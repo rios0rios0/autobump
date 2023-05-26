@@ -1,9 +1,9 @@
 build:
-        go build -o bin/autobump ./cmd/autobump/main.go
-        strip -s bin/autobump
+		go build -o bin/autobump ./cmd/autobump
+		strip -s bin/autobump
 
 run:
-        go run ./cmd/autobump/main.go
+		go run ./cmd/autobump
 
 install:
-        cp -v bin/autobump /usr/local/bin/autobump
+		cp -v bin/autobump /usr/local/bin/autobump
