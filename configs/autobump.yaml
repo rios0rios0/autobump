@@ -1,6 +1,7 @@
-user_name: "USERNAME"
-user_email: "EMAIL"
-gitlab_access_token: "GITLAB_TOKEN"
+gitlab:
+  user_name: "USERNAME"
+  user_email: "EMAIL"
+  gitlab_access_token: "GITLAB_TOKEN"
 
 projects:
   - path: "/home/johndoe/example"
