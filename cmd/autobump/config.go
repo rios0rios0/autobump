@@ -7,7 +7,7 @@ import (
 
 type GlobalConfig struct {
 	ProjectsConfig []ProjectsConfig `yaml:"projects"`
-	GitLabConfig   GitLabConfig
+	GitLabConfig   GitLabConfig     `yaml:"gitlab"`
 }
 
 type ProjectsConfig struct {
