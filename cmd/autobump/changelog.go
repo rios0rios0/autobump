@@ -191,11 +191,11 @@ func updateSection(unreleasedSection []string, nextVersion semver.Version) ([]st
 		// Append sections only if they have content
 		if len(*section) > 0 {
 			newSection = append(newSection, fmt.Sprintf("### %s", title))
-			newSection = append(newSection, "") // add a blank line between sections
+			newSection = append(newSection, "")
 			newSection = append(newSection, *section...)
+			newSection = append(newSection, "")
 		}
 	}
 
-	newSection = append(newSection, "")
 	return newSection, &nextVersion, nil
 }
