@@ -1,72 +1,35 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	log "github.com/sirupsen/logrus"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 )
 
-func UpdateChangelogFile(filePath string) (*semver.Version, error) {
-	log.Info("Reading lines from the changelog file")
-	lines, err := readLines(filePath)
+func updateChangelogFile(changelogPath string) (*semver.Version, error) {
+	lines, err := readLines(changelogPath)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Info("Processing the changelog content")
 	version, newContent, err := processChangelog(lines)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Info("Writing the new content to the changelog file")
-	err = writeLines(filePath, newContent)
+	err = writeLines(changelogPath, newContent)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Info("Changelog file updated successfully")
 	return version, nil
 }
 
-func readLines(filePath string) ([]string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	return lines, scanner.Err()
-}
-
-func writeLines(filePath string, lines []string) error {
-	file, err := os.Create(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	writer := bufio.NewWriter(file)
-	for _, line := range lines {
-		fmt.Fprintln(writer, line)
-	}
-	return writer.Flush()
-}
-
 func findLatestVersion(lines []string) (*semver.Version, error) {
-	log.Info("Starting findLatestVersion")
-
 	// Regular expression to match version lines
 	versionRegex := regexp.MustCompile(`^\s*##\s*\[([^\]]+)\]`)
 
@@ -96,14 +59,10 @@ func findLatestVersion(lines []string) (*semver.Version, error) {
 		return nil, err
 	}
 
-	log.Infof("Latest version found: %s", latestVersion)
-	log.Info("Finished findLatestVersion")
 	return latestVersion, nil
 }
 
 func processChangelog(lines []string) (*semver.Version, []string, error) {
-	log.Info("Starting processChangelog")
-
 	// Variables to hold the new content
 	var newContent []string
 	var unreleasedSection []string
@@ -115,22 +74,19 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 		log.Errorf("Error finding latest version: %v", err)
 		return nil, nil, err
 	}
-	log.Infof("Latest version found: %s", latestVersion)
+	log.Infof("Previous version: %s", latestVersion)
 
 	nextVersion := latestVersion.IncPatch()
-	log.Infof("Next version: %s", nextVersion)
+	log.Infof("Next calculated version: %s", nextVersion)
 
 	for _, line := range lines {
 
 		if strings.Contains(line, "[Unreleased]") {
 			unreleased = true
-			log.Info("Unreleased section found")
 		} else if strings.HasPrefix(line, fmt.Sprintf("## [%s]", latestVersion.String())) {
 			unreleased = false
-			log.Info("End of unreleased section")
 			if len(unreleasedSection) > 0 {
 				// Process the unreleased section
-				log.Info("Processing unreleased section")
 				updatedSection, updatedVersion, err := updateSection(unreleasedSection, nextVersion)
 				if err != nil {
 					log.Errorf("Error updating section: %v", err)
@@ -150,7 +106,6 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 		}
 	}
 
-	log.Info("Finished processChangelog")
 	return &nextVersion, newContent, nil
 }
 
