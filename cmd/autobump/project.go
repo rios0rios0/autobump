@@ -155,7 +155,7 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	}
 
 	if serviceType == "GitLab" {
-		err = createGitLabMergeRequest(globalConfig, projectPath, repo)
+		err = createGitLabMergeRequest(globalConfig, repo, branchName)
 		if err != nil {
 			return err
 		}
