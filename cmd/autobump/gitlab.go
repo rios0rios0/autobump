@@ -10,7 +10,7 @@ import (
 
 func createGitLabMergeRequest(globalConfig *GlobalConfig, repo *git.Repository, sourceBranch string) error {
 	log.Info("Creating GitLab merge request")
-	gitlabClient, err := gitlab.NewClient(globalConfig.GitLabConfig.GitLabAccessToken)
+	gitlabClient, err := gitlab.NewClient(globalConfig.GitLabAccessToken)
 	if err != nil {
 		return err
 	}
