@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/go-git/go-git/v5"
 	"path/filepath"
-	"time"
 
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -126,12 +125,7 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	}
 
 	commitMessage := "Bump version to " + projectsConfig.NewVersion
-	author := &object.Signature{
-		Name:  globalConfig.GitLabConfig.UserName,
-		Email: globalConfig.GitLabConfig.Email,
-		When:  time.Now(),
-	}
-	commit, err := commitChanges(w, commitMessage, author)
+	commit, err := commitChanges(w, commitMessage, &object.Signature{})
 	if err != nil {
 		return err
 	}
