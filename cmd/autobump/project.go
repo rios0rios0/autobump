@@ -50,9 +50,7 @@ func createAndSwitchBranch(repo *git.Repository, w *git.Worktree, branchName str
 
 func commitChanges(w *git.Worktree, commitMessage string, author *object.Signature) (plumbing.Hash, error) {
 	log.Info("Committing changes")
-	commit, err := w.Commit(commitMessage, &git.CommitOptions{
-		Author: author,
-	})
+	commit, err := w.Commit(commitMessage, &git.CommitOptions{})
 	if err != nil {
 		return plumbing.ZeroHash, err
 	}
