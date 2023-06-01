@@ -7,3 +7,6 @@ run:
 
 install:
 		cp -v bin/autobump /usr/local/bin/autobump
+
+exportKey:
+		gpg --export-secret-key --armor $(keyId) > ~/.gnupg/secret.asc

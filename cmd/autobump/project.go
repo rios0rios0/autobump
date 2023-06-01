@@ -2,12 +2,16 @@ package main
 
 import (
 	"fmt"
-	"github.com/go-git/go-git/v5"
+	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -47,9 +51,34 @@ func createAndSwitchBranch(repo *git.Repository, w *git.Worktree, branchName str
 	return err
 }
 
-func commitChanges(w *git.Worktree, commitMessage string, author *object.Signature) (plumbing.Hash, error) {
+func getGpgKey(gpgConfig GpgConfig) *openpgp.Entity {
+	privateKeyFile, err := os.Open(gpgConfig.Location)
+	if err != nil {
+		log.Error("Failed to open private key file:", err)
+	}
+	entityList, err := openpgp.ReadArmoredKeyRing(privateKeyFile)
+	if err != nil {
+		log.Error("Failed to read private key file:", err)
+	}
+	entity := entityList[0]
+	entity.PrivateKey.Decrypt([]byte(gpgConfig.Password))
+
+	return entity
+}
+
+func commitChangesGpg(
+	w *git.Worktree, commitMessage string, author *object.Signature, gpgConfig GpgConfig,
+) (plumbing.Hash, error) {
 	log.Info("Committing changes")
-	commit, err := w.Commit(commitMessage, &git.CommitOptions{})
+
+	commit, err := w.Commit(commitMessage, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  author.Name,
+			Email: author.Email,
+			When:  time.Now(),
+		},
+		SignKey: getGpgKey(gpgConfig),
+	})
 	if err != nil {
 		return plumbing.ZeroHash, err
 	}
@@ -57,10 +86,22 @@ func commitChanges(w *git.Worktree, commitMessage string, author *object.Signatu
 	return commit, nil
 }
 
-func pushChanges(repo *git.Repository, refSpec config.RefSpec) error {
-	log.Info("Pushing local changes to remote repository")
+func pushChangesSsh(repo *git.Repository, refSpec config.RefSpec) error {
+	log.Info("Pushing local changes to remote repository through SSH")
 	return repo.Push(&git.PushOptions{
 		RefSpecs: []config.RefSpec{refSpec},
+	})
+}
+
+func pushChangesHttps(repo *git.Repository, refSpec config.RefSpec, credential Credentials) error {
+	log.Info("Pushing local changes to remote repository through HTTPS")
+	return repo.Push(&git.PushOptions{
+		RefSpecs:   []config.RefSpec{refSpec},
+		RemoteName: "origin",
+		Auth: &http.BasicAuth{
+			Username: credential.Username,
+			Password: credential.GitLabAccessToken,
+		},
 	})
 }
 
@@ -125,7 +166,15 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	}
 
 	commitMessage := "Bump version to " + projectsConfig.NewVersion
-	commit, err := commitChanges(w, commitMessage, &object.Signature{})
+	commit, err := commitChangesGpg(
+		w,
+		commitMessage,
+		&object.Signature{
+			Name:  globalConfig.Credentials.PrettyName,
+			Email: globalConfig.Credentials.Email,
+		},
+		globalConfig.GpgConfig,
+	)
 	if err != nil {
 		return err
 	}
@@ -136,7 +185,7 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	}
 
 	refSpec := config.RefSpec("refs/heads/" + branchName + ":refs/heads/" + branchName)
-	err = pushChanges(repo, refSpec)
+	err = pushChangesHttps(repo, refSpec, globalConfig.Credentials)
 	if err != nil {
 		return err
 	}

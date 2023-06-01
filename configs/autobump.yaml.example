@@ -1,0 +1,13 @@
+credentials:
+  gitlab_access_token: "secret_pat"
+  username: "myhumbleuser"
+  pretty_name: "John Doe"
+  email: "john.doe@organization.com"
+
+gpg:
+  location: "/home/johndoe/.gnupg/secret.asc"
+  password: "mypassword"
+
+projects:
+  - path: "/home/johndoe/project"
+    language: "Python"
