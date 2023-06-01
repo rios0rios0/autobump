@@ -150,22 +150,27 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	}
 
 	projectsConfig.NewVersion = version.String()
-	err = adapter.UpdateVersion(projectPath, projectsConfig)
+	versionFilePath, err := adapter.UpdateVersion(projectPath, projectsConfig)
 	if err != nil {
 		return err
 	}
-
+	versionFileRelativePath, err := filepath.Rel(projectPath, versionFilePath)
 	changelogRelativePath, err := filepath.Rel(projectPath, changelogPath)
 	if err != nil {
 		return err
 	}
-	result, err := w.Add(changelogRelativePath)
+	result, err := w.Add(versionFileRelativePath)
 	if err != nil {
-		log.Errorf("Result not expected: %v", result)
+		log.Errorf("Failed to add %s: %v", versionFileRelativePath, result)
+		return err
+	}
+	result, err = w.Add(changelogRelativePath)
+	if err != nil {
+		log.Errorf("Failed to add CHANGELOG: %v", result)
 		return err
 	}
 
-	commitMessage := "Bump version to " + projectsConfig.NewVersion
+	commitMessage := "chore(bump) bump to version " + projectsConfig.NewVersion
 	commit, err := commitChangesGpg(
 		w,
 		commitMessage,

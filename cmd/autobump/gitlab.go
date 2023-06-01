@@ -29,14 +29,15 @@ func createGitLabMergeRequest(globalConfig *GlobalConfig, repo *git.Repository, 
 	}
 	projectID := project.ID
 
-	mrTitle := "Bump version"
+	// mrTitle := "Bump version"
 
 	mergeRequestOptions := &gitlab.CreateMergeRequestOptions{
-		SourceBranch:       gitlab.String(sourceBranch),
-		TargetBranch:       gitlab.String("main"),
-		Title:              &mrTitle,
+		SourceBranch: gitlab.String(sourceBranch),
+		TargetBranch: gitlab.String("main"),
+		// Title:              &mrTitle,
 		RemoveSourceBranch: gitlab.Bool(true),
 	}
+	log.Infof("The ID is: %s", project.ID)
 
 	_, _, err = gitlabClient.MergeRequests.CreateMergeRequest(projectID, mergeRequestOptions)
 	return err
