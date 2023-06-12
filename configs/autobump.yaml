@@ -1,7 +1,5 @@
-gitlab:
-  user_name: "USERNAME"
-  user_email: "EMAIL"
-  gitlab_access_token: "GITLAB_TOKEN"
+gitlab_access_token: "glpat-TOKEN"
 
 projects:
-  - path: "/home/johndoe/example"
+  - path: "/home/user/isecurity/example"
+    language: "Python"
