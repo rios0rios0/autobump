@@ -1,5 +1,7 @@
 gitlab_access_token: "glpat-TOKEN"
 
 projects:
-  - path: "/home/user/isecurity/example"
+  - path: "/home/user/isecurity/reports-writer"
     language: "Python"
+  - path: "/home/user/isecurity/api"
+    language: "Java"
