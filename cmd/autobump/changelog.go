@@ -77,8 +77,6 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 	log.Infof("Previous version: %s", latestVersion)
 
 	nextVersion := latestVersion.IncPatch()
-	log.Infof("Next calculated version: %s", nextVersion)
-
 	for _, line := range lines {
 
 		if strings.Contains(line, "[Unreleased]") {
@@ -106,6 +104,7 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 		}
 	}
 
+	log.Infof("Next calculated version: %s", nextVersion)
 	return &nextVersion, newContent, nil
 }
 
