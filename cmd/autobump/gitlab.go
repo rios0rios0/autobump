@@ -75,7 +75,6 @@ func getRemoteRepoOwnerAndName(repo *git.Repository) (owner, repoName string, er
 }
 
 func getRemoteRepoURL(repo *git.Repository) (string, error) {
-	// Assuming you want the URL for the "origin" remote
 	remote, err := repo.Remote("origin")
 	if err != nil {
 		return "", err
