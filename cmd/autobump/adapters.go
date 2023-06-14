@@ -42,7 +42,7 @@ func updateVersion(adapter LanguageAdapter, path string, config *ProjectsConfig)
 		return re.ReplaceAllString(match, "${1}"+config.NewVersion+"${2}")
 	})
 
-	err = ioutil.WriteFile(versionFilePath, []byte(updatedContent), 0644)
+	err = ioutil.WriteFile(versionFilePath, []byte(updatedContent), 0o644)
 	if err != nil {
 		return err
 	}

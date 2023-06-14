@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/go-git/go-git/v5"
 	log "github.com/sirupsen/logrus"
 	"github.com/xanzy/go-gitlab"
-	"strings"
 )
 
 func createGitLabMergeRequest(globalConfig *GlobalConfig, repo *git.Repository, sourceBranch string) error {

@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/Masterminds/semver/v3"
-	log "github.com/sirupsen/logrus"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Masterminds/semver/v3"
+	log "github.com/sirupsen/logrus"
 )
 
 func updateChangelogFile(changelogPath string) (*semver.Version, error) {
