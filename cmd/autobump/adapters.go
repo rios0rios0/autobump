@@ -1,35 +1,31 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
-// LanguageAdapter is the interface for language-specific adapters
 type LanguageAdapter interface {
-	UpdateVersion(path string, config *ProjectsConfig) error
-	VersionFile() string
-	VersionIdentifier() string
+	VersionFile(*ProjectsConfig) string
+	VersionPattern() string
 }
 
 func getAdapterByName(name string) LanguageAdapter {
 	switch name {
 	case "Python":
 		return &PythonAdapter{}
+	case "Java":
+		return &JavaAdapter{}
 	default:
 		return nil
 	}
 }
 
-// PythonAdapter is the adapter for Python projects
-type PythonAdapter struct{}
-
-func (p *PythonAdapter) UpdateVersion(path string, config *ProjectsConfig) error {
-	projectName := filepath.Base(config.Path)
-	versionFilePath := filepath.Join(path, projectName, p.VersionFile())
+func updateVersion(adapter LanguageAdapter, path string, config *ProjectsConfig) error {
+	versionFilePath := filepath.Join(config.Path, adapter.VersionFile(config))
 	if _, err := os.Stat(versionFilePath); os.IsNotExist(err) {
 		return nil
 	}
@@ -39,11 +35,13 @@ func (p *PythonAdapter) UpdateVersion(path string, config *ProjectsConfig) error
 		return err
 	}
 
-	versionIdentifier := p.VersionIdentifier()
-	versionPattern := fmt.Sprintf(`%s(\d+\.\d+\.\d+)`, regexp.QuoteMeta(versionIdentifier))
+	versionPattern := adapter.VersionPattern()
 	re := regexp.MustCompile(versionPattern)
 
-	updatedContent := re.ReplaceAllString(string(content), versionIdentifier+config.NewVersion)
+	updatedContent := re.ReplaceAllStringFunc(string(content), func(match string) string {
+		return re.ReplaceAllString(match, "${1}"+config.NewVersion+"${2}")
+	})
+
 	err = ioutil.WriteFile(versionFilePath, []byte(updatedContent), 0644)
 	if err != nil {
 		return err
@@ -52,10 +50,23 @@ func (p *PythonAdapter) UpdateVersion(path string, config *ProjectsConfig) error
 	return nil
 }
 
-func (p *PythonAdapter) VersionFile() string {
-	return "__init__.py"
+type PythonAdapter struct{}
+
+func (p *PythonAdapter) VersionFile(config *ProjectsConfig) string {
+	projectName := strings.Replace(filepath.Base(config.Path), "-", "_", -1)
+	return filepath.Join(projectName, "__init__.py")
 }
 
-func (p *PythonAdapter) VersionIdentifier() string {
-	return "__version__ = "
+func (p *PythonAdapter) VersionPattern() string {
+	return `(__version__\s*=\s*")\d+\.\d+\.\d+(")`
+}
+
+type JavaAdapter struct{}
+
+func (j *JavaAdapter) VersionFile(config *ProjectsConfig) string {
+	return "build.gradle"
+}
+
+func (j *JavaAdapter) VersionPattern() string {
+	return `(version\s*=\s*')\d+\.\d+\.\d+(')`
 }

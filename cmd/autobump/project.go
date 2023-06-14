@@ -109,7 +109,13 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	}
 
 	projectsConfig.NewVersion = version.String()
-	err = adapter.UpdateVersion(projectPath, projectsConfig)
+	log.Infof("Updating version to %s", projectsConfig.NewVersion)
+	err = updateVersion(adapter, projectPath, projectsConfig)
+	if err != nil {
+		return err
+	}
+	log.Infof("Adding version file %s", adapter.VersionFile(projectsConfig))
+	_, err = w.Add(adapter.VersionFile(projectsConfig))
 	if err != nil {
 		return err
 	}
@@ -118,9 +124,8 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	if err != nil {
 		return err
 	}
-	result, err := w.Add(changelogRelativePath)
+	_, err = w.Add(changelogRelativePath)
 	if err != nil {
-		log.Errorf("Result not expected: %v", result)
 		return err
 	}
 
