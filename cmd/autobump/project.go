@@ -2,67 +2,42 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/go-git/go-git/v5"
-
+	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
-func openRepo(projectPath string) (*git.Repository, error) {
-	log.Infof("Opening repository at %s", projectPath)
-	repo, err := git.PlainOpen(projectPath)
-	return repo, err
-}
-
-func checkIfBranchExists(repo *git.Repository, branchName string) (bool, error) {
-	refs, err := repo.References()
+func getGpgKey(gpgKeyPath string) (*openpgp.Entity, error) {
+	privateKeyFile, err := os.Open(gpgKeyPath)
 	if err != nil {
-		return false, err
+		log.Error("Failed to open private key file:", err)
+	}
+	entityList, err := openpgp.ReadArmoredKeyRing(privateKeyFile)
+	if err != nil {
+		log.Error("Failed to read private key file:", err)
 	}
 
-	branchExists := false
-	err = refs.ForEach(func(ref *plumbing.Reference) error {
-		if ref.Name().IsBranch() && ref.Name().Short() == branchName {
-			branchExists = true
-		}
-		return nil
-	})
-	return branchExists, err
-}
-
-func createAndSwitchBranch(repo *git.Repository, w *git.Worktree, branchName string, hash plumbing.Hash) error {
-	log.Infof("Creating and switching to new branch `%s`", branchName)
-	ref := plumbing.NewHashReference(plumbing.ReferenceName("refs/heads/"+branchName), hash)
-	err := repo.Storer.SetReference(ref)
+	fmt.Print("Enter the passphrase for your GPG key: ")
+	passphrase, err := terminal.ReadPassword(0)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	fmt.Println()
+
+	entity := entityList[0]
+	err = entity.PrivateKey.Decrypt([]byte(passphrase))
+	if err != nil {
+		log.Error("Failed to decrypt GPG key:", err)
+		return nil, err
 	}
 
-	err = w.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.ReferenceName("refs/heads/" + branchName),
-	})
-	return err
-}
-
-func commitChanges(w *git.Worktree, commitMessage string, author *object.Signature) (plumbing.Hash, error) {
-	log.Info("Committing changes")
-	commit, err := w.Commit(commitMessage, &git.CommitOptions{})
-	if err != nil {
-		return plumbing.ZeroHash, err
-	}
-
-	return commit, nil
-}
-
-func pushChanges(repo *git.Repository, refSpec config.RefSpec) error {
-	log.Info("Pushing local changes to remote repository")
-	return repo.Push(&git.PushOptions{
-		RefSpecs: []config.RefSpec{refSpec},
-	})
+	log.Info("Successfully decrypted GPG key")
+	return entity, nil
 }
 
 func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) error {
@@ -130,8 +105,37 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 		return err
 	}
 
-	commitMessage := "Bump version to " + projectsConfig.NewVersion
-	commit, err := commitChanges(w, commitMessage, &object.Signature{})
+	cfg, err := repo.Config()
+	if err != nil {
+		return err
+	}
+
+	gpgSign := cfg.Raw.Section("commit").Option("gpgsign")
+	if gpgSign == "" {
+		globalConfig, err := getGlobalGitConfig()
+		if err != nil {
+			return err
+		}
+
+		gpgSign = globalConfig.Raw.Section("commit").Option("gpgsign")
+	}
+
+	var signKey *openpgp.Entity
+	if gpgSign == "true" {
+		log.Info("Signing commit with GPG key")
+		signKey, err = getGpgKey(globalConfig.GpgKeyPath)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	commitMessage := "chore(bump) bump to version " + projectsConfig.NewVersion
+	commit, err := commitChanges(
+		w,
+		commitMessage,
+		signKey,
+	)
 	if err != nil {
 		return err
 	}
@@ -142,7 +146,19 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	}
 
 	refSpec := config.RefSpec("refs/heads/" + branchName + ":refs/heads/" + branchName)
-	err = pushChanges(repo, refSpec)
+
+	remoteCfg, err := repo.Remote("origin")
+	if err != nil {
+		return err
+	}
+
+	remoteURL := remoteCfg.Config().URLs[0]
+	if strings.HasPrefix(remoteURL, "git@") {
+		err = pushChangesSsh(repo, refSpec)
+	} else if strings.HasPrefix(remoteURL, "https://") || strings.HasPrefix(remoteURL, "http://") {
+		err = pushChangesHttps(repo, cfg, refSpec, globalConfig)
+	}
+
 	if err != nil {
 		return err
 	}
