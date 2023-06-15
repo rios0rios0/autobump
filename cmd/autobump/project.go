@@ -110,18 +110,23 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 		return err
 	}
 
+	globalGitConfig, err := getGlobalGitConfig()
+	if err != nil {
+		return err
+	}
+
 	gpgSign := cfg.Raw.Section("commit").Option("gpgsign")
 	if gpgSign == "" {
-		globalConfig, err := getGlobalGitConfig()
-		if err != nil {
-			return err
-		}
+		gpgSign = globalGitConfig.Raw.Section("commit").Option("gpgsign")
+	}
 
-		gpgSign = globalConfig.Raw.Section("commit").Option("gpgsign")
+	gpgFormat := cfg.Raw.Section("gpg").Option("format")
+	if gpgFormat == "" {
+		gpgFormat = globalGitConfig.Raw.Section("gpg").Option("format")
 	}
 
 	var signKey *openpgp.Entity
-	if gpgSign == "true" {
+	if gpgSign == "true" && gpgFormat != "ssh" {
 		log.Info("Signing commit with GPG key")
 		signKey, err = getGpgKey(globalConfig.GpgKeyPath)
 	}
