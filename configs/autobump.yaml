@@ -1,5 +1,14 @@
+# GitLab personal access token
+# used to create merge requests on GitLab
 gitlab_access_token: "glpat-TOKEN"
 
+# (optional) path to your password-protected GPG private key
+# used to sign the commits
+# see the `exportkey` target in the Makefile for how to export the key
+gpg_key_path: "/home/user/.gnupg/autobump.asc"
+
+# a list of the projects to be managed by this tool
+# a list of maps, each map must contain both `path` and `language`
 projects:
   - path: "/home/user/isecurity/reports-writer"
     language: "Python"
