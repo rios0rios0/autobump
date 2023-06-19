@@ -17,13 +17,13 @@ func createGitLabMergeRequest(globalConfig *GlobalConfig, repo *git.Repository, 
 	}
 
 	// Get the project owner and name
-	owner, projectName, err := getRemoteRepoOwnerAndName(repo)
+	projectName, err := getRemoteRepoFullProjectName(repo)
 	if err != nil {
 		return err
 	}
 
 	// Get the project ID using the GitLab API
-	project, _, err := gitlabClient.Projects.GetProject(fmt.Sprintf("%s/%s", owner, projectName), nil)
+	project, _, err := gitlabClient.Projects.GetProject(projectName, &gitlab.GetProjectOptions{})
 	if err != nil {
 		return err
 	}
@@ -42,37 +42,34 @@ func createGitLabMergeRequest(globalConfig *GlobalConfig, repo *git.Repository, 
 	return err
 }
 
-func getRemoteRepoOwnerAndName(repo *git.Repository) (owner, repoName string, err error) {
+func getRemoteRepoFullProjectName(repo *git.Repository) (fullProjectName string, err error) {
 	remoteURL, err := getRemoteRepoURL(repo)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 
 	// remove .git if it exists
 	trimmedURL := strings.TrimSuffix(remoteURL, ".git")
 
-	var repoURLParts []string
-
-	// Check if the URL is an SSH URL
 	if strings.HasPrefix(trimmedURL, "git@") {
-		repoURLParts = strings.Split(trimmedURL, ":")
-		if len(repoURLParts) != 2 {
-			return "", "", fmt.Errorf("invalid SSH repository URL")
+		parts := strings.Split(trimmedURL, ":")
+		if len(parts) == 2 {
+			fullProjectName = parts[1]
+		} else {
+			return "", fmt.Errorf("invalid SSH repository URL")
 		}
-		trimmedURL = repoURLParts[1]
-	}
-
-	// Extract owner and repo name
-	repoURLParts = strings.Split(trimmedURL, "/")
-
-	if len(repoURLParts) >= 2 {
-		owner = repoURLParts[len(repoURLParts)-2]
-		repoName = repoURLParts[len(repoURLParts)-1]
+	} else if strings.HasPrefix(trimmedURL, "https://") {
+		parts := strings.SplitN(trimmedURL, "/", 4)
+		if len(parts) >= 4 {
+			fullProjectName = parts[3]
+		} else {
+			return "", fmt.Errorf("unable to parse repository URL")
+		}
 	} else {
-		err = fmt.Errorf("unable to parse repository URL")
+		return "", fmt.Errorf("invalid repository URL: must be SSH or HTTPS")
 	}
 
-	return owner, repoName, err
+	return fullProjectName, nil
 }
 
 func getRemoteRepoURL(repo *git.Repository) (string, error) {
