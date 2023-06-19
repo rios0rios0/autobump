@@ -9,7 +9,7 @@ import (
 	"github.com/xanzy/go-gitlab"
 )
 
-func createGitLabMergeRequest(globalConfig *GlobalConfig, repo *git.Repository, sourceBranch string) error {
+func createGitLabMergeRequest(globalConfig *GlobalConfig, repo *git.Repository, sourceBranch string, newVersion string) error {
 	log.Info("Creating GitLab merge request")
 	gitlabClient, err := gitlab.NewClient(globalConfig.GitLabAccessToken)
 	if err != nil {
@@ -29,7 +29,7 @@ func createGitLabMergeRequest(globalConfig *GlobalConfig, repo *git.Repository, 
 	}
 	projectID := project.ID
 
-	mrTitle := "Bump version"
+	mrTitle := fmt.Sprintf("chore(bump): changed to version %s", newVersion)
 
 	mergeRequestOptions := &gitlab.CreateMergeRequestOptions{
 		SourceBranch:       gitlab.String(sourceBranch),
