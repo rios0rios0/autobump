@@ -1,13 +1,15 @@
 package main
 
 import (
-	"gopkg.in/yaml.v3"
 	"io/ioutil"
+
+	"gopkg.in/yaml.v3"
 )
 
 type GlobalConfig struct {
 	ProjectsConfig    []ProjectsConfig `yaml:"projects"`
 	GitLabAccessToken string           `yaml:"gitlab_access_token"`
+	GpgKeyPath        string           `yaml:"gpg_key_path"`
 }
 
 type ProjectsConfig struct {
