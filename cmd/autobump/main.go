@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -16,13 +16,11 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			globalConfig, err := readConfig(configPath)
 			if err != nil {
-				return err
+				log.Fatalf("Failed to read config: %v", err)
+				os.Exit(1)
 			}
 
-			if err := iterateProjects(globalConfig); err != nil {
-				return err
-			}
-
+			iterateProjects(globalConfig)
 			return nil
 		},
 	}
@@ -31,8 +29,5 @@ var (
 // program entrypoint
 func main() {
 	rootCmd.Flags().StringVarP(&configPath, "config", "c", "configs/autobump.yaml", "config file path")
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	rootCmd.Execute()
 }
