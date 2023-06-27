@@ -7,10 +7,38 @@ gitlab_access_token: "glpat-TOKEN"
 # see the `exportkey` target in the Makefile for how to export the key
 gpg_key_path: "/home/user/.gnupg/autobump.asc"
 
+# rules for automatically detecting project languages
+languages:
+  # name of the language, this requires support in the code
+  # currently only Python and Java are supported
+  python:
+    # file extensions in the repository that could indicate
+    #   this is a Python project
+    extensions:
+      - "py"
+
+    # special files in the repository that could indicate
+    #   this is a Python project
+    special_patterns:
+      - "setup.cfg"
+      - "setup.py"
+      - "pyproject.toml"
+  java:
+    extensions:
+      - "java"
+    special_patterns:
+      - "build.gradle"
+      - "lib/build.gradle"
+      - "settings.gradle"
+      - "pom.xml"
+
 # a list of the projects to be managed by this tool
-# a list of maps, each map must contain both `path` and `language`
 projects:
-  - path: "/home/user/isecurity/reports-writer"
-    language: "Python"
-  - path: "/home/user/isecurity/api"
+  # path is simply the path of the repository
+  - path: "/home/user/repo1"
+
+    # language can be omitted if auto-detect rules have already been specified
+    #   in the `languages` section
+    #language: "Python"
+  - path: "/home/user/repo2"
     language: "Java"

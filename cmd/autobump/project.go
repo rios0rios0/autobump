@@ -41,6 +41,15 @@ func getGpgKey(gpgKeyPath string) (*openpgp.Entity, error) {
 }
 
 func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) error {
+	// detect the project language if not manually set
+	if projectsConfig.Language == "" {
+		projectLanguage, err := detectLanguage(globalConfig, projectsConfig.Path)
+		if err != nil {
+			return err
+		}
+		projectsConfig.Language = projectLanguage
+	}
+
 	adapter := getAdapterByName(projectsConfig.Language)
 	if adapter == nil {
 		return fmt.Errorf("invalid adapter: %s", projectsConfig.Language)
@@ -80,7 +89,7 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
 	version, err := updateChangelogFile(changelogPath)
 	if err != nil {
-		fmt.Printf("No version found in CHANGELOG.md for project at %s\n", projectsConfig.Path)
+		log.Errorf("No version found in CHANGELOG.md for project at %s\n", projectsConfig.Path)
 		return err
 	}
 
@@ -90,8 +99,17 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	if err != nil {
 		return err
 	}
-	log.Infof("Adding version file %s", adapter.VersionFile(projectsConfig))
-	_, err = w.Add(adapter.VersionFile(projectsConfig))
+
+	versionFile, err := adapter.VersionFile(projectsConfig)
+	if err != nil {
+		return err
+	}
+
+	// get version file relative path
+	versionFileRelativePath, err := filepath.Rel(projectPath, versionFile)
+
+	log.Infof("Adding version file %s", versionFileRelativePath)
+	_, err = w.Add(versionFileRelativePath)
 	if err != nil {
 		return err
 	}
@@ -185,6 +203,14 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 
 func iterateProjects(globalConfig *GlobalConfig) {
 	for _, project := range globalConfig.ProjectsConfig {
+
+		// verify if the project path exists
+		if _, err := os.Stat(project.Path); os.IsNotExist(err) {
+			log.Errorf("Project path does not exist: %s\n", project.Path)
+			log.Warn("Skipping project")
+			continue
+		}
+
 		err := processRepo(globalConfig, &project)
 		if err != nil {
 			log.Errorf("Error processing project at %s: %v\n", project.Path, err)
