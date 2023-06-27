@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 )
@@ -33,4 +34,13 @@ func writeLines(filePath string, lines []string) error {
 		fmt.Fprintln(writer, line)
 	}
 	return writer.Flush()
+}
+
+func findFile(locations []string, filename string) (string, error) {
+	for _, location := range locations {
+		if _, err := os.Stat(location); !os.IsNotExist(err) {
+			return location, nil
+		}
+	}
+	return "", errors.New(filename + " not found")
 }

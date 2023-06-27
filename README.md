@@ -18,8 +18,39 @@ make install
 
 ## Usages
 
-Create a configuration file based on the example from `configs/autobump.yaml`, then run AutoBump:
+Create a configuration file based on the example from `configs/autobump.yaml` and put it in `~/.config/autobump.yaml`. You will need to at least update the `gitlab_access_token` field with your GitLab token. There are two ways to run AutoBump: for the current project and for multiple projects.
+
+### 1. For the Current Project
+
+Simply run this command in the project directory. AutoBump will automatically detect the project language, update the version, the CHANGELOG.md file, and create a GitLab MR.
 
 ```bash
-autobump -c /path/to/config.yaml
+autobump
 ```
+
+You can also overwrite the project language via the `-l`, `--language` flag:
+
+```bash
+autobump -l java
+```
+
+### 2. For Multiple Projects
+
+Modify the configuration file and add a list of your projects into the `projects` section:
+
+```yaml
+projects:
+  - path: "/home/user/repo1"
+    # language can be auto-detected
+  - path: "/home/user/repo2"
+    # language can also be manually specified
+    language: "Java"
+```
+
+Then run AutoBump in batch mode:
+
+```bash
+autobump batch
+```
+
+AutoBump will now go through each of the projects and perform the same actions as with a single project.

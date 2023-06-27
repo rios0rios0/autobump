@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -9,23 +10,79 @@ import (
 )
 
 type LanguageAdapter interface {
-	VersionFile(*ProjectsConfig) string
+	VersionFile(*ProjectsConfig) (string, error)
 	VersionPattern() string
 }
 
 func getAdapterByName(name string) LanguageAdapter {
-	switch name {
-	case "Python":
+	switch strings.ToLower(name) {
+	case "python":
 		return &PythonAdapter{}
-	case "Java":
+	case "java":
 		return &JavaAdapter{}
 	default:
 		return nil
 	}
 }
 
+func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
+	var detected string
+
+	absPath, err := filepath.Abs(cwd)
+	if err != nil {
+		return "", err
+	}
+
+	// Check project type by special files
+	for language, config := range globalConfig.LanguagesConfig {
+		for _, pattern := range config.SpecialPatterns {
+			_, err := os.Stat(filepath.Join(absPath, pattern))
+			if !os.IsNotExist(err) {
+				return language, nil
+			}
+		}
+	}
+
+	// Check project type by file extensions
+	err = filepath.Walk(absPath, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		if detected != "" {
+			return filepath.SkipDir
+		}
+
+		for language, config := range globalConfig.LanguagesConfig {
+			for _, ext := range config.Extensions {
+				if strings.HasSuffix(info.Name(), "."+ext) {
+					detected = language
+					return filepath.SkipDir
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return "", errors.New("project language not recognized")
+}
+
 func updateVersion(adapter LanguageAdapter, path string, config *ProjectsConfig) error {
-	versionFilePath := filepath.Join(config.Path, adapter.VersionFile(config))
+	versionFile, err := adapter.VersionFile(config)
+	if err != nil {
+		return err
+	}
+
+	versionFilePath := filepath.Join(config.Path, versionFile)
 	if _, err := os.Stat(versionFilePath); os.IsNotExist(err) {
 		return nil
 	}
@@ -52,9 +109,9 @@ func updateVersion(adapter LanguageAdapter, path string, config *ProjectsConfig)
 
 type PythonAdapter struct{}
 
-func (p *PythonAdapter) VersionFile(config *ProjectsConfig) string {
+func (p *PythonAdapter) VersionFile(config *ProjectsConfig) (string, error) {
 	projectName := strings.Replace(filepath.Base(config.Path), "-", "_", -1)
-	return filepath.Join(projectName, "__init__.py")
+	return filepath.Join(projectName, "__init__.py"), nil
 }
 
 func (p *PythonAdapter) VersionPattern() string {
@@ -63,8 +120,16 @@ func (p *PythonAdapter) VersionPattern() string {
 
 type JavaAdapter struct{}
 
-func (j *JavaAdapter) VersionFile(config *ProjectsConfig) string {
-	return "build.gradle"
+func (j *JavaAdapter) VersionFile(config *ProjectsConfig) (string, error) {
+	locations := []string{
+		filepath.Join(config.Path, "build.gradle"),
+		filepath.Join(config.Path, "lib", "build.gradle"),
+	}
+	buildGradlePath, err := findFile(locations, "build.gradle")
+	if err != nil {
+		return "", err
+	}
+	return buildGradlePath, nil
 }
 
 func (j *JavaAdapter) VersionPattern() string {

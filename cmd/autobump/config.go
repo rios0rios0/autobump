@@ -4,15 +4,22 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
 type GlobalConfig struct {
-	ProjectsConfig    []ProjectsConfig `yaml:"projects"`
-	GitLabAccessToken string           `yaml:"gitlab_access_token"`
-	GpgKeyPath        string           `yaml:"gpg_key_path"`
+	ProjectsConfig    []ProjectsConfig          `yaml:"projects"`
+	LanguagesConfig   map[string]LanguageConfig `yaml:"languages"`
+	GitLabAccessToken string                    `yaml:"gitlab_access_token"`
+	GpgKeyPath        string                    `yaml:"gpg_key_path"`
+}
+
+type LanguageConfig struct {
+	Extensions      []string `yaml:"extensions"`
+	SpecialPatterns []string `yaml:"special_patterns"`
 }
 
 type ProjectsConfig struct {
@@ -62,10 +69,6 @@ func validateGlobalConfig(cfg *GlobalConfig) error {
 		if pc.Path == "" {
 			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].path", i))
 		}
-
-		if pc.Language == "" {
-			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].language", i))
-		}
 	}
 
 	if len(missingKeys) > 0 {
@@ -73,4 +76,25 @@ func validateGlobalConfig(cfg *GlobalConfig) error {
 	}
 
 	return nil
+}
+
+func findConfig() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	locations := []string{
+		"autobump.yaml",
+		"autobump.yml",
+		"configs/autobump.yaml",
+		fmt.Sprintf("%s/.config/autobump.yaml", homeDir),
+	}
+
+	location, err := findFile(locations, "config file")
+	if err != nil {
+		return "", err
+	}
+
+	return location, nil
 }
