@@ -183,12 +183,11 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	return nil
 }
 
-func iterateProjects(globalConfig *GlobalConfig) error {
+func iterateProjects(globalConfig *GlobalConfig) {
 	for _, project := range globalConfig.ProjectsConfig {
 		err := processRepo(globalConfig, &project)
 		if err != nil {
 			log.Errorf("Error processing project at %s: %v\n", project.Path, err)
 		}
 	}
-	return nil
 }
