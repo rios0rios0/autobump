@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
+	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
@@ -41,6 +42,26 @@ func getGpgKey(gpgKeyPath string) (*openpgp.Entity, error) {
 }
 
 func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) error {
+	// check if project.Path starts with https:// or git@
+	if strings.HasPrefix(projectsConfig.Path, "https://") || strings.HasPrefix(projectsConfig.Path, "git@") {
+		tmpDir, err := os.MkdirTemp("", "autobump-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(tmpDir)
+		log.Infof("Cloning %s into %s", projectsConfig.Path, tmpDir)
+		cloneOptions := &git.CloneOptions{
+			URL:   projectsConfig.Path,
+			Depth: 1,
+		}
+		_, err = git.PlainClone(tmpDir, false, cloneOptions)
+		if err != nil {
+			return err
+		}
+		log.Infof("Successfully cloned %s", projectsConfig.Path)
+		projectsConfig.Path = tmpDir
+	}
+
 	// detect the project language if not manually set
 	if projectsConfig.Language == "" {
 		projectLanguage, err := detectLanguage(globalConfig, projectsConfig.Path)
@@ -206,9 +227,11 @@ func iterateProjects(globalConfig *GlobalConfig) {
 
 		// verify if the project path exists
 		if _, err := os.Stat(project.Path); os.IsNotExist(err) {
-			log.Errorf("Project path does not exist: %s\n", project.Path)
-			log.Warn("Skipping project")
-			continue
+			if !strings.HasPrefix(project.Path, "https://") && !strings.HasPrefix(project.Path, "git@") {
+				log.Errorf("Project path does not exist: %s\n", project.Path)
+				log.Warn("Skipping project")
+				continue
+			}
 		}
 
 		err := processRepo(globalConfig, &project)
