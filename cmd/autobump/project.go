@@ -9,6 +9,7 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp"
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -54,6 +55,16 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 			URL:   projectsConfig.Path,
 			Depth: 1,
 		}
+
+		// authenticate with CI job token if running in a GitLab CI pipeline
+		ciJobToken := os.Getenv("CI_JOB_TOKEN")
+		if ciJobToken != "" {
+			cloneOptions.Auth = &http.BasicAuth{
+				Username: "gitlab-ci-token", // this can be anything except an empty string
+				Password: ciJobToken,
+			}
+		}
+
 		_, err = git.PlainClone(tmpDir, false, cloneOptions)
 		if err != nil {
 			return err
