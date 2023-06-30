@@ -37,8 +37,7 @@ jobs:
           sudo apt-get install -y golang
       - name: Build
         run: |
-          make -j $(nproc)
-          go build -o bin/autobump ./cmd/autobump
+          make build
           strip -s bin/autobump
       - name: Package
         run: |
