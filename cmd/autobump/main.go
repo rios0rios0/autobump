@@ -101,6 +101,7 @@ func findConfigOnMissing(configPath string) (string, error) {
 func main() {
 	rootCmd.Flags().StringVarP(&configPath, "config", "c", "", "config file path")
 	rootCmd.Flags().StringVarP(&language, "language", "l", "", "project language")
+	batchCmd.Flags().StringVarP(&configPath, "config", "c", "", "config file path")
 
 	rootCmd.AddCommand(batchCmd)
 	rootCmd.Execute()
