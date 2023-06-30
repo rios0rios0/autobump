@@ -1,0 +1,89 @@
+name: release
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-22.04
+    outputs:
+      VERSION: ${{ steps.get_version.outputs.VERSION }}
+    steps:
+      - name: Get version
+        id: get_version
+        run: echo VERSION=${GITHUB_REF/refs\/tags\//} >> $GITHUB_OUTPUT
+
+  build:
+    name: Build
+    needs: [setup]
+    runs-on: ubuntu-22.04
+    env:
+      PACKAGENAME: autobump-${{ needs.setup.outputs.VERSION }}
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ needs.setup.outputs.VERSION }}
+          submodules: recursive
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y golang
+      - name: Build
+        run: |
+          make -j $(nproc)
+          go build -o bin/autobump ./cmd/autobump
+          strip -s bin/autobump
+      - name: Package
+        run: |
+          cd bin
+          zip -9 ${{ env.PACKAGENAME }}.zip autobump
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: autobump
+          path: bin/${{ env.PACKAGENAME }}.zip
+
+  create-release:
+    name: Create Release
+    needs: [setup, build]
+    runs-on: ubuntu-22.04
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.setup.outputs.VERSION }}
+          name: Release ${{ needs.setup.outputs.VERSION }}
+          draft: false
+          prerelease: false
+
+  upload:
+    name: Upload
+    needs: [setup, build, create-release]
+    runs-on: ubuntu-22.04
+    env:
+      PACKAGENAME: autobump-${{ needs.setup.outputs.VERSION }}
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: autobump
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ env.PACKAGENAME }}.zip
+          asset_name: ${{ env.PACKAGENAME }}.zip
+          asset_content_type: application/zip
