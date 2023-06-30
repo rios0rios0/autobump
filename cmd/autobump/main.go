@@ -15,6 +15,14 @@ var (
 		Use:   "autobump",
 		Short: "AutoBump is a tool that automatically updates CHANGELOG.md",
 		Run: func(cmd *cobra.Command, args []string) {
+			// find the config file if not manually set
+			configPath, err := findConfigOnMissing(configPath)
+			if err != nil {
+				log.Fatalf("Failed to locate config file")
+				os.Exit(1)
+			}
+
+			// read the config file
 			globalConfig, err := readConfig(configPath)
 			if err != nil {
 				log.Fatalf("Failed to read config: %v", err)
@@ -54,6 +62,14 @@ var (
 		Use:   "batch",
 		Short: "Run AutoBump for all projects in the configuration",
 		Run: func(cmd *cobra.Command, args []string) {
+			// find the config file if not manually set
+			configPath, err := findConfigOnMissing(configPath)
+			if err != nil {
+				log.Fatalf("Failed to locate config file")
+				os.Exit(1)
+			}
+
+			// read the config file
 			globalConfig, err := readConfig(configPath)
 			if err != nil {
 				log.Fatalf("Failed to read config: %v", err)
@@ -65,24 +81,26 @@ var (
 	}
 )
 
-// program entry point
-func main() {
-	rootCmd.Flags().StringVarP(&configPath, "config", "c", "", "config file path")
-	rootCmd.Flags().StringVarP(&language, "language", "l", "", "project language")
-
-	// search for config file in default locations
+func findConfigOnMissing(configPath string) (string, error) {
 	if configPath == "" {
 		log.Info("No config file specified, searching for default locations")
 
 		var err error
 		configPath, err = findConfig()
 		if err != nil {
-			log.Fatalf("Failed to locate config file: \"%v\"", err)
-			os.Exit(1)
+			return "", err
 		}
 
 		log.Infof("Using config file: \"%v\"", configPath)
+		return configPath, nil
 	}
+	return configPath, nil
+}
+
+// program entry point
+func main() {
+	rootCmd.Flags().StringVarP(&configPath, "config", "c", "", "config file path")
+	rootCmd.Flags().StringVarP(&language, "language", "l", "", "project language")
 
 	rootCmd.AddCommand(batchCmd)
 	rootCmd.Execute()
