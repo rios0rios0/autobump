@@ -25,6 +25,9 @@ languages:
       - "setup.cfg"
       - "setup.py"
       - "pyproject.toml"
+    version_files:
+      - "{project_name}/__init__.py"
+    version_pattern: "(__version__\\s*=\\s*\")\\d+\\.\\d+\\.\\d+(\")"
   java:
     extensions:
       - "java"
@@ -33,6 +36,10 @@ languages:
       - "lib/build.gradle"
       - "settings.gradle"
       - "pom.xml"
+    version_files:
+      - "build.gradle"
+      - "lib/build.gradle"
+    version_pattern: "(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')"
 
 # a list of the projects to be managed by this tool
 projects:

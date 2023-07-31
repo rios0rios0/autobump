@@ -2,28 +2,15 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
-
-type LanguageAdapter interface {
-	VersionFile(*ProjectsConfig) (string, error)
-	VersionPattern() string
-}
-
-func getAdapterByName(name string) LanguageAdapter {
-	switch strings.ToLower(name) {
-	case "python":
-		return &PythonAdapter{}
-	case "java":
-		return &JavaAdapter{}
-	default:
-		return nil
-	}
-}
 
 func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
 	var detected string
@@ -76,62 +63,77 @@ func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
 	return "", errors.New("project language not recognized")
 }
 
-func updateVersion(adapter LanguageAdapter, path string, config *ProjectsConfig) error {
-	versionFile, err := adapter.VersionFile(config)
+// updateVersion updates the version in the version files.
+// This function fails fast upon the first error.
+func updateVersion(path string, globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) error {
+	versionFiles, err := getVersionFiles(globalConfig, projectsConfig)
 	if err != nil {
 		return err
 	}
 
-	versionFilePath := filepath.Join(config.Path, versionFile)
-	if _, err := os.Stat(versionFilePath); os.IsNotExist(err) {
-		return nil
+	oneVersionFileExists := false
+	for _, versionFile := range versionFiles {
+		// check if the file exists
+		info, err := os.Stat(versionFile)
+		if os.IsNotExist(err) {
+			log.Warnf("Version file %s does not exist", versionFile)
+			continue
+		}
+
+		originalFileMode := info.Mode()
+		oneVersionFileExists = true
+
+		content, err := ioutil.ReadFile(versionFile)
+		if err != nil {
+			return err
+		}
+
+		versionPattern, err := getVersionPattern(globalConfig, projectsConfig)
+		if err != nil {
+			return err
+		}
+
+		re := regexp.MustCompile(versionPattern)
+		updatedContent := re.ReplaceAllStringFunc(string(content), func(match string) string {
+			return re.ReplaceAllString(match, "${1}"+projectsConfig.NewVersion+"${2}")
+		})
+
+		err = ioutil.WriteFile(versionFile, []byte(updatedContent), originalFileMode)
+		if err != nil {
+			return err
+		}
 	}
 
-	content, err := ioutil.ReadFile(versionFilePath)
-	if err != nil {
-		return err
-	}
-
-	versionPattern := adapter.VersionPattern()
-	re := regexp.MustCompile(versionPattern)
-
-	updatedContent := re.ReplaceAllStringFunc(string(content), func(match string) string {
-		return re.ReplaceAllString(match, "${1}"+config.NewVersion+"${2}")
-	})
-
-	err = ioutil.WriteFile(versionFilePath, []byte(updatedContent), 0o644)
-	if err != nil {
-		return err
+	if !oneVersionFileExists {
+		return errors.New(fmt.Sprintf("No version file found for %s", projectsConfig.Language))
 	}
 
 	return nil
 }
 
-type PythonAdapter struct{}
+func getVersionFiles(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) ([]string, error) {
+	projectName := strings.Replace(filepath.Base(projectsConfig.Path), "-", "_", -1)
+	var versionFiles []string
 
-func (p *PythonAdapter) VersionFile(config *ProjectsConfig) (string, error) {
-	projectName := strings.Replace(filepath.Base(config.Path), "-", "_", -1)
-	return filepath.Join(projectName, "__init__.py"), nil
-}
-
-func (p *PythonAdapter) VersionPattern() string {
-	return `(__version__\s*=\s*")\d+\.\d+\.\d+(")`
-}
-
-type JavaAdapter struct{}
-
-func (j *JavaAdapter) VersionFile(config *ProjectsConfig) (string, error) {
-	locations := []string{
-		filepath.Join(config.Path, "build.gradle"),
-		filepath.Join(config.Path, "lib", "build.gradle"),
+	languageConfig, exists := globalConfig.LanguagesConfig[projectsConfig.Language]
+	if !exists {
+		return nil, errors.New(fmt.Sprintf("Language %s not found in config", language))
 	}
-	buildGradlePath, err := findFile(locations, "build.gradle")
-	if err != nil {
-		return "", err
+
+	for _, versionFile := range languageConfig.VersionFiles {
+		versionFiles = append(
+			versionFiles, filepath.Join(
+				projectsConfig.Path, strings.ReplaceAll(versionFile, "{project_name}", projectName),
+			),
+		)
 	}
-	return buildGradlePath, nil
+	return versionFiles, nil
 }
 
-func (j *JavaAdapter) VersionPattern() string {
-	return `(version\s*=\s*')\d+\.\d+\.\d+(')`
+func getVersionPattern(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) (string, error) {
+	versionPattern, exists := globalConfig.LanguagesConfig[projectsConfig.Language]
+	if !exists {
+		return "", errors.New(fmt.Sprintf("Language %s not found in config", language))
+	}
+	return versionPattern.VersionPattern, nil
 }

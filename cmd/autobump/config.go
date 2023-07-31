@@ -20,6 +20,8 @@ type GlobalConfig struct {
 type LanguageConfig struct {
 	Extensions      []string `yaml:"extensions"`
 	SpecialPatterns []string `yaml:"special_patterns"`
+	VersionFiles    []string `yaml:"version_files"`
+	VersionPattern  string   `yaml:"version_pattern"`
 }
 
 type ProjectsConfig struct {
