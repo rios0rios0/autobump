@@ -60,7 +60,7 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 		ciJobToken := os.Getenv("CI_JOB_TOKEN")
 		if ciJobToken != "" {
 			cloneOptions.Auth = &http.BasicAuth{
-				Username: "gitlab-ci-token", // this can be anything except an empty string
+				Username: "gitlab-ci-token",
 				Password: ciJobToken,
 			}
 		}
@@ -80,11 +80,6 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 			return err
 		}
 		projectsConfig.Language = projectLanguage
-	}
-
-	adapter := getAdapterByName(projectsConfig.Language)
-	if adapter == nil {
-		return fmt.Errorf("invalid adapter: %s", projectsConfig.Language)
 	}
 
 	projectPath := projectsConfig.Path
@@ -127,23 +122,28 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 
 	projectsConfig.NewVersion = version.String()
 	log.Infof("Updating version to %s", projectsConfig.NewVersion)
-	err = updateVersion(adapter, projectPath, projectsConfig)
+	err = updateVersion(projectPath, globalConfig, projectsConfig)
 	if err != nil {
 		return err
 	}
 
-	versionFile, err := adapter.VersionFile(projectsConfig)
+	versionFiles, err := getVersionFiles(globalConfig, projectsConfig)
 	if err != nil {
 		return err
 	}
 
 	// get version file relative path
-	versionFileRelativePath, err := filepath.Rel(projectPath, versionFile)
+	for _, versionFile := range versionFiles {
+		versionFileRelativePath, err := filepath.Rel(projectPath, versionFile)
+		if _, err := os.Stat(versionFileRelativePath); os.IsNotExist(err) {
+			continue
+		}
 
-	log.Infof("Adding version file %s", versionFileRelativePath)
-	_, err = w.Add(versionFileRelativePath)
-	if err != nil {
-		return err
+		log.Infof("Adding version file %s", versionFileRelativePath)
+		_, err = w.Add(versionFileRelativePath)
+		if err != nil {
+			return err
+		}
 	}
 
 	changelogRelativePath, err := filepath.Rel(projectPath, changelogPath)
@@ -185,7 +185,7 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 		return err
 	}
 
-	commitMessage := "chore(bump) bump to version " + projectsConfig.NewVersion
+	commitMessage := "chore(bump): bumped version to " + projectsConfig.NewVersion
 	commit, err := commitChanges(
 		w,
 		commitMessage,

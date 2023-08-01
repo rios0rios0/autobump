@@ -29,7 +29,7 @@ func createGitLabMergeRequest(globalConfig *GlobalConfig, repo *git.Repository, 
 	}
 	projectID := project.ID
 
-	mrTitle := fmt.Sprintf("chore(bump): changed to version %s", newVersion)
+	mrTitle := fmt.Sprintf("chore(bump): bumped version to %s", newVersion)
 
 	mergeRequestOptions := &gitlab.CreateMergeRequestOptions{
 		SourceBranch:       gitlab.String(sourceBranch),
