@@ -35,22 +35,22 @@ var (
 				os.Exit(1)
 			}
 
-			projectsConfig := &ProjectsConfig{
+			projectConfig := &ProjectConfig{
 				Path:     cwd,
 				Language: language,
 			}
 
 			// detect the project language if not manually set
-			if projectsConfig.Language == "" {
-				projectLanguage, err := detectLanguage(globalConfig, projectsConfig.Path)
+			if projectConfig.Language == "" {
+				projectLanguage, err := detectLanguage(globalConfig, projectConfig.Path)
 				if err != nil {
 					log.Fatalf("Failed to detect project language: %v", err)
 					os.Exit(1)
 				}
-				projectsConfig.Language = projectLanguage
+				projectConfig.Language = projectLanguage
 			}
 
-			err = processRepo(globalConfig, projectsConfig)
+			err = processRepo(globalConfig, projectConfig)
 			if err != nil {
 				log.Fatalf("Failed to process repo: %v", err)
 				os.Exit(1)
@@ -76,11 +76,17 @@ var (
 				os.Exit(1)
 			}
 
+			if err = validateGlobalConfig(globalConfig, true); err != nil {
+				log.Fatalf("Config validation failed: %v", err)
+				os.Exit(1)
+			}
+
 			iterateProjects(globalConfig)
 		},
 	}
 )
 
+// findConfigOnMissing finds the config file if not manually set
 func findConfigOnMissing(configPath string) (string, error) {
 	if configPath == "" {
 		log.Info("No config file specified, searching for default locations")
