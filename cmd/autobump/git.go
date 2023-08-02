@@ -89,12 +89,24 @@ func pushChangesSsh(repo *git.Repository, refSpec config.RefSpec) error {
 
 func pushChangesHttps(repo *git.Repository, repoCfg *config.Config, refSpec config.RefSpec, globalConfig *GlobalConfig) error {
 	log.Info("Pushing local changes to remote repository through HTTPS")
-	return repo.Push(&git.PushOptions{
+	pushOptions := &git.PushOptions{
 		RefSpecs:   []config.RefSpec{refSpec},
 		RemoteName: "origin",
-		Auth: &http.BasicAuth{
+	}
+
+	// use the CI_JOB_TOKEN if available
+	ciJobToken := os.Getenv("CI_JOB_TOKEN")
+	if ciJobToken != "" {
+		pushOptions.Auth = &http.BasicAuth{
+			Username: "gitlab-ci-token",
+			Password: ciJobToken,
+		}
+	} else {
+		pushOptions.Auth = &http.BasicAuth{
 			Username: repoCfg.User.Name,
 			Password: globalConfig.GitLabAccessToken,
-		},
-	})
+		}
+	}
+
+	return repo.Push(pushOptions)
 }
