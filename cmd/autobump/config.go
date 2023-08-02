@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -55,16 +56,9 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 func validateGlobalConfig(cfg *GlobalConfig) error {
 	missingKeys := []string{}
 
-	if cfg.GitLabAccessToken == "" {
-
-		// try to get the token from the environment variable
-		gitlab_access_token := os.Getenv("CI_JOB_TOKEN")
-
-		if gitlab_access_token != "" {
-			cfg.GitLabAccessToken = gitlab_access_token
-		} else {
-			missingKeys = append(missingKeys, "gitlab_access_token")
-		}
+	if cfg.GitLabAccessToken == "" && os.Getenv("CI_JOB_TOKEN") == "" {
+		log.Error("Neither GitLab access token nor CI_JOB_TOKEN is available")
+		missingKeys = append(missingKeys, "gitlab_access_token")
 	}
 
 	if cfg.GpgKeyPath == "" {
