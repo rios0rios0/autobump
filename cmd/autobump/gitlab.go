@@ -9,9 +9,26 @@ import (
 	"github.com/xanzy/go-gitlab"
 )
 
-func createGitLabMergeRequest(globalConfig *GlobalConfig, repo *git.Repository, sourceBranch string, newVersion string) error {
+// createGitLabMergeRequest creates a new merge request on GitLab
+func createGitLabMergeRequest(
+	globalConfig *GlobalConfig,
+	projectConfig *ProjectConfig,
+	repo *git.Repository,
+	sourceBranch string,
+	newVersion string,
+) error {
 	log.Info("Creating GitLab merge request")
-	gitlabClient, err := gitlab.NewClient(globalConfig.GitLabAccessToken)
+
+	var accessToken string
+	if projectConfig.ProjectAccessToken != "" {
+		accessToken = projectConfig.ProjectAccessToken
+	} else if globalConfig.GitLabCIJobToken != "" {
+		accessToken = globalConfig.GitLabCIJobToken
+	} else {
+		accessToken = globalConfig.GitLabAccessToken
+	}
+
+	gitlabClient, err := gitlab.NewClient(accessToken)
 	if err != nil {
 		return err
 	}
@@ -42,6 +59,7 @@ func createGitLabMergeRequest(globalConfig *GlobalConfig, repo *git.Repository, 
 	return err
 }
 
+// getRemoteRepoFullProjectName returns the full project name of the remote repository
 func getRemoteRepoFullProjectName(repo *git.Repository) (fullProjectName string, err error) {
 	remoteURL, err := getRemoteRepoURL(repo)
 	if err != nil {
@@ -72,6 +90,7 @@ func getRemoteRepoFullProjectName(repo *git.Repository) (fullProjectName string,
 	return fullProjectName, nil
 }
 
+// getRemoteRepoURL returns the URL of the remote repository
 func getRemoteRepoURL(repo *git.Repository) (string, error) {
 	remote, err := repo.Remote("origin")
 	if err != nil {
@@ -85,6 +104,7 @@ func getRemoteRepoURL(repo *git.Repository) (string, error) {
 	return "", fmt.Errorf("No URLs configured for the remote")
 }
 
+// getRemoteServiceType returns the type of the remote service (e.g. GitHub, GitLab)
 func getRemoteServiceType(repo *git.Repository) (string, error) {
 	cfg, err := repo.Config()
 	if err != nil {

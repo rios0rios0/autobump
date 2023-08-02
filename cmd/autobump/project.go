@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,57 +12,103 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/crypto/ssh/terminal"
 )
 
-func getGpgKey(gpgKeyPath string) (*openpgp.Entity, error) {
-	privateKeyFile, err := os.Open(gpgKeyPath)
+// detectLanguage detects the language of a project by looking at the files in the project
+func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
+	var detected string
+
+	absPath, err := filepath.Abs(cwd)
 	if err != nil {
-		log.Error("Failed to open private key file:", err)
-	}
-	entityList, err := openpgp.ReadArmoredKeyRing(privateKeyFile)
-	if err != nil {
-		log.Error("Failed to read private key file:", err)
+		return "", err
 	}
 
-	fmt.Print("Enter the passphrase for your GPG key: ")
-	passphrase, err := terminal.ReadPassword(0)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println()
-
-	entity := entityList[0]
-	err = entity.PrivateKey.Decrypt([]byte(passphrase))
-	if err != nil {
-		log.Error("Failed to decrypt GPG key:", err)
-		return nil, err
+	// Check project type by special files
+	for language, config := range globalConfig.LanguagesConfig {
+		for _, pattern := range config.SpecialPatterns {
+			_, err := os.Stat(filepath.Join(absPath, pattern))
+			if !os.IsNotExist(err) {
+				return language, nil
+			}
+		}
 	}
 
-	log.Info("Successfully decrypted GPG key")
-	return entity, nil
+	// Check project type by file extensions
+	err = filepath.Walk(absPath, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		if detected != "" {
+			return filepath.SkipDir
+		}
+
+		for language, config := range globalConfig.LanguagesConfig {
+			for _, ext := range config.Extensions {
+				if strings.HasSuffix(info.Name(), "."+ext) {
+					detected = language
+					return filepath.SkipDir
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return "", errors.New("project language not recognized")
 }
 
-func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) error {
+// processRepo:
+// - clones the repository if it is a remote repository
+// - creates the chore/bump branch
+// - updates the CHANGELOG.md file
+// - updates the version file
+// - commits the changes
+// - pushes the branch to the remote repository
+// - creates a new merge request on GitLab
+func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error {
+	globalGitConfig, err := getGlobalGitConfig()
+	if err != nil {
+		return err
+	}
+
 	// check if project.Path starts with https:// or git@
-	if strings.HasPrefix(projectsConfig.Path, "https://") || strings.HasPrefix(projectsConfig.Path, "git@") {
+	// if these prefixes exist, it means the project is a remote repository and should be cloned
+	if strings.HasPrefix(projectConfig.Path, "https://") || strings.HasPrefix(projectConfig.Path, "git@") {
 		tmpDir, err := os.MkdirTemp("", "autobump-")
 		if err != nil {
 			return err
 		}
 		defer os.RemoveAll(tmpDir)
-		log.Infof("Cloning %s into %s", projectsConfig.Path, tmpDir)
+		log.Infof("Cloning %s into %s", projectConfig.Path, tmpDir)
 		cloneOptions := &git.CloneOptions{
-			URL:   projectsConfig.Path,
+			URL:   projectConfig.Path,
 			Depth: 1,
 		}
 
 		// authenticate with CI job token if running in a GitLab CI pipeline
-		ciJobToken := os.Getenv("CI_JOB_TOKEN")
-		if ciJobToken != "" {
+		if projectConfig.ProjectAccessToken != "" {
+			cloneOptions.Auth = &http.BasicAuth{
+				Username: globalGitConfig.Raw.Section("user").Option("name"),
+				Password: projectConfig.ProjectAccessToken,
+			}
+		} else if globalConfig.GitLabCIJobToken != "" {
 			cloneOptions.Auth = &http.BasicAuth{
 				Username: "gitlab-ci-token",
-				Password: ciJobToken,
+				Password: globalConfig.GitLabCIJobToken,
+			}
+		} else {
+			cloneOptions.Auth = &http.BasicAuth{
+				Username: globalGitConfig.Raw.Section("user").Option("name"),
+				Password: globalConfig.GitLabAccessToken,
 			}
 		}
 
@@ -69,20 +116,20 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 		if err != nil {
 			return err
 		}
-		log.Infof("Successfully cloned %s", projectsConfig.Path)
-		projectsConfig.Path = tmpDir
+		log.Infof("Successfully cloned %s", projectConfig.Path)
+		projectConfig.Path = tmpDir
 	}
 
 	// detect the project language if not manually set
-	if projectsConfig.Language == "" {
-		projectLanguage, err := detectLanguage(globalConfig, projectsConfig.Path)
+	if projectConfig.Language == "" {
+		projectLanguage, err := detectLanguage(globalConfig, projectConfig.Path)
 		if err != nil {
 			return err
 		}
-		projectsConfig.Language = projectLanguage
+		projectConfig.Language = projectLanguage
 	}
 
-	projectPath := projectsConfig.Path
+	projectPath := projectConfig.Path
 	repo, err := openRepo(projectPath)
 	if err != nil {
 		return err
@@ -99,7 +146,7 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	}
 
 	branchName := "chore/bump"
-	branchExists, err := checkIfBranchExists(repo, branchName)
+	branchExists, err := checkBranchExists(repo, branchName)
 	if err != nil {
 		return err
 	}
@@ -116,18 +163,18 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
 	version, err := updateChangelogFile(changelogPath)
 	if err != nil {
-		log.Errorf("No version found in CHANGELOG.md for project at %s\n", projectsConfig.Path)
+		log.Errorf("No version found in CHANGELOG.md for project at %s\n", projectConfig.Path)
 		return err
 	}
 
-	projectsConfig.NewVersion = version.String()
-	log.Infof("Updating version to %s", projectsConfig.NewVersion)
-	err = updateVersion(projectPath, globalConfig, projectsConfig)
+	projectConfig.NewVersion = version.String()
+	log.Infof("Updating version to %s", projectConfig.NewVersion)
+	err = updateVersion(projectPath, globalConfig, projectConfig)
 	if err != nil {
 		return err
 	}
 
-	versionFiles, err := getVersionFiles(globalConfig, projectsConfig)
+	versionFiles, err := getVersionFiles(globalConfig, projectConfig)
 	if err != nil {
 		return err
 	}
@@ -160,11 +207,6 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 		return err
 	}
 
-	globalGitConfig, err := getGlobalGitConfig()
-	if err != nil {
-		return err
-	}
-
 	gpgSign := cfg.Raw.Section("commit").Option("gpgsign")
 	if gpgSign == "" {
 		gpgSign = globalGitConfig.Raw.Section("commit").Option("gpgsign")
@@ -185,7 +227,7 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 		return err
 	}
 
-	commitMessage := "chore(bump): bumped version to " + projectsConfig.NewVersion
+	commitMessage := "chore(bump): bumped version to " + projectConfig.NewVersion
 	commit, err := commitChanges(
 		w,
 		commitMessage,
@@ -211,10 +253,13 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	if strings.HasPrefix(remoteURL, "git@") {
 		err = pushChangesSsh(repo, refSpec)
 	} else if strings.HasPrefix(remoteURL, "https://") || strings.HasPrefix(remoteURL, "http://") {
-		err = pushChangesHttps(repo, cfg, refSpec, globalConfig)
+		err = pushChangesHttps(repo, cfg, refSpec, globalConfig, projectConfig)
 	}
 
 	if err != nil {
+		if err.Error() == "object not found" {
+			log.Error("Got error object not found (remote branch already exists?)")
+		}
 		return err
 	}
 
@@ -224,17 +269,26 @@ func processRepo(globalConfig *GlobalConfig, projectsConfig *ProjectsConfig) err
 	}
 
 	if serviceType == "GitLab" {
-		err = createGitLabMergeRequest(globalConfig, repo, branchName, projectsConfig.NewVersion)
+		err = createGitLabMergeRequest(
+			globalConfig,
+			projectConfig,
+			repo,
+			branchName,
+			projectConfig.NewVersion,
+		)
 		if err != nil {
 			return err
 		}
 	}
 
+	log.Infof("Successfully processed project %s", projectConfig.Name)
+
 	return nil
 }
 
+// iterateProjects iterates over the projects and processes them using the processRepo function
 func iterateProjects(globalConfig *GlobalConfig) {
-	for _, project := range globalConfig.ProjectsConfig {
+	for _, project := range globalConfig.Projects {
 
 		// verify if the project path exists
 		if _, err := os.Stat(project.Path); os.IsNotExist(err) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -12,10 +13,11 @@ import (
 )
 
 type GlobalConfig struct {
-	ProjectsConfig    []ProjectsConfig          `yaml:"projects"`
+	Projects          []ProjectConfig           `yaml:"projects"`
 	LanguagesConfig   map[string]LanguageConfig `yaml:"languages"`
-	GitLabAccessToken string                    `yaml:"gitlab_access_token"`
 	GpgKeyPath        string                    `yaml:"gpg_key_path"`
+	GitLabAccessToken string                    `yaml:"gitlab_access_token"`
+	GitLabCIJobToken  string
 }
 
 type LanguageConfig struct {
@@ -25,12 +27,15 @@ type LanguageConfig struct {
 	VersionPattern  string   `yaml:"version_pattern"`
 }
 
-type ProjectsConfig struct {
-	Path       string `yaml:"path"`
-	Language   string `yaml:"language"`
-	NewVersion string
+type ProjectConfig struct {
+	Path               string `yaml:"path"`
+	Name               string `yaml:"name"`
+	Language           string `yaml:"language"`
+	ProjectAccessToken string `yaml:"project_access_token"`
+	NewVersion         string
 }
 
+// readConfig reads the config file and returns a GlobalConfig struct
 func readConfig(configPath string) (*GlobalConfig, error) {
 	data, err := ioutil.ReadFile(configPath)
 	if err != nil {
@@ -46,32 +51,38 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 		return nil, err
 	}
 
-	if err = validateGlobalConfig(&globalConfig); err != nil {
-		return nil, err
+	for i := range globalConfig.Projects {
+		if globalConfig.Projects[i].Name == "" {
+			basename := path.Base(globalConfig.Projects[i].Path)
+			basename = strings.TrimSuffix(basename, ".git")
+			globalConfig.Projects[i].Name = basename
+		}
 	}
+
+	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
 
 	return &globalConfig, nil
 }
 
-func validateGlobalConfig(cfg *GlobalConfig) error {
+// validateGlobalConfig validates the global config and reports missing keys and errors
+func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 	missingKeys := []string{}
 
-	if cfg.GitLabAccessToken == "" && os.Getenv("CI_JOB_TOKEN") == "" {
-		log.Error("Neither GitLab access token nor CI_JOB_TOKEN is available")
-		missingKeys = append(missingKeys, "gitlab_access_token")
-	}
-
-	if cfg.GpgKeyPath == "" {
+	if globalConfig.GpgKeyPath == "" {
 		missingKeys = append(missingKeys, "gpg_key_path")
 	}
 
-	if len(cfg.ProjectsConfig) == 0 {
+	if batch == true && len(globalConfig.Projects) == 0 {
 		missingKeys = append(missingKeys, "projects")
 	}
 
-	for i, pc := range cfg.ProjectsConfig {
-		if pc.Path == "" {
+	for i, projectConfig := range globalConfig.Projects {
+		if projectConfig.Path == "" {
 			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].path", i))
+		}
+		if batch == true && globalConfig.GitLabAccessToken == "" && projectConfig.ProjectAccessToken == "" {
+			log.Error("Project access token is required when personal access token is not set in batch mode")
+			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].project_access_token", i))
 		}
 	}
 
@@ -82,6 +93,7 @@ func validateGlobalConfig(cfg *GlobalConfig) error {
 	return nil
 }
 
+// findConfig finds the config file in a list of default locations
 func findConfig() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -92,7 +104,9 @@ func findConfig() (string, error) {
 		"autobump.yaml",
 		"autobump.yml",
 		"configs/autobump.yaml",
+		"configs/autobump.yml",
 		fmt.Sprintf("%s/.config/autobump.yaml", homeDir),
+		fmt.Sprintf("%s/.config/autobump.yml", homeDir),
 	}
 
 	location, err := findFile(locations, "config file")

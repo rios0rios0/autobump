@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// getGlobalGitConfig reads the global git configuration file and returns a config.Config object
 func getGlobalGitConfig() (*config.Config, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -33,13 +34,15 @@ func getGlobalGitConfig() (*config.Config, error) {
 	return cfg, nil
 }
 
+// openRepo opens a git repository at the given path
 func openRepo(projectPath string) (*git.Repository, error) {
 	log.Infof("Opening repository at %s", projectPath)
 	repo, err := git.PlainOpen(projectPath)
 	return repo, err
 }
 
-func checkIfBranchExists(repo *git.Repository, branchName string) (bool, error) {
+// createAndSwitchBranch checks if a given Git branch exists
+func checkBranchExists(repo *git.Repository, branchName string) (bool, error) {
 	refs, err := repo.References()
 	if err != nil {
 		return false, err
@@ -55,7 +58,13 @@ func checkIfBranchExists(repo *git.Repository, branchName string) (bool, error) 
 	return branchExists, err
 }
 
-func createAndSwitchBranch(repo *git.Repository, w *git.Worktree, branchName string, hash plumbing.Hash) error {
+// createAndSwitchBranch creates a new branch and switches to it
+func createAndSwitchBranch(
+	repo *git.Repository,
+	w *git.Worktree,
+	branchName string,
+	hash plumbing.Hash,
+) error {
 	log.Infof("Creating and switching to new branch `%s`", branchName)
 	ref := plumbing.NewHashReference(plumbing.ReferenceName("refs/heads/"+branchName), hash)
 	err := repo.Storer.SetReference(ref)
@@ -69,7 +78,12 @@ func createAndSwitchBranch(repo *git.Repository, w *git.Worktree, branchName str
 	return err
 }
 
-func commitChanges(w *git.Worktree, commitMessage string, signKey *openpgp.Entity) (plumbing.Hash, error) {
+// commitChanges commits the changes in the given worktree
+func commitChanges(
+	w *git.Worktree,
+	commitMessage string,
+	signKey *openpgp.Entity,
+) (plumbing.Hash, error) {
 	log.Info("Committing changes")
 
 	commit, err := w.Commit(commitMessage, &git.CommitOptions{SignKey: signKey})
@@ -80,6 +94,7 @@ func commitChanges(w *git.Worktree, commitMessage string, signKey *openpgp.Entit
 	return commit, nil
 }
 
+// pushChangesSsh pushes the changes to the remote repository over SSH
 func pushChangesSsh(repo *git.Repository, refSpec config.RefSpec) error {
 	log.Info("Pushing local changes to remote repository through SSH")
 	return repo.Push(&git.PushOptions{
@@ -87,19 +102,25 @@ func pushChangesSsh(repo *git.Repository, refSpec config.RefSpec) error {
 	})
 }
 
-func pushChangesHttps(repo *git.Repository, repoCfg *config.Config, refSpec config.RefSpec, globalConfig *GlobalConfig) error {
+// pushChangesHttps pushes the changes to the remote repository over HTTPS
+func pushChangesHttps(
+	repo *git.Repository,
+	repoCfg *config.Config,
+	refSpec config.RefSpec,
+	globalConfig *GlobalConfig,
+	projectConfig *ProjectConfig,
+) error {
 	log.Info("Pushing local changes to remote repository through HTTPS")
 	pushOptions := &git.PushOptions{
 		RefSpecs:   []config.RefSpec{refSpec},
 		RemoteName: "origin",
 	}
 
-	// use the CI_JOB_TOKEN if available
-	ciJobToken := os.Getenv("CI_JOB_TOKEN")
-	if ciJobToken != "" {
+	// use the project access token if available
+	if projectConfig.ProjectAccessToken != "" {
 		pushOptions.Auth = &http.BasicAuth{
-			Username: "gitlab-ci-token",
-			Password: ciJobToken,
+			Username: repoCfg.User.Name,
+			Password: projectConfig.ProjectAccessToken,
 		}
 	} else {
 		pushOptions.Auth = &http.BasicAuth{
