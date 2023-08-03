@@ -29,6 +29,11 @@ var (
 				os.Exit(1)
 			}
 
+			if err = validateGlobalConfig(globalConfig, false); err != nil {
+				log.Fatalf("Config validation failed: %v", err)
+				os.Exit(1)
+			}
+
 			cwd, err := os.Getwd()
 			if err != nil {
 				log.Fatalf("Failed to get the current working directory: %v", err)

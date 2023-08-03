@@ -1,7 +1,7 @@
 # GitLab personal access token
 # used to create merge requests on GitLab
-# leave it empty to automatically read from the
-#   CI_JOB_TOKEN environment variable
+# set it to a path to read the token from a file
+#gitlab_access_token: ".secure_files/gitlab_access_token.key"
 gitlab_access_token: "glpat-TOKEN"
 
 # (optional) path to your password-protected GPG private key
@@ -55,3 +55,8 @@ projects:
   # specify a Git URL for AutoBump to clone the repository automatically into a
   #   temporary directory, perform the bump, then delete the temporary directory
   - path: "git@github.com:example/repo3.git"
+
+  # you can specify a project access token that will be used for this project
+  # this token will be prioritized over the gitlab_access_token and the CI_JOB_TOKEN
+  - path: "https://gitlab.com/user/repo4.git"
+    project_access_token: "glpat-TOKEN"
