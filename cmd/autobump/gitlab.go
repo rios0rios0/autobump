@@ -22,8 +22,6 @@ func createGitLabMergeRequest(
 	var accessToken string
 	if projectConfig.ProjectAccessToken != "" {
 		accessToken = projectConfig.ProjectAccessToken
-	} else if globalConfig.GitLabCIJobToken != "" {
-		accessToken = globalConfig.GitLabCIJobToken
 	} else {
 		accessToken = globalConfig.GitLabAccessToken
 	}
