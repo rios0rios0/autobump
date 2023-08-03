@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	log "github.com/sirupsen/logrus"
@@ -65,8 +66,13 @@ func getGpgKey(gpgKeyPath string) (*openpgp.Entity, error) {
 	}
 
 	fmt.Print("Enter the passphrase for your GPG key: ")
-	passphrase, err := terminal.ReadPassword(0)
-	if err != nil {
+	var passphrase []byte
+	passphrase, err = terminal.ReadPassword(0)
+
+	// assume the passphrase to be empty if unable to read from terminal
+	if strings.TrimSpace(err.Error()) == "inappropriate ioctl for device" {
+		passphrase = []byte("")
+	} else if err != nil {
 		return nil, err
 	}
 	fmt.Println()
