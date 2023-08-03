@@ -235,6 +235,8 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		w,
 		commitMessage,
 		signKey,
+		globalGitConfig.Raw.Section("user").Option("name"),
+		globalGitConfig.Raw.Section("user").Option("email"),
 	)
 	if err != nil {
 		return err
