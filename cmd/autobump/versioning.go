@@ -62,6 +62,9 @@ func updateVersion(path string, globalConfig *GlobalConfig, projectConfig *Proje
 
 // getVersionFiles returns the files in a project that contains the software's version number
 func getVersionFiles(globalConfig *GlobalConfig, projectConfig *ProjectConfig) ([]string, error) {
+	if projectConfig.Name == "" {
+		projectConfig.Name = filepath.Base(projectConfig.Path)
+	}
 	projectName := strings.Replace(projectConfig.Name, "-", "_", -1)
 	var versionFiles []string
 
