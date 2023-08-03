@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -83,8 +84,14 @@ func commitChanges(
 	w *git.Worktree,
 	commitMessage string,
 	signKey *openpgp.Entity,
+	name string,
+	email string,
 ) (plumbing.Hash, error) {
 	log.Info("Committing changes")
+
+	// add DCO sign-off
+	signoff := fmt.Sprintf("\n\nSigned-off-by: %s <%s>", name, email)
+	commitMessage += signoff
 
 	commit, err := w.Commit(commitMessage, &git.CommitOptions{SignKey: signKey})
 	if err != nil {
