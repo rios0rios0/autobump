@@ -59,6 +59,18 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 		}
 	}
 
+	if globalConfig.GitLabAccessToken != "" {
+		_, err = os.Stat(globalConfig.GitLabAccessToken)
+		if !os.IsNotExist(err) {
+			log.Infof("Reading GitLab access token from file %s", globalConfig.GitLabAccessToken)
+			token, err := ioutil.ReadFile(globalConfig.GitLabAccessToken)
+			if err != nil {
+				return nil, err
+			}
+			globalConfig.GitLabAccessToken = strings.TrimSpace(string(token))
+		}
+	}
+
 	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
 
 	return &globalConfig, nil
