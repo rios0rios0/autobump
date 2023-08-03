@@ -97,7 +97,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		// authenticate with CI job token if running in a GitLab CI pipeline
 		if projectConfig.ProjectAccessToken != "" {
 			cloneOptions.Auth = &http.BasicAuth{
-				Username: globalGitConfig.Raw.Section("user").Option("name"),
+				Username: "oauth2",
 				Password: projectConfig.ProjectAccessToken,
 			}
 		} else if globalConfig.GitLabCIJobToken != "" {
