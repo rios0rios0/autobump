@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,31 +22,27 @@ func updateVersion(path string, globalConfig *GlobalConfig, projectConfig *Proje
 	oneVersionFileExists := false
 	for _, versionFile := range versionFiles {
 		// check if the file exists
-		info, err := os.Stat(versionFile)
+		info, err := os.Stat(versionFile.Path)
 		if os.IsNotExist(err) {
-			log.Warnf("Version file %s does not exist", versionFile)
+			log.Warnf("Version file %s does not exist", versionFile.Path)
 			continue
 		}
+		log.Infof("Updating version file %s", versionFile.Path)
 
 		originalFileMode := info.Mode()
 		oneVersionFileExists = true
 
-		content, err := ioutil.ReadFile(versionFile)
+		content, err := os.ReadFile(versionFile.Path)
 		if err != nil {
 			return err
 		}
 
-		versionPattern, err := getVersionPattern(globalConfig, projectConfig)
-		if err != nil {
-			return err
-		}
-
-		re := regexp.MustCompile(versionPattern)
+		re := regexp.MustCompile(versionFile.Pattern)
 		updatedContent := re.ReplaceAllStringFunc(string(content), func(match string) string {
 			return re.ReplaceAllString(match, "${1}"+projectConfig.NewVersion+"${2}")
 		})
 
-		err = ioutil.WriteFile(versionFile, []byte(updatedContent), originalFileMode)
+		err = os.WriteFile(versionFile.Path, []byte(updatedContent), originalFileMode)
 		if err != nil {
 			return err
 		}
@@ -61,12 +56,13 @@ func updateVersion(path string, globalConfig *GlobalConfig, projectConfig *Proje
 }
 
 // getVersionFiles returns the files in a project that contains the software's version number
-func getVersionFiles(globalConfig *GlobalConfig, projectConfig *ProjectConfig) ([]string, error) {
+// as well as the regex pattern to find the version number in the file.
+func getVersionFiles(globalConfig *GlobalConfig, projectConfig *ProjectConfig) ([]VersionFile, error) {
 	if projectConfig.Name == "" {
 		projectConfig.Name = filepath.Base(projectConfig.Path)
 	}
 	projectName := strings.Replace(projectConfig.Name, "-", "_", -1)
-	var versionFiles []string
+	var versionFiles []VersionFile
 
 	languageConfig, exists := globalConfig.LanguagesConfig[projectConfig.Language]
 	if !exists {
@@ -75,19 +71,11 @@ func getVersionFiles(globalConfig *GlobalConfig, projectConfig *ProjectConfig) (
 
 	for _, versionFile := range languageConfig.VersionFiles {
 		versionFiles = append(
-			versionFiles, filepath.Join(
-				projectConfig.Path, strings.ReplaceAll(versionFile, "{project_name}", projectName),
-			),
+			versionFiles, VersionFile{
+				Path:    filepath.Join(projectConfig.Path, strings.ReplaceAll(versionFile.Path, "{project_name}", projectName)),
+				Pattern: versionFile.Pattern,
+			},
 		)
 	}
 	return versionFiles, nil
-}
-
-// getVersionPattern returns the pattern that matches the version number in the version files
-func getVersionPattern(globalConfig *GlobalConfig, projectConfig *ProjectConfig) (string, error) {
-	versionPattern, exists := globalConfig.LanguagesConfig[projectConfig.Language]
-	if !exists {
-		return "", errors.New(fmt.Sprintf("Language %s not found in config", language))
-	}
-	return versionPattern.VersionPattern, nil
 }
