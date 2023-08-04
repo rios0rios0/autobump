@@ -58,11 +58,13 @@ func findFile(locations []string, filename string) (string, error) {
 func getGpgKey(gpgKeyPath string) (*openpgp.Entity, error) {
 	privateKeyFile, err := os.Open(gpgKeyPath)
 	if err != nil {
-		log.Error("Failed to open private key file:", err)
+		log.Error("Failed to open private key file: ", err)
+		return nil, errors.New("Failed to open private key file")
 	}
 	entityList, err := openpgp.ReadArmoredKeyRing(privateKeyFile)
 	if err != nil {
-		log.Error("Failed to read private key file:", err)
+		log.Error("Failed to read private key file: ", err)
+		return nil, errors.New("Failed to read private key file")
 	}
 
 	fmt.Print("Enter the passphrase for your GPG key: ")
@@ -70,10 +72,12 @@ func getGpgKey(gpgKeyPath string) (*openpgp.Entity, error) {
 	passphrase, err = terminal.ReadPassword(0)
 
 	// assume the passphrase to be empty if unable to read from terminal
-	if strings.TrimSpace(err.Error()) == "inappropriate ioctl for device" {
-		passphrase = []byte("")
-	} else if err != nil {
-		return nil, err
+	if err != nil {
+		if strings.TrimSpace(err.Error()) == "inappropriate ioctl for device" {
+			passphrase = []byte("")
+		} else {
+			return nil, err
+		}
 	}
 	fmt.Println()
 

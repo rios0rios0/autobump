@@ -187,10 +187,13 @@ func updateSection(unreleasedSection []string, nextVersion semver.Version) ([]st
 	newSection = append(newSection, fmt.Sprintf("## [%s] - %s", nextVersion.String(), time.Now().Format("2006-01-02")))
 	newSection = append(newSection, "") // add a blank line between sections
 
-	for title, section := range sections {
+	keys := []string{"Added", "Changed", "Removed"}
+	for _, key := range keys {
+		section := sections[key]
+
 		// Append sections only if they have content
 		if len(*section) > 0 {
-			newSection = append(newSection, fmt.Sprintf("### %s", title))
+			newSection = append(newSection, fmt.Sprintf("### %s", key))
 			newSection = append(newSection, "")
 			newSection = append(newSection, *section...)
 			newSection = append(newSection, "")

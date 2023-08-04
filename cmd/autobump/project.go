@@ -184,8 +184,8 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 
 	// get version file relative path
 	for _, versionFile := range versionFiles {
-		versionFileRelativePath, err := filepath.Rel(projectPath, versionFile)
-		if _, err := os.Stat(versionFile); os.IsNotExist(err) {
+		versionFileRelativePath, err := filepath.Rel(projectPath, versionFile.Path)
+		if _, err := os.Stat(versionFile.Path); os.IsNotExist(err) {
 			continue
 		}
 
