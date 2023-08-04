@@ -21,10 +21,14 @@ type GlobalConfig struct {
 }
 
 type LanguageConfig struct {
-	Extensions      []string `yaml:"extensions"`
-	SpecialPatterns []string `yaml:"special_patterns"`
-	VersionFiles    []string `yaml:"version_files"`
-	VersionPattern  string   `yaml:"version_pattern"`
+	Extensions      []string      `yaml:"extensions"`
+	SpecialPatterns []string      `yaml:"special_patterns"`
+	VersionFiles    []VersionFile `yaml:"version_files"`
+}
+
+type VersionFile struct {
+	Path    string `yaml:"path"`
+	Pattern string `yaml:"pattern"`
 }
 
 type ProjectConfig struct {
