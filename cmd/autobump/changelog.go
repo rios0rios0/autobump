@@ -134,7 +134,7 @@ func updateSection(unreleasedSection []string, nextVersion semver.Version) ([]st
 		default:
 			if currentSection != nil && trimmedLine != "" && trimmedLine != "-" && !strings.HasPrefix(trimmedLine, "##") {
 				*currentSection = append(*currentSection, line)
-				if strings.HasPrefix(line, "**BREAKING CHANGE: **") {
+				if strings.HasPrefix(line, "**BREAKING CHANGE:**") {
 					majorChanges++
 				} else if currentSection == sections["Added"] {
 					minorChanges++
@@ -147,17 +147,17 @@ func updateSection(unreleasedSection []string, nextVersion semver.Version) ([]st
 
 	switch {
 	case majorChanges > 0:
-		for i := 1; i < majorChanges; i++ {
+		for i := 0; i < majorChanges; i++ {
 			nextVersion = nextVersion.IncMajor()
 		}
 		break
 	case minorChanges > 0:
-		for i := 1; i < minorChanges; i++ {
+		for i := 0; i < minorChanges; i++ {
 			nextVersion = nextVersion.IncMinor()
 		}
 		break
 	case patchChanges > 0:
-		for i := 1; i < patchChanges; i++ {
+		for i := 0; i < patchChanges; i++ {
 			nextVersion = nextVersion.IncPatch()
 		}
 		break
