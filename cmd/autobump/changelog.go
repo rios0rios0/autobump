@@ -109,7 +109,10 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 	return &nextVersion, newContent, nil
 }
 
-func updateSection(unreleasedSection []string, nextVersion semver.Version) ([]string, *semver.Version, error) {
+func updateSection(
+	unreleasedSection []string,
+	nextVersion semver.Version,
+) ([]string, *semver.Version, error) {
 	var newSection []string
 	var currentSection *[]string
 	sections := map[string]*[]string{
@@ -132,7 +135,8 @@ func updateSection(unreleasedSection []string, nextVersion semver.Version) ([]st
 		case strings.Contains(line, "### Removed"):
 			currentSection = sections["Removed"]
 		default:
-			if currentSection != nil && trimmedLine != "" && trimmedLine != "-" && !strings.HasPrefix(trimmedLine, "##") {
+			if currentSection != nil && trimmedLine != "" && trimmedLine != "-" &&
+				!strings.HasPrefix(trimmedLine, "##") {
 				*currentSection = append(*currentSection, line)
 				if strings.HasPrefix(line, "**BREAKING CHANGE:**") {
 					majorChanges++
@@ -184,7 +188,10 @@ func updateSection(unreleasedSection []string, nextVersion semver.Version) ([]st
 	newSection = append(newSection, "-")
 	newSection = append(newSection, "")
 
-	newSection = append(newSection, fmt.Sprintf("## [%s] - %s", nextVersion.String(), time.Now().Format("2006-01-02")))
+	newSection = append(
+		newSection,
+		fmt.Sprintf("## [%s] - %s", nextVersion.String(), time.Now().Format("2006-01-02")),
+	)
 	newSection = append(newSection, "") // add a blank line between sections
 
 	keys := []string{"Added", "Changed", "Removed"}

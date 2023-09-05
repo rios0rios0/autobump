@@ -16,7 +16,7 @@ import (
 
 // detectLanguage detects the language of a project by looking at the files in the project
 func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
-	var detected string
+	log.Info("Detecting project language")
 
 	absPath, err := filepath.Abs(cwd)
 	if err != nil {
@@ -26,14 +26,20 @@ func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
 	// Check project type by special files
 	for language, config := range globalConfig.LanguagesConfig {
 		for _, pattern := range config.SpecialPatterns {
-			_, err := os.Stat(filepath.Join(absPath, pattern))
-			if !os.IsNotExist(err) {
+			matches, _ := filepath.Glob(filepath.Join(absPath, pattern))
+			if len(matches) > 0 {
+				log.Infof(
+					"Project language detected as %s via file pattern '%s'",
+					language,
+					pattern,
+				)
 				return language, nil
 			}
 		}
 	}
 
 	// Check project type by file extensions
+	var detected string
 	err = filepath.Walk(absPath, func(p string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -63,6 +69,11 @@ func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
 		return "", err
 	}
 
+	if detected != "" {
+		log.Infof("Project language detected as '%s' via file extension", detected)
+		return detected, nil
+	}
+
 	return "", errors.New("project language not recognized")
 }
 
@@ -82,7 +93,8 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 
 	// check if project.Path starts with https:// or git@
 	// if these prefixes exist, it means the project is a remote repository and should be cloned
-	if strings.HasPrefix(projectConfig.Path, "https://") || strings.HasPrefix(projectConfig.Path, "git@") {
+	if strings.HasPrefix(projectConfig.Path, "https://") ||
+		strings.HasPrefix(projectConfig.Path, "git@") {
 		tmpDir, err := os.MkdirTemp("", "autobump-")
 		if err != nil {
 			return err
@@ -297,7 +309,8 @@ func iterateProjects(globalConfig *GlobalConfig) {
 
 		// verify if the project path exists
 		if _, err := os.Stat(project.Path); os.IsNotExist(err) {
-			if !strings.HasPrefix(project.Path, "https://") && !strings.HasPrefix(project.Path, "git@") {
+			if !strings.HasPrefix(project.Path, "https://") &&
+				!strings.HasPrefix(project.Path, "git@") {
 				log.Errorf("Project path does not exist: %s\n", project.Path)
 				log.Warn("Skipping project")
 				continue

@@ -37,10 +37,13 @@ func updateVersion(path string, globalConfig *GlobalConfig, projectConfig *Proje
 			return err
 		}
 
-		re := regexp.MustCompile(versionFile.Pattern)
-		updatedContent := re.ReplaceAllStringFunc(string(content), func(match string) string {
-			return re.ReplaceAllString(match, "${1}"+projectConfig.NewVersion+"${2}")
-		})
+		updatedContent := string(content)
+		for _, pattern := range versionFile.Patterns {
+			re := regexp.MustCompile(pattern)
+			updatedContent = re.ReplaceAllStringFunc(updatedContent, func(match string) string {
+				return re.ReplaceAllString(match, "${1}"+projectConfig.NewVersion+"${2}")
+			})
+		}
 
 		err = os.WriteFile(versionFile.Path, []byte(updatedContent), originalFileMode)
 		if err != nil {
@@ -57,7 +60,10 @@ func updateVersion(path string, globalConfig *GlobalConfig, projectConfig *Proje
 
 // getVersionFiles returns the files in a project that contains the software's version number
 // as well as the regex pattern to find the version number in the file.
-func getVersionFiles(globalConfig *GlobalConfig, projectConfig *ProjectConfig) ([]VersionFile, error) {
+func getVersionFiles(
+	globalConfig *GlobalConfig,
+	projectConfig *ProjectConfig,
+) ([]VersionFile, error) {
 	if projectConfig.Name == "" {
 		projectConfig.Name = filepath.Base(projectConfig.Path)
 	}
@@ -70,12 +76,23 @@ func getVersionFiles(globalConfig *GlobalConfig, projectConfig *ProjectConfig) (
 	}
 
 	for _, versionFile := range languageConfig.VersionFiles {
-		versionFiles = append(
-			versionFiles, VersionFile{
-				Path:    filepath.Join(projectConfig.Path, strings.ReplaceAll(versionFile.Path, "{project_name}", projectName)),
-				Pattern: versionFile.Pattern,
-			},
+		matches, err := filepath.Glob(
+			filepath.Join(
+				projectConfig.Path,
+				strings.ReplaceAll(versionFile.Path, "{project_name}", projectName),
+			),
 		)
+		if err != nil {
+			return nil, err
+		}
+		for _, match := range matches {
+			versionFiles = append(
+				versionFiles, VersionFile{
+					Path:     match,
+					Patterns: versionFile.Patterns,
+				},
+			)
+		}
 	}
 	return versionFiles, nil
 }
