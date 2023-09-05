@@ -30,6 +30,35 @@ func updateChangelogFile(changelogPath string) (*semver.Version, error) {
 	return version, nil
 }
 
+func isChangelogUnreleasedEmpty(changelogPath string) (bool, error) {
+	lines, err := readLines(changelogPath)
+	if err != nil {
+		return false, err
+	}
+
+	latestVersion, err := findLatestVersion(lines)
+	if err != nil {
+		return false, err
+	}
+
+	unreleased := false
+	for _, line := range lines {
+		if strings.Contains(line, "[Unreleased]") {
+			unreleased = true
+		} else if strings.HasPrefix(line, fmt.Sprintf("## [%s]", latestVersion.String())) {
+			unreleased = false
+		}
+
+		if unreleased {
+			if match, _ := regexp.MatchString(`^\s*-\s*[^ ]+`, line); match {
+				return false, nil
+			}
+		}
+	}
+
+	return true, nil
+}
+
 func findLatestVersion(lines []string) (*semver.Version, error) {
 	// Regular expression to match version lines
 	versionRegex := regexp.MustCompile(`^\s*##\s*\[([^\]]+)\]`)
