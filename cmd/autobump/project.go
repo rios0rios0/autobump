@@ -135,6 +135,15 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		projectConfig.Path = tmpDir
 	}
 
+	bumpEmpty, err := isChangelogUnreleasedEmpty(filepath.Join(projectConfig.Path, "CHANGELOG.md"))
+	if err != nil {
+		return err
+	}
+	if bumpEmpty {
+		log.Infof("Bump is empty, skipping project %s", projectConfig.Name)
+		return nil
+	}
+
 	// detect the project language if not manually set
 	if projectConfig.Language == "" {
 		projectLanguage, err := detectLanguage(globalConfig, projectConfig.Path)
