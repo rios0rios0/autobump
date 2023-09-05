@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -27,8 +26,8 @@ type LanguageConfig struct {
 }
 
 type VersionFile struct {
-	Path    string `yaml:"path"`
-	Pattern string `yaml:"pattern"`
+	Path     string   `yaml:"path"`
+	Patterns []string `yaml:"patterns"`
 }
 
 type ProjectConfig struct {
@@ -41,7 +40,7 @@ type ProjectConfig struct {
 
 // readConfig reads the config file and returns a GlobalConfig struct
 func readConfig(configPath string) (*GlobalConfig, error) {
-	data, err := ioutil.ReadFile(configPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +66,7 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 		_, err = os.Stat(globalConfig.GitLabAccessToken)
 		if !os.IsNotExist(err) {
 			log.Infof("Reading GitLab access token from file %s", globalConfig.GitLabAccessToken)
-			token, err := ioutil.ReadFile(globalConfig.GitLabAccessToken)
+			token, err := os.ReadFile(globalConfig.GitLabAccessToken)
 			if err != nil {
 				return nil, err
 			}
@@ -96,8 +95,11 @@ func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 		if projectConfig.Path == "" {
 			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].path", i))
 		}
-		if batch == true && globalConfig.GitLabAccessToken == "" && projectConfig.ProjectAccessToken == "" {
-			log.Error("Project access token is required when personal access token is not set in batch mode")
+		if batch == true && globalConfig.GitLabAccessToken == "" &&
+			projectConfig.ProjectAccessToken == "" {
+			log.Error(
+				"Project access token is required when personal access token is not set in batch mode",
+			)
 			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].project_access_token", i))
 		}
 	}
