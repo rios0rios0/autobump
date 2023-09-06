@@ -30,6 +30,20 @@ func updateChangelogFile(changelogPath string) (*semver.Version, error) {
 	return version, nil
 }
 
+func getNextVersion(changelogPath string) (*semver.Version, error) {
+	lines, err := readLines(changelogPath)
+	if err != nil {
+		return nil, err
+	}
+
+	version, _, err := processChangelog(lines)
+	if err != nil {
+		return nil, err
+	}
+
+	return version, nil
+}
+
 func isChangelogUnreleasedEmpty(changelogPath string) (bool, error) {
 	lines, err := readLines(changelogPath)
 	if err != nil {
@@ -221,7 +235,8 @@ func updateSection(
 		newSection,
 		fmt.Sprintf("## [%s] - %s", nextVersion.String(), time.Now().Format("2006-01-02")),
 	)
-	newSection = append(newSection, "") // add a blank line between sections
+	// add a blank line between sections
+	newSection = append(newSection, "")
 
 	keys := []string{"Added", "Changed", "Removed"}
 	for _, key := range keys {
