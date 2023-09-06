@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -22,7 +21,7 @@ func getGlobalGitConfig() (*config.Config, error) {
 	}
 
 	globalConfigPath := filepath.Join(homeDir, ".gitconfig")
-	configBytes, err := ioutil.ReadFile(globalConfigPath)
+	configBytes, err := os.ReadFile(globalConfigPath)
 	if err != nil {
 		return nil, err
 	}

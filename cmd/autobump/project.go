@@ -169,7 +169,15 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		return err
 	}
 
-	branchName := "chore/bump"
+	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
+	nextVersion, err := getNextVersion(changelogPath)
+	if err != nil {
+		return err
+	}
+
+	branchName := fmt.Sprintf("chore/bump-%s", nextVersion.String())
+
+	// check if branch already exists
 	branchExists, err := checkBranchExists(repo, branchName)
 	if err != nil {
 		return err
@@ -184,7 +192,6 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 	}
 
 	log.Info("Updating CHANGELOG.md file")
-	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
 	version, err := updateChangelogFile(changelogPath)
 	if err != nil {
 		log.Errorf("No version found in CHANGELOG.md for project at %s\n", projectConfig.Path)
