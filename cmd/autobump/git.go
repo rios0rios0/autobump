@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/go-git/go-git/v5"
@@ -136,4 +137,29 @@ func pushChangesHttps(
 	}
 
 	return repo.Push(pushOptions)
+}
+
+// getRemoteServiceType returns the type of the remote service (e.g. GitHub, GitLab)
+func getRemoteServiceType(repo *git.Repository) (string, error) {
+	cfg, err := repo.Config()
+	if err != nil {
+		return "", err
+	}
+
+	// TODO: this could be better using Adapter pattern
+	for _, remote := range cfg.Remotes {
+		if strings.Contains(remote.URLs[0], "gitlab.com") {
+			return "GitLab", nil
+		} else if strings.Contains(remote.URLs[0], "github.com") {
+			return "GitHub", nil
+		} else if strings.Contains(remote.URLs[0], "bitbucket.org") {
+			return "Bitbucket", nil
+		} else if strings.Contains(remote.URLs[0], "git-codecommit") {
+			return "CodeCommit", nil
+		} else if strings.Contains(remote.URLs[0], "dev.azure.com") {
+			return "AzureDevOps", nil
+		}
+	}
+
+	return "Unknown", nil
 }

@@ -99,23 +99,5 @@ func getRemoteRepoURL(repo *git.Repository) (string, error) {
 		return remote.Config().URLs[0], nil // Return the first URL configured for the remote
 	}
 
-	return "", fmt.Errorf("No URLs configured for the remote")
-}
-
-// getRemoteServiceType returns the type of the remote service (e.g. GitHub, GitLab)
-func getRemoteServiceType(repo *git.Repository) (string, error) {
-	cfg, err := repo.Config()
-	if err != nil {
-		return "", err
-	}
-
-	for _, remote := range cfg.Remotes {
-		if strings.Contains(remote.URLs[0], "gitlab.com") {
-			return "GitLab", nil
-		} else if strings.Contains(remote.URLs[0], "github.com") {
-			return "GitHub", nil
-		}
-	}
-
-	return "Unknown", nil
+	return "", fmt.Errorf("no URLs configured for the remote")
 }

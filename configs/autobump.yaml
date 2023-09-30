@@ -7,7 +7,7 @@ gitlab_access_token: "glpat-TOKEN"
 # (optional) path to your password-protected GPG private key
 # used to sign the commits
 # see the `exportkey` target in the Makefile for how to export the key
-gpg_key_path: "/home/user/.gnupg/autobump.asc"
+#gpg_key_path: "/home/user/.gnupg/autobump.asc"
 
 # rules for automatically detecting project languages
 languages:
