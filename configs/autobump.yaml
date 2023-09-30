@@ -12,7 +12,48 @@ gpg_key_path: "/home/user/.gnupg/autobump.asc"
 # rules for automatically detecting project languages
 languages:
   # name of the language, this requires support in the code
-  # currently only Python and Java are supported
+  cs:
+    extensions:
+      - "cs"
+    special_patterns:
+      - "*\\.sln"
+    version_files:
+      - path: "Setup64bit/Setup64bit.vdproj"
+        patterns: [ "(\\s*\"ProductVersion\"\\s*=\\s*\"\\d*)\\d+\\.\\d+\\.\\d+(\")" ]
+      - path: "Setup32bit/Setup32bit.vdproj"
+        patterns: [ "(\\s*\"ProductVersion\"\\s*=\\s*\"\\d*)\\d+\\.\\d+\\.\\d+(\")" ]
+      - path: "*/*.csproj"
+        patterns:
+          - "(\\s*<Version>)\\d+\\.\\d+\\.\\d+(</Version>)"
+          - "(\\s*<AssemblyVersion>)\\d+\\.\\d+\\.\\d+(</AssemblyVersion>)"
+          - "(\\s*<FileVersion>)\\d+\\.\\d+\\.\\d+(</FileVersion>)"
+
+  go:
+    extensions:
+      - "go"
+    special_patterns:
+      - "go.mod"
+    # TODO: this should be updated because Go doesn't have a version file
+    version_files:
+      - path: "go.mod"
+        patterns: [ "(\\s*module\\s*\\S+\\s*v)\\d+\\.\\d+\\.\\d+" ]
+
+  java:
+    extensions:
+      - "java"
+    special_patterns:
+      - "build.gradle"
+      - "lib/build.gradle"
+      - "settings.gradle"
+      - "pom.xml"
+    version_files:
+      - path: "build.gradle"
+        patterns: [ "(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')" ]
+      - path: "lib/build.gradle"
+        patterns: [ "(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')" ]
+      - path: "src/main/resources/application.yaml"
+        patterns: [ "(\\s*version:\\s*')\\d+\\.\\d+\\.\\d+(')" ]
+
   python:
     # file extensions in the repository that could indicate
     #   this is a Python project
@@ -27,21 +68,7 @@ languages:
     version_files:
       - path: "{project_name}/__init__.py"
         patterns: ["(__version__\\s*=\\s*\")\\d+\\.\\d+\\.\\d+(\")"]
-  java:
-    extensions:
-      - "java"
-    special_patterns:
-      - "build.gradle"
-      - "lib/build.gradle"
-      - "settings.gradle"
-      - "pom.xml"
-    version_files:
-      - path: "build.gradle"
-        patterns: ["(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')"]
-      - path: "lib/build.gradle"
-        patterns: ["(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')"]
-      - path: "src/main/resources/application.yaml"
-        patterns: ["(\\s*version:\\s*')\\d+\\.\\d+\\.\\d+(')"]
+
   typescript:
     extensions:
       - "ts"
@@ -52,31 +79,14 @@ languages:
     version_files:
       - path: "package.json"
         patterns: ["(\\s*\"version\":\\s*\")\\d+\\.\\d+\\.\\d+(\",)"]
-  cs:
-    extensions:
-      - "cs"
-    special_patterns:
-      - "*\\.sln"
-    version_files:
-      - path: "Setup64bit/Setup64bit.vdproj"
-        patterns: ["(\\s*\"ProductVersion\"\\s*=\\s*\"\\d*)\\d+\\.\\d+\\.\\d+(\")"]
-      - path: "Setup32bit/Setup32bit.vdproj"
-        patterns: ["(\\s*\"ProductVersion\"\\s*=\\s*\"\\d*)\\d+\\.\\d+\\.\\d+(\")"]
-      - path: "*/*.csproj"
-        patterns:
-          - "(\\s*<Version>)\\d+\\.\\d+\\.\\d+(</Version>)"
-          - "(\\s*<AssemblyVersion>)\\d+\\.\\d+\\.\\d+(</AssemblyVersion>)"
-          - "(\\s*<FileVersion>)\\d+\\.\\d+\\.\\d+(</FileVersion>)"
 
 # a list of the projects to be managed by this tool
 projects:
   # path is simply the path of the repository
   - path: "/home/user/repo1"
 
-  # language can be omitted if auto-detect rules have already been specified
-  #   in the `languages` section
-  #language: "Python"
   - path: "/home/user/repo2"
+    # language can be omitted if auto-detect rules have already been specified
     language: "Java"
 
   # specify a Git URL for AutoBump to clone the repository automatically into a

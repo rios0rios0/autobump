@@ -18,6 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+- added Go support with a nonexistent version file (because Go doesn't have a version file)
 - added the `.editorconfig` file to handle the files formatting
 - added the `CHANGELOG.md` file to make the releases clearer
 
@@ -121,30 +122,30 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-added CI token reading, auto cloning, and a release pipeline for use in the scheduled pipeline
-added language detection and batch processing mode
-added config validation
-added the feature to allow GPG signing
-added Java support, fixed package version update
-added files from previous repo; added license, README, etc.
-completed the create GitLab MR feature
-completed the Git commit&push functions
-added PR templates
+- added CI token reading, auto cloning, and a release pipeline for use in the scheduled pipeline
+- added language detection and batch processing mode
+- added config validation
+- added the feature to allow GPG signing
+- added Java support, fixed package version update
+- added files from previous repo; added license, README, etc.
+- completed the create GitLab MR feature
+- completed the Git commit&push functions
+- added PR templates
+- added docs in the config file and README
 
 ### Changed
 
-updated the MR title to comply with naming standards
-fix(gitlab): fixed the issue of it getting the incorrect GitLab project ID
-chore(doc): added docs in the config file and README
-fix(ssh): skip signing if signing format is SSH
-formatted code with `gofumpt`
-updated example config to match new parser
-fixed newline creation in CHANGELOG
-using cobra to parse args; split files
-fixed Makefile
-updated gitignore from GitHub reference file, added Nvim Session.vim ignore
+- updated the MR title to comply with naming standards
+- fixed the issue of it getting the incorrect GitLab project ID
+- skip signing if signing format is SSH
+- formatted code with `gofumpt`
+- updated example config to match new parser
+- fixed newline creation in CHANGELOG
+- using cobra to parse args; split files
+- fixed Makefile
+- updated gitignore from GitHub reference file, added Nvim Session.vim ignore
 
 ### Removed
 
-removed unnecessary GitLab username and email definition
-removed git commit author overwrite
+- removed unnecessary GitLab username and email definition
+- removed git commit author overwrite

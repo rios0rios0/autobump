@@ -13,7 +13,7 @@ import (
 
 // updateVersion updates the version in the version files.
 // This function fails fast upon the first error.
-func updateVersion(path string, globalConfig *GlobalConfig, projectConfig *ProjectConfig) error {
+func updateVersion(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error {
 	versionFiles, err := getVersionFiles(globalConfig, projectConfig)
 	if err != nil {
 		return err

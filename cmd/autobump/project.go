@@ -200,7 +200,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 
 	projectConfig.NewVersion = version.String()
 	log.Infof("Updating version to %s", projectConfig.NewVersion)
-	err = updateVersion(projectPath, globalConfig, projectConfig)
+	err = updateVersion(globalConfig, projectConfig)
 	if err != nil {
 		return err
 	}
