@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
@@ -56,22 +58,43 @@ func findFile(locations []string, filename string) (string, error) {
 // getGpgKey returns GPG key entity from the given path
 // it prompts for the passphrase to decrypt the key
 func getGpgKey(gpgKeyPath string) (*openpgp.Entity, error) {
-	privateKeyFile, err := os.Open(gpgKeyPath)
-	if err != nil {
-		log.Error("Failed to open private key file: ", err)
-		return nil, errors.New("Failed to open private key file")
-	}
-	entityList, err := openpgp.ReadArmoredKeyRing(privateKeyFile)
-	if err != nil {
-		log.Error("Failed to read private key file: ", err)
-		return nil, errors.New("Failed to read private key file")
+	var err error
+	var entityList openpgp.EntityList
+
+	if gpgKeyPath == "" {
+		log.Warn("No key path provided, attempting to read from default keyring")
+		cmd := exec.Command("gpg", "--export-secret-keys", "--armor")
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		err := cmd.Run()
+		if err != nil {
+			log.Error("Failed to read keys from default keyring:", err)
+			return nil, errors.New("failed to read keys from default keyring")
+		}
+
+		entityList, err = openpgp.ReadArmoredKeyRing(&out)
+		if err != nil {
+			log.Error("Failed to parse keys:", err)
+			return nil, errors.New("failed to parse keys")
+		}
+	} else {
+		privateKeyFile, err := os.Open(gpgKeyPath)
+		if err != nil {
+			log.Error("Failed to open private key file: ", err)
+			return nil, errors.New("failed to open private key file")
+		}
+		entityList, err = openpgp.ReadArmoredKeyRing(privateKeyFile)
+		if err != nil {
+			log.Error("Failed to read private key file: ", err)
+			return nil, errors.New("failed to read private key file")
+		}
 	}
 
-	fmt.Print("Enter the passphrase for your GPG key: ")
+	log.Warn("Enter the passphrase for your GPG key: ")
 	var passphrase []byte
 	passphrase, err = terminal.ReadPassword(0)
 
-	// assume the passphrase to be empty if unable to read from terminal
+	// assume the passphrase to be empty if unable to read from the terminal
 	if err != nil {
 		if strings.TrimSpace(err.Error()) == "inappropriate ioctl for device" {
 			passphrase = []byte("")
