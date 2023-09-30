@@ -16,11 +16,7 @@ var (
 		Short: "AutoBump is a tool that automatically updates CHANGELOG.md",
 		Run: func(cmd *cobra.Command, args []string) {
 			// find the config file if not manually set
-			configPath, err := findConfigOnMissing(configPath)
-			if err != nil {
-				log.Fatalf("Failed to locate config file")
-				os.Exit(1)
-			}
+			configPath := findConfigOnMissing(configPath)
 
 			// read the config file
 			globalConfig, err := readConfig(configPath)
@@ -68,11 +64,7 @@ var (
 		Short: "Run AutoBump for all projects in the configuration",
 		Run: func(cmd *cobra.Command, args []string) {
 			// find the config file if not manually set
-			configPath, err := findConfigOnMissing(configPath)
-			if err != nil {
-				log.Fatalf("Failed to locate config file")
-				os.Exit(1)
-			}
+			configPath := findConfigOnMissing(configPath)
 
 			// read the config file
 			globalConfig, err := readConfig(configPath)
@@ -92,20 +84,21 @@ var (
 )
 
 // findConfigOnMissing finds the config file if not manually set
-func findConfigOnMissing(configPath string) (string, error) {
+func findConfigOnMissing(configPath string) string {
 	if configPath == "" {
 		log.Info("No config file specified, searching for default locations")
 
 		var err error
 		configPath, err = findConfig()
 		if err != nil {
-			return "", err
+			log.Warn("Config file not found in default locations, using the repository configuration as the last resort")
+			configPath = "https://raw.githubusercontent.com/rios0rios0/autobump/main/configs/autobump.yaml"
 		}
 
 		log.Infof("Using config file: \"%v\"", configPath)
-		return configPath, nil
+		return configPath
 	}
-	return configPath, nil
+	return configPath
 }
 
 // program entry point

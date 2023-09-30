@@ -3,6 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -40,9 +43,29 @@ type ProjectConfig struct {
 
 // readConfig reads the config file and returns a GlobalConfig struct
 func readConfig(configPath string) (*GlobalConfig, error) {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, err
+	var err error
+	var data []byte
+
+	// check if configPath is a URL
+	uri, err := url.Parse(configPath)
+	if err != nil || uri.Scheme == "" || uri.Host == "" {
+		// it's not a URL, read the data from file
+		data, err = os.ReadFile(configPath)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// it's a URL, so read the data from the URL
+		resp, err := http.Get(configPath)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		data, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var globalConfig GlobalConfig
@@ -119,6 +142,8 @@ func findConfig() (string, error) {
 	}
 
 	locations := []string{
+		".autobump.yaml",
+		".autobump.yml",
 		"autobump.yaml",
 		"autobump.yml",
 		"configs/autobump.yaml",

@@ -1,8 +1,8 @@
 # GitLab personal access token
 # used to create merge requests on GitLab
 # set it to a path to read the token from a file
-#gitlab_access_token: ".secure_files/gitlab_access_token.key"
 gitlab_access_token: "glpat-TOKEN"
+#gitlab_access_token: ".secure_files/gitlab_access_token.key"
 
 # (optional) path to your password-protected GPG private key
 # used to sign the commits
@@ -18,7 +18,6 @@ languages:
     #   this is a Python project
     extensions:
       - "py"
-
     # special files in the repository that could indicate
     #   this is a Python project
     special_patterns:
@@ -64,7 +63,7 @@ languages:
       - path: "Setup32bit/Setup32bit.vdproj"
         patterns: ["(\\s*\"ProductVersion\"\\s*=\\s*\"\\d*)\\d+\\.\\d+\\.\\d+(\")"]
       - path: "*/*.csproj"
-        patterns: 
+        patterns:
           - "(\\s*<Version>)\\d+\\.\\d+\\.\\d+(</Version>)"
           - "(\\s*<AssemblyVersion>)\\d+\\.\\d+\\.\\d+(</AssemblyVersion>)"
           - "(\\s*<FileVersion>)\\d+\\.\\d+\\.\\d+(</FileVersion>)"
@@ -74,9 +73,9 @@ projects:
   # path is simply the path of the repository
   - path: "/home/user/repo1"
 
-    # language can be omitted if auto-detect rules have already been specified
-    #   in the `languages` section
-    #language: "Python"
+  # language can be omitted if auto-detect rules have already been specified
+  #   in the `languages` section
+  #language: "Python"
   - path: "/home/user/repo2"
     language: "Java"
 
