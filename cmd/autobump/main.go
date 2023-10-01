@@ -54,6 +54,9 @@ var (
 			err = processRepo(globalConfig, projectConfig)
 			if err != nil {
 				log.Fatalf("Failed to process repo: %v", err)
+
+				// TODO: rollback the process removing the branch if exists, reverting the files and going back to main
+
 				os.Exit(1)
 			}
 		},

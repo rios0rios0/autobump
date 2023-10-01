@@ -15,11 +15,12 @@ import (
 )
 
 type GlobalConfig struct {
-	Projects          []ProjectConfig           `yaml:"projects"`
-	LanguagesConfig   map[string]LanguageConfig `yaml:"languages"`
-	GpgKeyPath        string                    `yaml:"gpg_key_path"`
-	GitLabAccessToken string                    `yaml:"gitlab_access_token"`
-	GitLabCIJobToken  string
+	Projects               []ProjectConfig           `yaml:"projects"`
+	LanguagesConfig        map[string]LanguageConfig `yaml:"languages"`
+	GpgKeyPath             string                    `yaml:"gpg_key_path"`
+	GitLabAccessToken      string                    `yaml:"gitlab_access_token"`
+	AzureDevOpsAccessToken string                    `yaml:"azure_devops_access_token"`
+	GitLabCIJobToken       string
 }
 
 type LanguageConfig struct {
@@ -104,11 +105,7 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 
 // validateGlobalConfig validates the global config and reports missing keys and errors
 func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
-	missingKeys := []string{}
-
-	if globalConfig.GpgKeyPath == "" {
-		missingKeys = append(missingKeys, "gpg_key_path")
-	}
+	var missingKeys []string
 
 	if batch == true && len(globalConfig.Projects) == 0 {
 		missingKeys = append(missingKeys, "projects")
@@ -142,12 +139,12 @@ func findConfig() (string, error) {
 	}
 
 	locations := []string{
-		".autobump.yaml",
-		".autobump.yml",
 		"autobump.yaml",
 		"autobump.yml",
 		"configs/autobump.yaml",
 		"configs/autobump.yml",
+		fmt.Sprintf("%s/.autobump.yaml", homeDir),
+		fmt.Sprintf("%s/.autobump.yml", homeDir),
 		fmt.Sprintf("%s/.config/autobump.yaml", homeDir),
 		fmt.Sprintf("%s/.config/autobump.yml", homeDir),
 	}

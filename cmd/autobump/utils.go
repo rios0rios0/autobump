@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -57,43 +56,43 @@ func findFile(locations []string, filename string) (string, error) {
 
 // getGpgKey returns GPG key entity from the given path
 // it prompts for the passphrase to decrypt the key
-func getGpgKey(gpgKeyPath string) (*openpgp.Entity, error) {
+func getGpgKey(gpgKeyId, gpgKeyPath string) (*openpgp.Entity, error) {
 	var err error
-	var entityList openpgp.EntityList
 
-	if gpgKeyPath == "" {
-		log.Warn("No key path provided, attempting to read from default keyring")
-		cmd := exec.Command("gpg", "--export-secret-keys", "--armor")
-		var out bytes.Buffer
-		cmd.Stdout = &out
-		err := cmd.Run()
-		if err != nil {
-			log.Error("Failed to read keys from default keyring:", err)
-			return nil, errors.New("failed to read keys from default keyring")
-		}
+	location := gpgKeyPath
+	if location == "" {
+		location = os.ExpandEnv(fmt.Sprintf("$HOME/.gnupg/autobump-%s.asc", gpgKeyId))
+		log.Warnf("No key path provided, attempting to read (%s) at: %s", gpgKeyId, location)
 
-		entityList, err = openpgp.ReadArmoredKeyRing(&out)
-		if err != nil {
-			log.Error("Failed to parse keys:", err)
-			return nil, errors.New("failed to parse keys")
-		}
-	} else {
-		privateKeyFile, err := os.Open(gpgKeyPath)
-		if err != nil {
-			log.Error("Failed to open private key file: ", err)
-			return nil, errors.New("failed to open private key file")
-		}
-		entityList, err = openpgp.ReadArmoredKeyRing(privateKeyFile)
-		if err != nil {
-			log.Error("Failed to read private key file: ", err)
-			return nil, errors.New("failed to read private key file")
+		if _, err = os.Stat(location); os.IsNotExist(err) {
+			// TODO: until today Go is not capable to read the key from the keyring (kbx)
+			cmd := exec.Command("gpg", "--export-secret-key", "--output", location, "--armor", gpgKeyId)
+			err = cmd.Run()
+			if err != nil {
+				return nil, fmt.Errorf("failed to execute command GPG: %w", err)
+			}
 		}
 	}
 
-	log.Warn("Enter the passphrase for your GPG key: ")
+	privateKeyFile, err := os.Open(location)
+	if err != nil {
+		return nil, errors.New("failed to open private key file")
+	}
+	defer privateKeyFile.Close()
+
+	entityList, err := openpgp.ReadArmoredKeyRing(privateKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read private key file: %s", err)
+	}
+
+	entity := entityList[0]
+	if entity == nil {
+		return nil, fmt.Errorf("failed to find key with fingerprint %s", gpgKeyId)
+	}
+
+	fmt.Print("Enter the passphrase for your GPG key: ")
 	var passphrase []byte
 	passphrase, err = terminal.ReadPassword(0)
-
 	// assume the passphrase to be empty if unable to read from the terminal
 	if err != nil {
 		if strings.TrimSpace(err.Error()) == "inappropriate ioctl for device" {
@@ -104,11 +103,13 @@ func getGpgKey(gpgKeyPath string) (*openpgp.Entity, error) {
 	}
 	fmt.Println()
 
-	entity := entityList[0]
-	err = entity.PrivateKey.Decrypt([]byte(passphrase))
+	if entity.PrivateKey == nil {
+		return nil, fmt.Errorf("failed to find private key for %s", gpgKeyId)
+	}
+
+	err = entity.PrivateKey.Decrypt(passphrase)
 	if err != nil {
-		log.Error("Failed to decrypt GPG key:", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to decrypt GPG key: %v", err)
 	}
 
 	log.Info("Successfully decrypted GPG key")

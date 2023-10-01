@@ -14,6 +14,3 @@ run:
 install:
 	make build
 	sudo cp -v bin/autobump /usr/local/bin/autobump
-
-exportkey:
-	gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobump.asc

@@ -1,12 +1,12 @@
-# GitLab personal access token
-# used to create merge requests on GitLab
+# GitLab/Azure DevOps personal access token used to create MRs/PRs
 # set it to a path to read the token from a file
 gitlab_access_token: "glpat-TOKEN"
 #gitlab_access_token: ".secure_files/gitlab_access_token.key"
+azure_devops_access_token: "azure-devops-token"
+#azure_devops_access_token: ".secure_files/azure_devops_access_token.key"
 
-# (optional) path to your password-protected GPG private key
-# used to sign the commits
-# see the `exportkey` target in the Makefile for how to export the key
+# (optional) path to your password-protected GPG private key used to sign the commits
+# example: "gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobump.asc"
 #gpg_key_path: "/home/user/.gnupg/autobump.asc"
 
 # rules for automatically detecting project languages
