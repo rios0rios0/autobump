@@ -1,4 +1,4 @@
-module autobump
+module github.com/rios0rios0/autobump
 
 go 1.20
 

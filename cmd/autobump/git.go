@@ -66,14 +66,20 @@ func createAndSwitchBranch(
 	branchName string,
 	hash plumbing.Hash,
 ) error {
-	log.Infof("Creating and switching to new branch `%s`", branchName)
+	log.Infof("Creating and switching to new branch '%s'", branchName)
 	ref := plumbing.NewHashReference(plumbing.ReferenceName("refs/heads/"+branchName), hash)
 	err := repo.Storer.SetReference(ref)
 	if err != nil {
 		return err
 	}
 
-	err = w.Checkout(&git.CheckoutOptions{
+	return checkoutBranch(w, branchName)
+}
+
+// checkoutBranch switches to the given branch
+func checkoutBranch(w *git.Worktree, branchName string) error {
+	log.Infof("Switching to branch '%s'", branchName)
+	err := w.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.ReferenceName("refs/heads/" + branchName),
 	})
 	return err
@@ -162,4 +168,18 @@ func getRemoteServiceType(repo *git.Repository) (string, error) {
 	}
 
 	return "Unknown", nil
+}
+
+// getRemoteRepoURL returns the URL of the remote repository
+func getRemoteRepoURL(repo *git.Repository) (string, error) {
+	remote, err := repo.Remote("origin")
+	if err != nil {
+		return "", err
+	}
+
+	if len(remote.Config().URLs) > 0 {
+		return remote.Config().URLs[0], nil // return the first URL configured for the remote
+	}
+
+	return "", fmt.Errorf("no URLs configured for the remote")
 }
