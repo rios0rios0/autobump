@@ -95,7 +95,7 @@ func findConfigOnMissing(configPath string) string {
 		configPath, err = findConfig()
 		if err != nil {
 			log.Warn("Config file not found in default locations, using the repository configuration as the last resort")
-			configPath = "https://raw.githubusercontent.com/rios0rios0/autobump/feat/url-reading/configs/autobump.yaml"
+			configPath = "https://raw.githubusercontent.com/rios0rios0/autobump/main/configs/autobump.yaml"
 		}
 
 		log.Infof("Using config file: \"%v\"", configPath)

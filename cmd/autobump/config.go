@@ -86,6 +86,7 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 		}
 	}
 
+	// TODO: transform this structure in a loop to avoid code duplication
 	if globalConfig.GitLabAccessToken != "" {
 		_, err = os.Stat(globalConfig.GitLabAccessToken)
 		if !os.IsNotExist(err) {
@@ -95,6 +96,17 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 				return nil, err
 			}
 			globalConfig.GitLabAccessToken = strings.TrimSpace(string(token))
+		}
+	}
+	if globalConfig.AzureDevOpsAccessToken != "" {
+		_, err = os.Stat(globalConfig.AzureDevOpsAccessToken)
+		if !os.IsNotExist(err) {
+			log.Infof("Reading Azure DevOps access token from file %s", globalConfig.AzureDevOpsAccessToken)
+			token, err := os.ReadFile(globalConfig.AzureDevOpsAccessToken)
+			if err != nil {
+				return nil, err
+			}
+			globalConfig.AzureDevOpsAccessToken = strings.TrimSpace(string(token))
 		}
 	}
 
