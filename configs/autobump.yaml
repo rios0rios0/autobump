@@ -1,33 +1,43 @@
-# GitLab personal access token
-# used to create merge requests on GitLab
+# GitLab/Azure DevOps personal access token used to create MRs/PRs
 # set it to a path to read the token from a file
-#gitlab_access_token: ".secure_files/gitlab_access_token.key"
 gitlab_access_token: "glpat-TOKEN"
+#gitlab_access_token: ".secure_files/gitlab_access_token.key"
+azure_devops_access_token: "azure-devops-token"
+#azure_devops_access_token: ".secure_files/azure_devops_access_token.key"
 
-# (optional) path to your password-protected GPG private key
-# used to sign the commits
-# see the `exportkey` target in the Makefile for how to export the key
-gpg_key_path: "/home/user/.gnupg/autobump.asc"
+# (optional) path to your password-protected GPG private key used to sign the commits
+# example: "gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobump.asc"
+#gpg_key_path: "/home/user/.gnupg/autobump.asc"
 
 # rules for automatically detecting project languages
 languages:
   # name of the language, this requires support in the code
-  # currently only Python and Java are supported
-  python:
-    # file extensions in the repository that could indicate
-    #   this is a Python project
+  cs:
     extensions:
-      - "py"
-
-    # special files in the repository that could indicate
-    #   this is a Python project
+      - "cs"
     special_patterns:
-      - "setup.cfg"
-      - "setup.py"
-      - "pyproject.toml"
+      - "*\\.sln"
     version_files:
-      - path: "{project_name}/__init__.py"
-        patterns: ["(__version__\\s*=\\s*\")\\d+\\.\\d+\\.\\d+(\")"]
+      - path: "Setup64bit/Setup64bit.vdproj"
+        patterns: [ "(\\s*\"ProductVersion\"\\s*=\\s*\"\\d*)\\d+\\.\\d+\\.\\d+(\")" ]
+      - path: "Setup32bit/Setup32bit.vdproj"
+        patterns: [ "(\\s*\"ProductVersion\"\\s*=\\s*\"\\d*)\\d+\\.\\d+\\.\\d+(\")" ]
+      - path: "*/*.csproj"
+        patterns:
+          - "(\\s*<Version>)\\d+\\.\\d+\\.\\d+(</Version>)"
+          - "(\\s*<AssemblyVersion>)\\d+\\.\\d+\\.\\d+(</AssemblyVersion>)"
+          - "(\\s*<FileVersion>)\\d+\\.\\d+\\.\\d+(</FileVersion>)"
+
+  go:
+    extensions:
+      - "go"
+    special_patterns:
+      - "go.mod"
+    # TODO: this should be updated because Go doesn't have a version file
+    version_files:
+      - path: "go.mod"
+        patterns: [ "(\\s*module\\s*\\S+\\s*v)\\d+\\.\\d+\\.\\d+" ]
+
   java:
     extensions:
       - "java"
@@ -38,11 +48,27 @@ languages:
       - "pom.xml"
     version_files:
       - path: "build.gradle"
-        patterns: ["(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')"]
+        patterns: [ "(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')" ]
       - path: "lib/build.gradle"
-        patterns: ["(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')"]
+        patterns: [ "(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')" ]
       - path: "src/main/resources/application.yaml"
-        patterns: ["(\\s*version:\\s*')\\d+\\.\\d+\\.\\d+(')"]
+        patterns: [ "(\\s*version:\\s*')\\d+\\.\\d+\\.\\d+(')" ]
+
+  python:
+    # file extensions in the repository that could indicate
+    #   this is a Python project
+    extensions:
+      - "py"
+    # special files in the repository that could indicate
+    #   this is a Python project
+    special_patterns:
+      - "setup.cfg"
+      - "setup.py"
+      - "pyproject.toml"
+    version_files:
+      - path: "{project_name}/__init__.py"
+        patterns: ["(__version__\\s*=\\s*\")\\d+\\.\\d+\\.\\d+(\")"]
+
   typescript:
     extensions:
       - "ts"
@@ -53,31 +79,14 @@ languages:
     version_files:
       - path: "package.json"
         patterns: ["(\\s*\"version\":\\s*\")\\d+\\.\\d+\\.\\d+(\",)"]
-  cs:
-    extensions:
-      - "cs"
-    special_patterns:
-      - "*\\.sln"
-    version_files:
-      - path: "Setup64bit/Setup64bit.vdproj"
-        patterns: ["(\\s*\"ProductVersion\"\\s*=\\s*\"\\d*)\\d+\\.\\d+\\.\\d+(\")"]
-      - path: "Setup32bit/Setup32bit.vdproj"
-        patterns: ["(\\s*\"ProductVersion\"\\s*=\\s*\"\\d*)\\d+\\.\\d+\\.\\d+(\")"]
-      - path: "*/*.csproj"
-        patterns: 
-          - "(\\s*<Version>)\\d+\\.\\d+\\.\\d+(</Version>)"
-          - "(\\s*<AssemblyVersion>)\\d+\\.\\d+\\.\\d+(</AssemblyVersion>)"
-          - "(\\s*<FileVersion>)\\d+\\.\\d+\\.\\d+(</FileVersion>)"
 
 # a list of the projects to be managed by this tool
 projects:
   # path is simply the path of the repository
   - path: "/home/user/repo1"
 
-    # language can be omitted if auto-detect rules have already been specified
-    #   in the `languages` section
-    #language: "Python"
   - path: "/home/user/repo2"
+    # language can be omitted if auto-detect rules have already been specified
     language: "Java"
 
   # specify a Git URL for AutoBump to clone the repository automatically into a

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
-	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	log "github.com/sirupsen/logrus"
@@ -200,7 +200,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 
 	projectConfig.NewVersion = version.String()
 	log.Infof("Updating version to %s", projectConfig.NewVersion)
-	err = updateVersion(projectPath, globalConfig, projectConfig)
+	err = updateVersion(globalConfig, projectConfig)
 	if err != nil {
 		return err
 	}
@@ -238,6 +238,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		return err
 	}
 
+	// TODO: we should create methods to return these sections without repeating code
 	gpgSign := cfg.Raw.Section("commit").Option("gpgsign")
 	if gpgSign == "" {
 		gpgSign = globalGitConfig.Raw.Section("commit").Option("gpgsign")
@@ -251,7 +252,13 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 	var signKey *openpgp.Entity
 	if gpgSign == "true" && gpgFormat != "ssh" {
 		log.Info("Signing commit with GPG key")
-		signKey, err = getGpgKey(globalConfig.GpgKeyPath)
+
+		// TODO: we should create methods to return these sections without repeating code
+		gpgKeyId := cfg.Raw.Section("user").Option("signingkey")
+		if gpgKeyId == "" {
+			gpgKeyId = globalGitConfig.Raw.Section("user").Option("signingkey")
+		}
+		signKey, err = getGpgKey(gpgKeyId, globalConfig.GpgKeyPath)
 	}
 
 	if err != nil {
@@ -312,9 +319,27 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		if err != nil {
 			return err
 		}
+	} else if serviceType == "AzureDevOps" {
+		err = createAzureDevOpsPullRequest(
+			globalConfig,
+			projectConfig,
+			repo,
+			branchName,
+			projectConfig.NewVersion,
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		log.Warnf("Service type '%s' not supported yet...", serviceType)
 	}
 
-	log.Infof("Successfully processed project %s", projectConfig.Name)
+	err = checkoutBranch(w, "main")
+	if err != nil {
+		return checkoutBranch(w, "master")
+	}
+
+	log.Infof("Successfully processed project '%s'", projectConfig.Name)
 
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/xanzy/go-gitlab"
 )
 
+// TODO: this should be better using an Adapter pattern (interface with many providers and implementing the methods)
 // createGitLabMergeRequest creates a new merge request on GitLab
 func createGitLabMergeRequest(
 	globalConfig *GlobalConfig,
@@ -86,36 +87,4 @@ func getRemoteRepoFullProjectName(repo *git.Repository) (fullProjectName string,
 	}
 
 	return fullProjectName, nil
-}
-
-// getRemoteRepoURL returns the URL of the remote repository
-func getRemoteRepoURL(repo *git.Repository) (string, error) {
-	remote, err := repo.Remote("origin")
-	if err != nil {
-		return "", err
-	}
-
-	if len(remote.Config().URLs) > 0 {
-		return remote.Config().URLs[0], nil // Return the first URL configured for the remote
-	}
-
-	return "", fmt.Errorf("No URLs configured for the remote")
-}
-
-// getRemoteServiceType returns the type of the remote service (e.g. GitHub, GitLab)
-func getRemoteServiceType(repo *git.Repository) (string, error) {
-	cfg, err := repo.Config()
-	if err != nil {
-		return "", err
-	}
-
-	for _, remote := range cfg.Remotes {
-		if strings.Contains(remote.URLs[0], "gitlab.com") {
-			return "GitLab", nil
-		} else if strings.Contains(remote.URLs[0], "github.com") {
-			return "GitHub", nil
-		}
-	}
-
-	return "Unknown", nil
 }

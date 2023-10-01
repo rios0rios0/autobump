@@ -3,6 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -12,11 +15,12 @@ import (
 )
 
 type GlobalConfig struct {
-	Projects          []ProjectConfig           `yaml:"projects"`
-	LanguagesConfig   map[string]LanguageConfig `yaml:"languages"`
-	GpgKeyPath        string                    `yaml:"gpg_key_path"`
-	GitLabAccessToken string                    `yaml:"gitlab_access_token"`
-	GitLabCIJobToken  string
+	Projects               []ProjectConfig           `yaml:"projects"`
+	LanguagesConfig        map[string]LanguageConfig `yaml:"languages"`
+	GpgKeyPath             string                    `yaml:"gpg_key_path"`
+	GitLabAccessToken      string                    `yaml:"gitlab_access_token"`
+	AzureDevOpsAccessToken string                    `yaml:"azure_devops_access_token"`
+	GitLabCIJobToken       string
 }
 
 type LanguageConfig struct {
@@ -40,9 +44,29 @@ type ProjectConfig struct {
 
 // readConfig reads the config file and returns a GlobalConfig struct
 func readConfig(configPath string) (*GlobalConfig, error) {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, err
+	var err error
+	var data []byte
+
+	// check if configPath is a URL
+	uri, err := url.Parse(configPath)
+	if err != nil || uri.Scheme == "" || uri.Host == "" {
+		// it's not a URL, read the data from file
+		data, err = os.ReadFile(configPath)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// it's a URL, so read the data from the URL
+		resp, err := http.Get(configPath)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		data, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var globalConfig GlobalConfig
@@ -62,6 +86,7 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 		}
 	}
 
+	// TODO: transform this structure in a loop to avoid code duplication
 	if globalConfig.GitLabAccessToken != "" {
 		_, err = os.Stat(globalConfig.GitLabAccessToken)
 		if !os.IsNotExist(err) {
@@ -73,6 +98,17 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 			globalConfig.GitLabAccessToken = strings.TrimSpace(string(token))
 		}
 	}
+	if globalConfig.AzureDevOpsAccessToken != "" {
+		_, err = os.Stat(globalConfig.AzureDevOpsAccessToken)
+		if !os.IsNotExist(err) {
+			log.Infof("Reading Azure DevOps access token from file %s", globalConfig.AzureDevOpsAccessToken)
+			token, err := os.ReadFile(globalConfig.AzureDevOpsAccessToken)
+			if err != nil {
+				return nil, err
+			}
+			globalConfig.AzureDevOpsAccessToken = strings.TrimSpace(string(token))
+		}
+	}
 
 	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
 
@@ -81,11 +117,7 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 
 // validateGlobalConfig validates the global config and reports missing keys and errors
 func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
-	missingKeys := []string{}
-
-	if globalConfig.GpgKeyPath == "" {
-		missingKeys = append(missingKeys, "gpg_key_path")
-	}
+	var missingKeys []string
 
 	if batch == true && len(globalConfig.Projects) == 0 {
 		missingKeys = append(missingKeys, "projects")
@@ -123,6 +155,8 @@ func findConfig() (string, error) {
 		"autobump.yml",
 		"configs/autobump.yaml",
 		"configs/autobump.yml",
+		fmt.Sprintf("%s/.autobump.yaml", homeDir),
+		fmt.Sprintf("%s/.autobump.yml", homeDir),
 		fmt.Sprintf("%s/.config/autobump.yaml", homeDir),
 		fmt.Sprintf("%s/.config/autobump.yml", homeDir),
 	}
