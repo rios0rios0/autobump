@@ -23,7 +23,7 @@ func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
 		return "", err
 	}
 
-	// Check project type by special files
+	// check the project type by special files
 	for language, config := range globalConfig.LanguagesConfig {
 		for _, pattern := range config.SpecialPatterns {
 			matches, _ := filepath.Glob(filepath.Join(absPath, pattern))
@@ -38,7 +38,7 @@ func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
 		}
 	}
 
-	// Check project type by file extensions
+	// check the project type by file extensions
 	var detected string
 	err = filepath.Walk(absPath, func(p string, info os.FileInfo, err error) error {
 		if err != nil {
