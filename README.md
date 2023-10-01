@@ -5,9 +5,8 @@ commit the changes, push the commits, and create a merge request/pull request on
 
 ## Installation
 
-At the moment, AutoBump doesn't have binary releases.
-You will need to compile it yourself.
-Make sure you have Go and Make installed, then use the following command to create the binary:
+AutoBump has binary releases in the [releases section](https://github.com/rios0rios0/autobump/releases).
+But if you'd like to compile it by yourself, make sure you have Go and Make installed, then use the following command to create the binary:
 
 ```bash
 make build

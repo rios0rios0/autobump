@@ -119,6 +119,8 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 	var missingKeys []string
 
+	// TODO: validate if the section languages exists and if not download and merge the default configuration
+
 	if batch == true && len(globalConfig.Projects) == 0 {
 		missingKeys = append(missingKeys, "projects")
 	}
@@ -150,9 +152,16 @@ func findConfig() (string, error) {
 		return "", err
 	}
 
+	// TODO: it doesn't need a for loop to find the file, just a regex matching the name
 	locations := []string{
+		".autobump.yaml",
+		".autobump.yml",
+		".config/autobump.yaml",
+		".config/autobump.yml",
 		"autobump.yaml",
 		"autobump.yml",
+		"configs/.autobump.yaml",
+		"configs/.autobump.yml",
 		"configs/autobump.yaml",
 		"configs/autobump.yml",
 		fmt.Sprintf("%s/.autobump.yaml", homeDir),

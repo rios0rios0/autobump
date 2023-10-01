@@ -1,13 +1,13 @@
+# (optional) path to your password-protected GPG private key used to sign the commits
+# example: "gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobump.asc"
+#gpg_key_path: "/home/user/.gnupg/autobump.asc"
+
 # GitLab/Azure DevOps personal access token used to create MRs/PRs
 # set it to a path to read the token from a file
 gitlab_access_token: "glpat-TOKEN"
 #gitlab_access_token: ".secure_files/gitlab_access_token.key"
 azure_devops_access_token: "azure-devops-token"
 #azure_devops_access_token: ".secure_files/azure_devops_access_token.key"
-
-# (optional) path to your password-protected GPG private key used to sign the commits
-# example: "gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobump.asc"
-#gpg_key_path: "/home/user/.gnupg/autobump.asc"
 
 # rules for automatically detecting project languages
 languages:
@@ -44,8 +44,8 @@ languages:
     special_patterns:
       - "build.gradle"
       - "lib/build.gradle"
-      - "settings.gradle"
       - "pom.xml"
+      - "settings.gradle"
     version_files:
       - path: "build.gradle"
         patterns: [ "(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')" ]
@@ -62,9 +62,9 @@ languages:
     # special files in the repository that could indicate
     #   this is a Python project
     special_patterns:
+      - "pyproject.toml"
       - "setup.cfg"
       - "setup.py"
-      - "pyproject.toml"
     version_files:
       - path: "{project_name}/__init__.py"
         patterns: ["(__version__\\s*=\\s*\")\\d+\\.\\d+\\.\\d+(\")"]
@@ -73,8 +73,8 @@ languages:
     extensions:
       - "ts"
     special_patterns:
-      - "tsconfig.json"
       - "package.json"
+      - "tsconfig.json"
       - "yarn.lock"
     version_files:
       - path: "package.json"
@@ -90,7 +90,7 @@ projects:
     language: "Java"
 
   # specify a Git URL for AutoBump to clone the repository automatically into a
-  #   temporary directory, perform the bump, then delete the temporary directory
+  # temporary directory, perform the bump, then delete the temporary directory
   - path: "git@github.com:example/repo3.git"
 
   # you can specify a project access token that will be used for this project
