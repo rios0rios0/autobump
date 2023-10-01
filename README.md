@@ -1,10 +1,13 @@
 # AutoBump
 
-Automatically update CHANGELOG.md according to the [Keep a Changelog (version 1.1.0)](https://keepachangelog.com/en/1.1.0/) standard and the [Semantic Versioning (version 2.0.0)](https://semver.org/spec/v2.0.0.html) standard, commit the changes, push the commits, and create a merge request on GitLab.
+Automatically update CHANGELOG.md according to the [Keep a Changelog (version 1.1.0)](https://keepachangelog.com/en/1.1.0/) standard and the [Semantic Versioning (version 2.0.0)](https://semver.org/spec/v2.0.0.html) standard,
+commit the changes, push the commits, and create a merge request/pull request on GitLab/Azure DevOps.
 
 ## Installation
 
-At the moment, AutoBump doesn't have binary releases. You will need to compile it yourself. Make sure you have Golang and make installed, then use the following command to create the binary:
+At the moment, AutoBump doesn't have binary releases.
+You will need to compile it yourself.
+Make sure you have Go and Make installed, then use the following command to create the binary:
 
 ```bash
 make build
@@ -18,7 +21,9 @@ make install
 
 ## Usages
 
-Create a configuration file based on the example from `configs/autobump.yaml` and put it in `~/.config/autobump.yaml`. You will need to at least update the `gitlab_access_token` field with your GitLab token. There are two ways to run AutoBump: for the current project and for multiple projects.
+Create a configuration file based on the example from `configs/autobump.yaml` and put it in `~/.config/autobump.yaml`.
+You will need to at least update the `gitlab_access_token` field with your GitLab token.
+There are two ways to run AutoBump: for the current project and for multiple projects.
 
 ### 1. For the Current Project
 
@@ -54,3 +59,9 @@ autobump batch
 ```
 
 AutoBump will now go through each of the projects and perform the same actions as with a single project.
+
+## TODO
+- [ ] Add support for Code Commit
+- [ ] Add support for Bitbucket
+- [ ] Add support for GitHub
+- [ ] Full-fil the description on each PR/MR
