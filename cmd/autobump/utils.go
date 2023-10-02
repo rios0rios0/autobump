@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -52,6 +54,24 @@ func findFile(locations []string, filename string) (string, error) {
 		}
 	}
 	return "", errors.New(filename + " not found")
+}
+
+// downloadFile downloads a file from the given URL
+func downloadFile(url string) ([]byte, error) {
+	var data []byte
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }
 
 // getGpgKey returns GPG key entity from the given path

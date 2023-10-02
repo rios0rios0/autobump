@@ -22,6 +22,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added support to Azure DevOps and support to have Azure DevOps token in a file
 - added the `.editorconfig` file to handle the file formatting
 - added the `CHANGELOG.md` file to make the releases clearer
+- added the feature to download the default configuration when the language detection is not present
 - added the feature to read the GPG keys from the default keyring
 - added the feature to read the configuration from the default repository URL
 
