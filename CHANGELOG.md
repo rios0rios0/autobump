@@ -18,6 +18,20 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+-
+
+### Changed
+
+-
+
+### Removed
+
+-
+
+## [2.8.0] - 2023-10-01
+
+### Added
+
 - added Go support with a nonexistent version file (because Go doesn't have a version file)
 - added support to Azure DevOps and support to have Azure DevOps token in a file
 - added the `.editorconfig` file to handle the file formatting
