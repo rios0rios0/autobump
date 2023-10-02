@@ -10,7 +10,6 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -106,27 +105,13 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 			Depth: 1,
 		}
 
-		// authenticate with CI job token if running in a GitLab CI pipeline
-		if projectConfig.ProjectAccessToken != "" {
-			log.Infof("Using project access token to authenticate")
-			cloneOptions.Auth = &http.BasicAuth{
-				Username: "oauth2",
-				Password: projectConfig.ProjectAccessToken,
-			}
-		} else if globalConfig.GitLabCIJobToken != "" {
-			log.Infof("Using GitLab CI job token to authenticate")
-			cloneOptions.Auth = &http.BasicAuth{
-				Username: "gitlab-ci-token",
-				Password: globalConfig.GitLabCIJobToken,
-			}
-		} else {
-			log.Infof("Using GitLab access token to authenticate")
-			cloneOptions.Auth = &http.BasicAuth{
-				Username: globalGitConfig.Raw.Section("user").Option("name"),
-				Password: globalConfig.GitLabAccessToken,
-			}
+		service := getServiceTypeByURL(projectConfig.Path)
+		auth, err := getAuthenticationMethod(service, globalGitConfig.Raw.Section("user").Option("name"), globalConfig, projectConfig)
+		if err != nil {
+			return err
 		}
 
+		cloneOptions.Auth = auth
 		_, err = git.PlainClone(tmpDir, false, cloneOptions)
 		if err != nil {
 			return err

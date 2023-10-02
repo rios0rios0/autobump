@@ -47,6 +47,7 @@ func createAzureDevOpsPullRequest(
 		return err
 	}
 
+	// TODO: refactor to use this library: https://github.com/microsoft/azure-devops-go-api
 	url := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories/%s/pullrequests?api-version=6.0",
 		azureInfo.OrganizationName, azureInfo.ProjectName, azureInfo.RepositoryID)
 	prTitle := fmt.Sprintf("chore(bump): bumped version to %s", newVersion)
