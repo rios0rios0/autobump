@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"reflect"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -203,18 +202,4 @@ func findConfig() (string, error) {
 	}
 
 	return location, nil
-}
-
-// mergeConfig merges the default config with the global config overriding the default values
-func mergeConfig(customConfig, defaultConfig *GlobalConfig) {
-	customValue := reflect.ValueOf(customConfig).Elem()
-	defaultValue := reflect.ValueOf(defaultConfig).Elem()
-
-	for i := 0; i < customValue.NumField(); i++ {
-		globalField := customValue.Field(i)
-		defaultField := defaultValue.Field(i)
-		if !defaultField.IsZero() {
-			globalField.Set(defaultField)
-		}
-	}
 }

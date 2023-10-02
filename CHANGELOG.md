@@ -28,6 +28,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 -
 
+## [2.8.1] - 2023-10-01
+
+### Changed
+
+- corrected the configuration merging without the `reflect` library
+
 ## [2.8.0] - 2023-10-01
 
 ### Added
