@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -8,27 +9,14 @@ import (
 )
 
 var (
-	configPath string
 	language   string
+	configPath string
 
 	rootCmd = &cobra.Command{
 		Use:   "autobump",
 		Short: "AutoBump is a tool that automatically updates CHANGELOG.md",
 		Run: func(cmd *cobra.Command, args []string) {
-			// find the config file if not manually set
-			configPath := findConfigOnMissing(configPath)
-
-			// read the config file
-			globalConfig, err := readConfig(configPath)
-			if err != nil {
-				log.Fatalf("Failed to read config: %v", err)
-				os.Exit(1)
-			}
-
-			if err = validateGlobalConfig(globalConfig, false); err != nil {
-				log.Fatalf("Config validation failed: %v", err)
-				os.Exit(1)
-			}
+			globalConfig := findReadAndValidateConfig(configPath)
 
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -66,45 +54,47 @@ var (
 		Use:   "batch",
 		Short: "Run AutoBump for all projects in the configuration",
 		Run: func(cmd *cobra.Command, args []string) {
-			// find the config file if not manually set
-			configPath := findConfigOnMissing(configPath)
-
-			// read the config file
-			globalConfig, err := readConfig(configPath)
-			if err != nil {
-				log.Fatalf("Failed to read config: %v", err)
-				os.Exit(1)
-			}
-
-			if err = validateGlobalConfig(globalConfig, true); err != nil {
-				log.Fatalf("Config validation failed: %v", err)
-				os.Exit(1)
-			}
-
+			globalConfig := findReadAndValidateConfig(configPath)
 			iterateProjects(globalConfig)
 		},
 	}
 )
 
-// findConfigOnMissing finds the config file if not manually set
-func findConfigOnMissing(configPath string) string {
-	if configPath == "" {
-		log.Info("No config file specified, searching for default locations")
+// findReadAndValidateConfig finds, reads and validates the config file
+func findReadAndValidateConfig(configPath string) *GlobalConfig {
+	// find the config file if not manually set
+	configPath = findConfigOnMissing(configPath)
 
-		var err error
-		configPath, err = findConfig()
-		if err != nil {
-			log.Warn("Config file not found in default locations, using the repository configuration as the last resort")
-			configPath = "https://raw.githubusercontent.com/rios0rios0/autobump/main/configs/autobump.yaml"
-		}
-
-		log.Infof("Using config file: \"%v\"", configPath)
-		return configPath
+	// read the config file
+	globalConfig, err := readConfig(configPath)
+	if err != nil {
+		log.Fatalf("Failed to read config: %v", err)
+		os.Exit(1)
 	}
-	return configPath
+
+	if err = validateGlobalConfig(globalConfig, false); err != nil {
+		if errors.Is(err, missingLanguagesKeyError) {
+			log.Warn("Missing languages key, using the default configuration")
+
+			var data []byte
+			data, err = downloadFile(defaultConfigUrl)
+			if err != nil {
+				log.Fatalf("Failed to download default config: %v", err)
+				os.Exit(1)
+			}
+
+			var defaultConfig *GlobalConfig
+			defaultConfig, err = decodeConfig(data)
+			mergeConfig(globalConfig, defaultConfig)
+		} else {
+			log.Fatalf("Config validation failed: %v", err)
+			os.Exit(1)
+		}
+	}
+
+	return globalConfig
 }
 
-// program entry point
 func main() {
 	rootCmd.Flags().StringVarP(&configPath, "config", "c", "", "config file path")
 	rootCmd.Flags().StringVarP(&language, "language", "l", "", "project language")

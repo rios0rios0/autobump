@@ -3,11 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os"
 	"path"
+	"reflect"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -42,6 +41,10 @@ type ProjectConfig struct {
 	NewVersion         string
 }
 
+const defaultConfigUrl = "https://raw.githubusercontent.com/rios0rios0/autobump/main/configs/autobump.yaml"
+
+var missingLanguagesKeyError = errors.New("missing languages key")
+
 // readConfig reads the config file and returns a GlobalConfig struct
 func readConfig(configPath string) (*GlobalConfig, error) {
 	var err error
@@ -57,23 +60,13 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 		}
 	} else {
 		// it's a URL, so read the data from the URL
-		resp, err := http.Get(configPath)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-
-		data, err = ioutil.ReadAll(resp.Body)
+		data, err = downloadFile(configPath)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	var globalConfig GlobalConfig
-	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
-	decoder.KnownFields(true)
-
-	err = decoder.Decode(&globalConfig)
+	globalConfig, err := decodeConfig(data)
 	if err != nil {
 		return nil, err
 	}
@@ -112,14 +105,26 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 
 	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
 
+	return globalConfig, nil
+}
+
+// decodeConfig decodes the config file and returns a GlobalConfig struct
+func decodeConfig(data []byte) (*GlobalConfig, error) {
+	var globalConfig GlobalConfig
+
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	err := decoder.Decode(&globalConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	return &globalConfig, nil
 }
 
 // validateGlobalConfig validates the global config and reports missing keys and errors
 func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 	var missingKeys []string
-
-	// TODO: validate if the section languages exists and if not download and merge the default configuration
 
 	if batch == true && len(globalConfig.Projects) == 0 {
 		missingKeys = append(missingKeys, "projects")
@@ -142,7 +147,29 @@ func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 		return errors.New("missing keys: " + strings.Join(missingKeys, ", "))
 	}
 
+	if globalConfig.LanguagesConfig == nil {
+		return missingLanguagesKeyError
+	}
+
 	return nil
+}
+
+// findConfigOnMissing finds the config file if not manually set
+func findConfigOnMissing(configPath string) string {
+	if configPath == "" {
+		log.Info("No config file specified, searching for default locations")
+
+		var err error
+		configPath, err = findConfig()
+		if err != nil {
+			log.Warn("Config file not found in default locations, using the repository configuration as the last resort")
+			configPath = defaultConfigUrl
+		}
+
+		log.Infof("Using config file: \"%v\"", configPath)
+		return configPath
+	}
+	return configPath
 }
 
 // findConfig finds the config file in a list of default locations
@@ -176,4 +203,18 @@ func findConfig() (string, error) {
 	}
 
 	return location, nil
+}
+
+// mergeConfig merges the default config with the global config overriding the default values
+func mergeConfig(customConfig, defaultConfig *GlobalConfig) {
+	customValue := reflect.ValueOf(customConfig).Elem()
+	defaultValue := reflect.ValueOf(defaultConfig).Elem()
+
+	for i := 0; i < customValue.NumField(); i++ {
+		globalField := customValue.Field(i)
+		defaultField := defaultValue.Field(i)
+		if !defaultField.IsZero() {
+			globalField.Set(defaultField)
+		}
+	}
 }
