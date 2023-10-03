@@ -19,7 +19,7 @@ languages:
       - "*\\.sln"
     version_files:
       - path: "*/*.vdproj"
-        patterns: [ "(.*\"ProductVersion\"\\s*=\\s*\"\\d*:?) \\d+\\.\\d+\\.\\d+ (\")" ]
+        patterns: [ "(\"ProductVersion\"\\s*=\\s*\"\\d+:?)\\s*\\d+\\.\\d+\\.\\d+(\")" ]
       - path: "*/*.csproj"
         patterns:
           - "(\\s*<Version>)\\d+\\.\\d+\\.\\d+(</Version>)"
