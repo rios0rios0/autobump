@@ -28,6 +28,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 -
 
+## [2.8.2] - 2023-10-03
+
+### Changed
+
+- corrected the issue with the regex for C# projects in the `.vdproj` files
+
 ## [2.8.1] - 2023-10-01
 
 ### Changed
