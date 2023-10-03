@@ -1,7 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"github.com/go-git/go-git/v5/plumbing/protocol/packp/capability"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"os"
 	"path/filepath"
 	"strings"
@@ -129,20 +132,64 @@ func pushChangesHttps(
 		RemoteName: "origin",
 	}
 
-	// use the project access token if available
-	if projectConfig.ProjectAccessToken != "" {
-		pushOptions.Auth = &http.BasicAuth{
-			Username: repoCfg.User.Name,
-			Password: projectConfig.ProjectAccessToken,
-		}
-	} else {
-		pushOptions.Auth = &http.BasicAuth{
-			Username: repoCfg.User.Name,
-			Password: globalConfig.GitLabAccessToken,
-		}
+	service, err := getRemoteServiceType(repo)
+	if err != nil {
+		return err
+	}
+	auth, err := getAuthenticationMethod(service, repoCfg.User.Name, globalConfig, projectConfig)
+	if err != nil {
+		return err
 	}
 
+	pushOptions.Auth = auth
 	return repo.Push(pushOptions)
+}
+
+// getAuthenticationMethod returns the authentication method to use for cloning/pushing changes
+func getAuthenticationMethod(service string, username string, globalConfig *GlobalConfig, projectConfig *ProjectConfig,
+) (transport.AuthMethod, error) {
+	var auth transport.AuthMethod
+
+	switch service {
+	case "GitLab":
+		// TODO: this lines of code MUST be refactored to avoid code duplication
+		// authenticate with CI job token if running in a GitLab CI pipeline
+		if projectConfig.ProjectAccessToken != "" {
+			log.Infof("Using project access token to authenticate")
+			auth = &http.BasicAuth{
+				Username: "oauth2",
+				Password: projectConfig.ProjectAccessToken,
+			}
+		} else if globalConfig.GitLabCIJobToken != "" {
+			log.Infof("Using GitLab CI job token to authenticate")
+			auth = &http.BasicAuth{
+				Username: "gitlab-ci-token",
+				Password: globalConfig.GitLabCIJobToken,
+			}
+		} else if globalConfig.GitLabAccessToken != "" {
+			log.Infof("Using GitLab access token to authenticate")
+			auth = &http.BasicAuth{
+				Username: username,
+				Password: globalConfig.GitLabAccessToken,
+			}
+		}
+		break
+	case "AzureDevOps":
+		log.Infof("Using Azure DevOps access token to authenticate")
+		transport.UnsupportedCapabilities = []capability.Capability{
+			capability.ThinPack,
+		}
+		auth = &http.BasicAuth{
+			Username: username,
+			Password: globalConfig.AzureDevOpsAccessToken,
+		}
+		break
+	default:
+		log.Errorf("No authentication mechanism implemented for service type '%s'", service)
+		return nil, errors.New("no authentication mechanism implemented")
+	}
+
+	return auth, nil
 }
 
 // getRemoteServiceType returns the type of the remote service (e.g. GitHub, GitLab)
@@ -152,22 +199,31 @@ func getRemoteServiceType(repo *git.Repository) (string, error) {
 		return "", err
 	}
 
-	// TODO: this could be better using Adapter pattern
+	var firstRemote string
 	for _, remote := range cfg.Remotes {
-		if strings.Contains(remote.URLs[0], "gitlab.com") {
-			return "GitLab", nil
-		} else if strings.Contains(remote.URLs[0], "github.com") {
-			return "GitHub", nil
-		} else if strings.Contains(remote.URLs[0], "bitbucket.org") {
-			return "Bitbucket", nil
-		} else if strings.Contains(remote.URLs[0], "git-codecommit") {
-			return "CodeCommit", nil
-		} else if strings.Contains(remote.URLs[0], "dev.azure.com") {
-			return "AzureDevOps", nil
-		}
+		firstRemote = remote.URLs[0]
+		break
 	}
 
-	return "Unknown", nil
+	return getServiceTypeByURL(firstRemote), nil
+}
+
+// getServiceTypeByURL returns the type of the remote service (e.g. GitHub, GitLab) by URL
+func getServiceTypeByURL(remoteURL string) string {
+	// TODO: this could be better using the Adapter pattern
+	if strings.Contains(remoteURL, "gitlab.com") {
+		return "GitLab"
+	} else if strings.Contains(remoteURL, "github.com") {
+		return "GitHub"
+	} else if strings.Contains(remoteURL, "bitbucket.org") {
+		return "Bitbucket"
+	} else if strings.Contains(remoteURL, "git-codecommit") {
+		return "CodeCommit"
+	} else if strings.Contains(remoteURL, "dev.azure.com") {
+		return "AzureDevOps"
+	}
+
+	return "Unknown"
 }
 
 // getRemoteRepoURL returns the URL of the remote repository

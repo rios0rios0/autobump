@@ -85,6 +85,7 @@ func findReadAndValidateConfig(configPath string) *GlobalConfig {
 
 			var defaultConfig *GlobalConfig
 			defaultConfig, err = decodeConfig(data)
+			// TODO: this merge could be done, for each language
 			globalConfig.LanguagesConfig = defaultConfig.LanguagesConfig
 		} else {
 			log.Fatalf("Config validation failed: %v", err)
