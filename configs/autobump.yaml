@@ -18,10 +18,8 @@ languages:
     special_patterns:
       - "*\\.sln"
     version_files:
-      - path: "Setup64bit/Setup64bit.vdproj"
-        patterns: [ "(\\s*\"ProductVersion\"\\s*=\\s*\"\\d*)\\d+\\.\\d+\\.\\d+(\")" ]
-      - path: "Setup32bit/Setup32bit.vdproj"
-        patterns: [ "(\\s*\"ProductVersion\"\\s*=\\s*\"\\d*)\\d+\\.\\d+\\.\\d+(\")" ]
+      - path: "*/*.vdproj"
+        patterns: [ "(.*\"ProductVersion\"\\s*=\\s*\"\\d*:?) \\d+\\.\\d+\\.\\d+ (\")" ]
       - path: "*/*.csproj"
         patterns:
           - "(\\s*<Version>)\\d+\\.\\d+\\.\\d+(</Version>)"
