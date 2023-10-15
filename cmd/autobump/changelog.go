@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -10,6 +11,8 @@ import (
 	"github.com/Masterminds/semver/v3"
 	log "github.com/sirupsen/logrus"
 )
+
+const defaultChangelogUrl = "https://raw.githubusercontent.com/rios0rios0/autobump/main/configs/CHANGELOG.template.md"
 
 func updateChangelogFile(changelogPath string) (*semver.Version, error) {
 	lines, err := readLines(changelogPath)
@@ -42,6 +45,25 @@ func getNextVersion(changelogPath string) (*semver.Version, error) {
 	}
 
 	return version, nil
+}
+
+// createChangelogIfNotExists create an empty CHANGELOG file if it doesn't exist
+func createChangelogIfNotExists(changelogPath string) error {
+	if _, err := os.Stat(changelogPath); os.IsNotExist(err) {
+		log.Infof("Creating empty CHANGELOG file at '%s'.", changelogPath)
+		var fileContent, err = downloadFile(defaultChangelogUrl)
+		if err != nil {
+			log.Errorf("It wasn't possible to download the CHANGELOG model file: %v", err)
+		}
+
+		err = os.WriteFile(changelogPath, fileContent, 0644)
+		if err != nil {
+			log.Errorf("Error creating CHANGELOG file: %v", err)
+			return err
+		}
+	}
+
+	return nil
 }
 
 func isChangelogUnreleasedEmpty(changelogPath string) (bool, error) {
