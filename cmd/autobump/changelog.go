@@ -48,9 +48,9 @@ func getNextVersion(changelogPath string) (*semver.Version, error) {
 }
 
 // createChangelogIfNotExists create an empty CHANGELOG file if it doesn't exist
-func createChangelogIfNotExists(changelogPath string) error {
+func createChangelogIfNotExists(changelogPath string) (bool, error) {
 	if _, err := os.Stat(changelogPath); os.IsNotExist(err) {
-		log.Infof("Creating empty CHANGELOG file at '%s'.", changelogPath)
+		log.Warnf("Creating empty CHANGELOG file at '%s'.", changelogPath)
 		var fileContent, err = downloadFile(defaultChangelogUrl)
 		if err != nil {
 			log.Errorf("It wasn't possible to download the CHANGELOG model file: %v", err)
@@ -59,11 +59,13 @@ func createChangelogIfNotExists(changelogPath string) error {
 		err = os.WriteFile(changelogPath, fileContent, 0644)
 		if err != nil {
 			log.Errorf("Error creating CHANGELOG file: %v", err)
-			return err
+			return false, err
 		}
+
+		return false, nil
 	}
 
-	return nil
+	return true, nil
 }
 
 func isChangelogUnreleasedEmpty(changelogPath string) (bool, error) {

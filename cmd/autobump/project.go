@@ -3,14 +3,13 @@ package main
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	log "github.com/sirupsen/logrus"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 // detectLanguage detects the language of a project by looking at the files in the project
@@ -123,9 +122,16 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 	projectPath := projectConfig.Path
 	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
 
-	err = createChangelogIfNotExists(changelogPath)
+	exists, err := createChangelogIfNotExists(changelogPath)
 	if err != nil {
 		return err
+	}
+	if !exists {
+		err = addCurrentVersion(changelogPath)
+		if err != nil {
+			return err
+		}
+		// TODO: after creating the new file in the project, we should commit and push it to the main branch
 	}
 
 	bumpEmpty, err := isChangelogUnreleasedEmpty(changelogPath)
@@ -354,4 +360,31 @@ func iterateProjects(globalConfig *GlobalConfig) {
 			log.Errorf("Error processing project at %s: %v\n", project.Path, err)
 		}
 	}
+}
+
+// addCurrentVersion adds the current version to the CHANGELOG file
+func addCurrentVersion(changelogPath string) error {
+	lines, err := readLines(changelogPath)
+	if err != nil {
+		return err
+	}
+
+	latestTag, err := getLatestTag()
+	if err != nil {
+		return err
+	}
+
+	// TODO: we should replace <LINK TO THE PLATFORM TO OPEN THE PULL REQUEST> with the actual link
+
+	// add lines to the end of the file
+	lines = append(lines, []string{
+		fmt.Sprintf("\n## [%s] - %s\n", latestTag.Tag, latestTag.Date.Format("2006-01-02")),
+		"The changes weren't tracked until this version.",
+	}...)
+	err = writeLines(changelogPath, lines)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
