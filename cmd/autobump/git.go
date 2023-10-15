@@ -3,11 +3,14 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/Masterminds/semver/v3"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/protocol/packp/capability"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/go-git/go-git/v5"
@@ -16,6 +19,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	log "github.com/sirupsen/logrus"
 )
+
+const defaultGitTag = "0.1.0"
 
 // getGlobalGitConfig reads the global git configuration file and returns a config.Config object
 func getGlobalGitConfig() (*config.Config, error) {
@@ -238,4 +243,77 @@ func getRemoteRepoURL(repo *git.Repository) (string, error) {
 	}
 
 	return "", fmt.Errorf("no URLs configured for the remote")
+}
+
+// getAmountCommits returns the number of commits in the repository
+func getAmountCommits(repo *git.Repository) (int, error) {
+	commits, err := repo.Log(&git.LogOptions{})
+	if err != nil {
+		return 0, err
+	}
+
+	amountCommits := 0
+	err = commits.ForEach(func(commit *object.Commit) error {
+		amountCommits++
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return amountCommits, nil
+}
+
+type LatestTag struct {
+	Tag  *semver.Version
+	Date time.Time
+}
+
+// getLatestTag find the latest tag in the Git history
+func getLatestTag() (*LatestTag, error) {
+	repo, err := git.PlainOpen(".")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tags, err := repo.Tags()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var latestTag *plumbing.Reference
+	err = tags.ForEach(func(tag *plumbing.Reference) error {
+		latestTag = tag
+		return nil
+	})
+
+	// get the date time of the tag
+	commit, err := repo.CommitObject(latestTag.Hash())
+	var latestTagDate = commit.Committer.When
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	commits, _ := getAmountCommits(repo)
+	if latestTag == nil {
+		// if the project is already started with no tags in the history
+		if commits >= 5 {
+			log.Warnf("No tags found in Git history, falling back to '%s'", defaultGitTag)
+			var version, _ = semver.NewVersion(defaultGitTag)
+			return &LatestTag{
+				Tag:  version,
+				Date: time.Now(),
+			}, nil
+		} else {
+			// but if the project is new, we should not use any tag and just commit the file
+			log.Warn("This project seems be a new project, the CHANGELOG should be committed by itself.")
+			return nil, fmt.Errorf("this project has no tags, it seems be new")
+		}
+	}
+
+	var version, _ = semver.NewVersion(latestTag.Name().Short())
+	return &LatestTag{
+		Tag:  version,
+		Date: latestTagDate,
+	}, nil
 }

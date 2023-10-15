@@ -18,11 +18,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
--
+- created the feature to add the new version when the `CHANGELOG.md` doesn't have a previous version
 
 ### Changed
 
--
+- changed the main method to create the `CHANGELOG.md` file if it doesn't exist
 
 ### Removed
 
