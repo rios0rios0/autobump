@@ -120,7 +120,15 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		projectConfig.Path = tmpDir
 	}
 
-	bumpEmpty, err := isChangelogUnreleasedEmpty(filepath.Join(projectConfig.Path, "CHANGELOG.md"))
+	projectPath := projectConfig.Path
+	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
+
+	err = createChangelogIfNotExists(changelogPath)
+	if err != nil {
+		return err
+	}
+
+	bumpEmpty, err := isChangelogUnreleasedEmpty(changelogPath)
 	if err != nil {
 		return err
 	}
@@ -138,7 +146,6 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		projectConfig.Language = projectLanguage
 	}
 
-	projectPath := projectConfig.Path
 	repo, err := openRepo(projectPath)
 	if err != nil {
 		return err
@@ -154,7 +161,6 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		return err
 	}
 
-	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
 	nextVersion, err := getNextVersion(changelogPath)
 	if err != nil {
 		return err
