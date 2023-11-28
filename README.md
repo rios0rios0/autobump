@@ -60,7 +60,12 @@ autobump batch
 AutoBump will now go through each of the projects and perform the same actions as with a single project.
 
 ## TODO
-- [ ] Add support for Code Commit
-- [ ] Add support for Bitbucket
-- [ ] Add support for GitHub
-- [ ] Full-fil the description on each PR/MR
+- Get the default GPG configured at the current repository
+- Add support for Code Commit
+- Add support for Bitbucket
+- Add support for GitHub
+- Full-fil the description on each PR/MR
+- When the branch already exists, doesn't try to proceed, and receive the error
+- When there's no previous version, autobump doesn't know how to bump to 1.0.0
+- When the file "CHANGELOG.md" doesn't exist, it throws an error
+- Deal with specific configurations to merge with the default one (having more files to change)
