@@ -183,9 +183,12 @@ func updateSection(
 	var newSection []string
 	var currentSection *[]string
 	sections := map[string]*[]string{
-		"Added":   {},
-		"Changed": {},
-		"Removed": {},
+		"Added":      {},
+		"Changed":    {},
+		"Deprecated": {},
+		"Removed":    {},
+		"Fixed":      {},
+		"Security":   {},
 	}
 
 	majorChanges := 0
@@ -199,8 +202,14 @@ func updateSection(
 			currentSection = sections["Added"]
 		case strings.Contains(line, "### Changed"):
 			currentSection = sections["Changed"]
+		case strings.Contains(line, "### Deprecated"):
+			currentSection = sections["Deprecated"]
 		case strings.Contains(line, "### Removed"):
 			currentSection = sections["Removed"]
+		case strings.Contains(line, "### Fixed"):
+			currentSection = sections["Fixed"]
+		case strings.Contains(line, "### Security"):
+			currentSection = sections["Security"]
 		default:
 			if currentSection != nil && trimmedLine != "" && trimmedLine != "-" &&
 				!strings.HasPrefix(trimmedLine, "##") {
@@ -241,18 +250,6 @@ func updateSection(
 
 	// Create the new section with the next version and the current date
 	newSection = append(newSection, "## [Unreleased]")
-	newSection = append(newSection, "")
-	newSection = append(newSection, "### Added")
-	newSection = append(newSection, "")
-	newSection = append(newSection, "-")
-	newSection = append(newSection, "")
-	newSection = append(newSection, "### Changed")
-	newSection = append(newSection, "")
-	newSection = append(newSection, "-")
-	newSection = append(newSection, "")
-	newSection = append(newSection, "### Removed")
-	newSection = append(newSection, "")
-	newSection = append(newSection, "-")
 	newSection = append(newSection, "")
 
 	newSection = append(
