@@ -22,11 +22,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
+- made changelog processing adhere to keep a changelog version 1.1.0 standard
 - changed the main method to create the `CHANGELOG.md` file if it doesn't exist
-
-### Removed
-
--
 
 ## [2.8.3] - 2023-10-03
 
