@@ -214,7 +214,7 @@ func updateSection(
 			if currentSection != nil && trimmedLine != "" && trimmedLine != "-" &&
 				!strings.HasPrefix(trimmedLine, "##") {
 				*currentSection = append(*currentSection, line)
-				if strings.HasPrefix(line, "**BREAKING CHANGE:**") {
+				if strings.HasPrefix(line, "- **BREAKING CHANGE:**") {
 					majorChanges++
 				} else if currentSection == sections["Added"] {
 					minorChanges++
