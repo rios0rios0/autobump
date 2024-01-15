@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.9.0] - 2024-01-15
+
 ### Added
 
 - created the feature to add the new version when the `CHANGELOG.md` doesn't have a previous version
