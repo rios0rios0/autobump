@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- downgraded `go-git` to v5.9.0 so the GitHub Actions pipeline can compile the program
+
 ## [2.9.0] - 2024-01-15
 
 ### Added
