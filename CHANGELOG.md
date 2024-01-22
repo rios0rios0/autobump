@@ -16,6 +16,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- exit with error code when batch processing fails
+- automatically try all authentication methods for Git cloning and pushing
+
 ## [2.9.1] - 2024-01-18
 
 ### Fixed

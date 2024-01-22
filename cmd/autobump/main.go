@@ -55,7 +55,11 @@ var (
 		Short: "Run AutoBump for all projects in the configuration",
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig := findReadAndValidateConfig(configPath)
-			iterateProjects(globalConfig)
+			err := iterateProjects(globalConfig)
+			if err != nil {
+				log.Fatalf("Failed to iterate projects: %v", err)
+				os.Exit(1)
+			}
 		},
 	}
 )

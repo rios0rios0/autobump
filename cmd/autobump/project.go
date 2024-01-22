@@ -75,6 +75,15 @@ func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
 	return "", errors.New("project language not recognized")
 }
 
+// getGlobalGitConfig gets a Git option from local and global Git config
+func getOptionFromConfig(cfg, globalCfg *config.Config, section string, option string) string {
+	opt := cfg.Raw.Section(section).Option(option)
+	if opt == "" {
+		opt = globalCfg.Raw.Section(section).Option(option)
+	}
+	return opt
+}
+
 // processRepo:
 // - clones the repository if it is a remote repository
 // - creates the chore/bump branch
@@ -105,18 +114,30 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		}
 
 		service := getServiceTypeByURL(projectConfig.Path)
-		auth, err := getAuthenticationMethod(service, globalGitConfig.Raw.Section("user").Option("name"), globalConfig, projectConfig)
+		authMethods, err := getAuthMethods(
+			service,
+			globalGitConfig.Raw.Section("user").Option("name"),
+			globalConfig,
+			projectConfig,
+		)
 		if err != nil {
 			return err
 		}
 
-		cloneOptions.Auth = auth
-		_, err = git.PlainClone(tmpDir, false, cloneOptions)
-		if err != nil {
-			return err
+		// try each authentication method
+		for _, auth := range authMethods {
+			cloneOptions.Auth = auth
+			_, err = git.PlainClone(tmpDir, false, cloneOptions)
+
+			// if action finished successfully, return
+			if err == nil {
+				log.Infof("Successfully cloned %s", projectConfig.Path)
+				projectConfig.Path = tmpDir
+				return nil
+			}
 		}
-		log.Infof("Successfully cloned %s", projectConfig.Path)
-		projectConfig.Path = tmpDir
+
+		return err
 	}
 
 	projectPath := projectConfig.Path
@@ -131,7 +152,8 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		if err != nil {
 			return err
 		}
-		// TODO: after creating the new file in the project, we should commit and push it to the main branch
+		// TODO: after creating the new file in the project,
+		//			 we should commit and push it to the main branch
 	}
 
 	bumpEmpty, err := isChangelogUnreleasedEmpty(changelogPath)
@@ -157,7 +179,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		return err
 	}
 
-	w, err := repo.Worktree()
+	worktree, err := repo.Worktree()
 	if err != nil {
 		return err
 	}
@@ -183,7 +205,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		return fmt.Errorf("branch %s already exists", branchName)
 	}
 
-	err = createAndSwitchBranch(repo, w, branchName, head.Hash())
+	err = createAndSwitchBranch(repo, worktree, branchName, head.Hash())
 	if err != nil {
 		return err
 	}
@@ -215,7 +237,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		}
 
 		log.Infof("Adding version file %s", versionFileRelativePath)
-		_, err = w.Add(versionFileRelativePath)
+		_, err = worktree.Add(versionFileRelativePath)
 		if err != nil {
 			return err
 		}
@@ -225,7 +247,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 	if err != nil {
 		return err
 	}
-	_, err = w.Add(changelogRelativePath)
+	_, err = worktree.Add(changelogRelativePath)
 	if err != nil {
 		return err
 	}
@@ -235,26 +257,13 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		return err
 	}
 
-	// TODO: we should create methods to return these sections without repeating code
-	gpgSign := cfg.Raw.Section("commit").Option("gpgsign")
-	if gpgSign == "" {
-		gpgSign = globalGitConfig.Raw.Section("commit").Option("gpgsign")
-	}
-
-	gpgFormat := cfg.Raw.Section("gpg").Option("format")
-	if gpgFormat == "" {
-		gpgFormat = globalGitConfig.Raw.Section("gpg").Option("format")
-	}
+	gpgSign := getOptionFromConfig(cfg, globalGitConfig, "commit", "gpgsign")
+	gpgFormat := getOptionFromConfig(cfg, globalGitConfig, "gpg", "format")
 
 	var signKey *openpgp.Entity
 	if gpgSign == "true" && gpgFormat != "ssh" {
 		log.Info("Signing commit with GPG key")
-
-		// TODO: we should create methods to return these sections without repeating code
-		gpgKeyId := cfg.Raw.Section("user").Option("signingkey")
-		if gpgKeyId == "" {
-			gpgKeyId = globalGitConfig.Raw.Section("user").Option("signingkey")
-		}
+		gpgKeyId := getOptionFromConfig(cfg, globalGitConfig, "user", "signingkey")
 		signKey, err = getGpgKey(gpgKeyId, globalConfig.GpgKeyPath)
 	}
 
@@ -264,7 +273,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 
 	commitMessage := "chore(bump): bumped version to " + projectConfig.NewVersion
 	commit, err := commitChanges(
-		w,
+		worktree,
 		commitMessage,
 		signKey,
 		globalGitConfig.Raw.Section("user").Option("name"),
@@ -331,9 +340,9 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		log.Warnf("Service type '%s' not supported yet...", serviceType)
 	}
 
-	err = checkoutBranch(w, "main")
+	err = checkoutBranch(worktree, "main")
 	if err != nil {
-		return checkoutBranch(w, "master")
+		return checkoutBranch(worktree, "master")
 	}
 
 	log.Infof("Successfully processed project '%s'", projectConfig.Name)
@@ -342,24 +351,32 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 }
 
 // iterateProjects iterates over the projects and processes them using the processRepo function
-func iterateProjects(globalConfig *GlobalConfig) {
+func iterateProjects(globalConfig *GlobalConfig) error {
+	var err error = nil
 	for _, project := range globalConfig.Projects {
 
 		// verify if the project path exists
-		if _, err := os.Stat(project.Path); os.IsNotExist(err) {
+		if _, err = os.Stat(project.Path); os.IsNotExist(err) {
+
+			// if the project path does not exist, check if it is a remote repository
 			if !strings.HasPrefix(project.Path, "https://") &&
 				!strings.HasPrefix(project.Path, "git@") {
+
+				// if it is neither a local path nor a remote repository, skip the project
 				log.Errorf("Project path does not exist: %s\n", project.Path)
 				log.Warn("Skipping project")
+				err = errors.New("project path does not exist")
 				continue
 			}
 		}
 
-		err := processRepo(globalConfig, &project)
+		err = processRepo(globalConfig, &project)
 		if err != nil {
 			log.Errorf("Error processing project at %s: %v\n", project.Path, err)
 		}
 	}
+
+	return err
 }
 
 // addCurrentVersion adds the current version to the CHANGELOG file

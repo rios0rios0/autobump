@@ -141,42 +141,63 @@ func pushChangesHttps(
 	if err != nil {
 		return err
 	}
-	auth, err := getAuthenticationMethod(service, repoCfg.User.Name, globalConfig, projectConfig)
+	authMethods, err := getAuthMethods(service, repoCfg.User.Name, globalConfig, projectConfig)
 	if err != nil {
 		return err
 	}
 
-	pushOptions.Auth = auth
-	return repo.Push(pushOptions)
+	// try each authentication method
+	for _, auth := range authMethods {
+		pushOptions.Auth = auth
+		err = repo.Push(pushOptions)
+
+		// if action finished successfully, return
+		if err == nil {
+			return nil
+		}
+	}
+
+	return err
 }
 
-// getAuthenticationMethod returns the authentication method to use for cloning/pushing changes
-func getAuthenticationMethod(service string, username string, globalConfig *GlobalConfig, projectConfig *ProjectConfig,
-) (transport.AuthMethod, error) {
-	var auth transport.AuthMethod
+// getAuthMethods returns the authentication method to use for cloning/pushing changes
+func getAuthMethods(
+	service string,
+	username string,
+	globalConfig *GlobalConfig,
+	projectConfig *ProjectConfig,
+) ([]transport.AuthMethod, error) {
+	var authMethods []transport.AuthMethod
 
 	switch service {
 	case "GitLab":
 		// TODO: this lines of code MUST be refactored to avoid code duplication
-		// authenticate with CI job token if running in a GitLab CI pipeline
+
+		// project access token
 		if projectConfig.ProjectAccessToken != "" {
 			log.Infof("Using project access token to authenticate")
-			auth = &http.BasicAuth{
+			authMethods = append(authMethods, &http.BasicAuth{
 				Username: "oauth2",
 				Password: projectConfig.ProjectAccessToken,
-			}
-		} else if globalConfig.GitLabCIJobToken != "" {
+			})
+		}
+
+		// CI job token
+		if globalConfig.GitLabCIJobToken != "" {
 			log.Infof("Using GitLab CI job token to authenticate")
-			auth = &http.BasicAuth{
+			authMethods = append(authMethods, &http.BasicAuth{
 				Username: "gitlab-ci-token",
 				Password: globalConfig.GitLabCIJobToken,
-			}
-		} else if globalConfig.GitLabAccessToken != "" {
+			})
+		}
+
+		// GitLab personal access token
+		if globalConfig.GitLabAccessToken != "" {
 			log.Infof("Using GitLab access token to authenticate")
-			auth = &http.BasicAuth{
+			authMethods = append(authMethods, &http.BasicAuth{
 				Username: username,
 				Password: globalConfig.GitLabAccessToken,
-			}
+			})
 		}
 		break
 	case "AzureDevOps":
@@ -184,17 +205,22 @@ func getAuthenticationMethod(service string, username string, globalConfig *Glob
 		transport.UnsupportedCapabilities = []capability.Capability{
 			capability.ThinPack,
 		}
-		auth = &http.BasicAuth{
+		authMethods = append(authMethods, &http.BasicAuth{
 			Username: username,
 			Password: globalConfig.AzureDevOpsAccessToken,
-		}
+		})
 		break
 	default:
 		log.Errorf("No authentication mechanism implemented for service type '%s'", service)
 		return nil, errors.New("no authentication mechanism implemented")
 	}
 
-	return auth, nil
+	if len(authMethods) == 0 {
+		log.Error("No authentication credentials found for any authentication method")
+		return nil, errors.New("no authentication credentials found for any authentication method")
+	}
+
+	return authMethods, nil
 }
 
 // getRemoteServiceType returns the type of the remote service (e.g. GitHub, GitLab)
