@@ -182,21 +182,21 @@ func getAuthMethods(
 			})
 		}
 
-		// CI job token
-		if globalConfig.GitLabCIJobToken != "" {
-			log.Infof("Using GitLab CI job token to authenticate")
-			authMethods = append(authMethods, &http.BasicAuth{
-				Username: "gitlab-ci-token",
-				Password: globalConfig.GitLabCIJobToken,
-			})
-		}
-
 		// GitLab personal access token
 		if globalConfig.GitLabAccessToken != "" {
 			log.Infof("Using GitLab access token to authenticate")
 			authMethods = append(authMethods, &http.BasicAuth{
 				Username: username,
 				Password: globalConfig.GitLabAccessToken,
+			})
+		}
+
+		// CI job token
+		if globalConfig.GitLabCIJobToken != "" {
+			log.Infof("Using GitLab CI job token to authenticate")
+			authMethods = append(authMethods, &http.BasicAuth{
+				Username: "gitlab-ci-token",
+				Password: globalConfig.GitLabCIJobToken,
 			})
 		}
 		break
