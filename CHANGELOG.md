@@ -18,8 +18,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- exit with error code when batch processing fails
 - automatically try all authentication methods for Git cloning and pushing
+- exit with an error code when batch processing fails
 
 ### Fixed
 
