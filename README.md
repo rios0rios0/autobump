@@ -21,7 +21,10 @@ make install
 ## Usages
 
 Create a configuration file based on the example from `configs/autobump.yaml` and put it in `~/.config/autobump.yaml`.
-You will need to at least update the `gitlab_access_token` field with your GitLab token.
+You will need to at least update your credentials:
+- GitLab token `gitlab_access_token` field;
+- or Azure DevOps equivalent `azure_devops_access_token`;
+
 There are two ways to run AutoBump: for the current project and for multiple projects.
 
 ### 1. For the Current Project
@@ -58,14 +61,3 @@ autobump batch
 ```
 
 AutoBump will now go through each of the projects and perform the same actions as with a single project.
-
-## TODO
-- Get the default GPG configured at the current repository
-- Add support for Code Commit
-- Add support for Bitbucket
-- Add support for GitHub
-- Full-fil the description on each PR/MR
-- When the branch already exists, doesn't try to proceed, and receive the error
-- When there's no previous version, autobump doesn't know how to bump to 1.0.0
-- When the file "CHANGELOG.md" doesn't exist, it throws an error
-- Deal with specific configurations to merge with the default one (having more files to change)
