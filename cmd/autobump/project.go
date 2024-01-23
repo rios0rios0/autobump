@@ -125,6 +125,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		}
 
 		// try each authentication method
+		clonedSuccessfully := false
 		for _, auth := range authMethods {
 			cloneOptions.Auth = auth
 			_, err = git.PlainClone(tmpDir, false, cloneOptions)
@@ -133,11 +134,15 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 			if err == nil {
 				log.Infof("Successfully cloned %s", projectConfig.Path)
 				projectConfig.Path = tmpDir
-				return nil
+				clonedSuccessfully = true
+				break
 			}
 		}
 
-		return err
+		// if all authentication methods failed, return the last error
+		if !clonedSuccessfully {
+			return err
+		}
 	}
 
 	projectPath := projectConfig.Path

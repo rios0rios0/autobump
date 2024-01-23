@@ -21,6 +21,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - exit with error code when batch processing fails
 - automatically try all authentication methods for Git cloning and pushing
 
+### Fixed
+
+- fixed incorrect logic in the project processing phase that causes the program to quit early
+
 ## [2.9.1] - 2024-01-18
 
 ### Fixed
