@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.11.0] - 2024-01-23
+
 ### Added
 
 - automatically try all authentication methods for Git cloning and pushing
