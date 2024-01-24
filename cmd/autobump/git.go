@@ -1,16 +1,16 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"github.com/Masterminds/semver/v3"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/protocol/packp/capability"
-	"github.com/go-git/go-git/v5/plumbing/transport"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Masterminds/semver/v3"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/protocol/packp/capability"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/go-git/go-git/v5"
@@ -199,7 +199,6 @@ func getAuthMethods(
 				Password: globalConfig.GitLabCIJobToken,
 			})
 		}
-		break
 	case "AzureDevOps":
 		log.Infof("Using Azure DevOps access token to authenticate")
 		transport.UnsupportedCapabilities = []capability.Capability{
@@ -209,15 +208,14 @@ func getAuthMethods(
 			Username: username,
 			Password: globalConfig.AzureDevOpsAccessToken,
 		})
-		break
 	default:
 		log.Errorf("No authentication mechanism implemented for service type '%s'", service)
-		return nil, errors.New("no authentication mechanism implemented")
+		return nil, fmt.Errorf("no authentication mechanism implemented")
 	}
 
 	if len(authMethods) == 0 {
 		log.Error("No authentication credentials found for any authentication method")
-		return nil, errors.New("no authentication credentials found for any authentication method")
+		return nil, fmt.Errorf("no authentication credentials found for any authentication method")
 	}
 
 	return authMethods, nil
@@ -308,14 +306,14 @@ func getLatestTag() (*LatestTag, error) {
 	}
 
 	var latestTag *plumbing.Reference
-	err = tags.ForEach(func(tag *plumbing.Reference) error {
+	_ = tags.ForEach(func(tag *plumbing.Reference) error {
 		latestTag = tag
 		return nil
 	})
 
 	// get the date time of the tag
 	commit, err := repo.CommitObject(latestTag.Hash())
-	var latestTagDate = commit.Committer.When
+	latestTagDate := commit.Committer.When
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -325,7 +323,7 @@ func getLatestTag() (*LatestTag, error) {
 		// if the project is already started with no tags in the history
 		if commits >= 5 {
 			log.Warnf("No tags found in Git history, falling back to '%s'", defaultGitTag)
-			var version, _ = semver.NewVersion(defaultGitTag)
+			version, _ := semver.NewVersion(defaultGitTag)
 			return &LatestTag{
 				Tag:  version,
 				Date: time.Now(),
@@ -337,7 +335,7 @@ func getLatestTag() (*LatestTag, error) {
 		}
 	}
 
-	var version, _ = semver.NewVersion(latestTag.Name().Short())
+	version, _ := semver.NewVersion(latestTag.Name().Short())
 	return &LatestTag{
 		Tag:  version,
 		Date: latestTagDate,
