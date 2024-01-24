@@ -5,12 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/go-git/go-git/v5"
-	log "github.com/sirupsen/logrus"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/go-git/go-git/v5"
+	log "github.com/sirupsen/logrus"
 )
 
 // AzureDevOpsInfo struct to hold organization, project, and repo info
@@ -48,8 +48,12 @@ func createAzureDevOpsPullRequest(
 	}
 
 	// TODO: refactor to use this library: https://github.com/microsoft/azure-devops-go-api
-	url := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories/%s/pullrequests?api-version=6.0",
-		azureInfo.OrganizationName, azureInfo.ProjectName, azureInfo.RepositoryID)
+	url := fmt.Sprintf(
+		"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/pullrequests?api-version=6.0",
+		azureInfo.OrganizationName,
+		azureInfo.ProjectName,
+		azureInfo.RepositoryID,
+	)
 	prTitle := fmt.Sprintf("chore(bump): bumped version to %s", newVersion)
 	payload := map[string]interface{}{
 		"sourceRefName": fmt.Sprintf("refs/heads/%s", sourceBranch),
@@ -69,7 +73,10 @@ func createAzureDevOpsPullRequest(
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(":"+personalAccessToken)))
+	req.Header.Set(
+		"Authorization",
+		"Basic "+base64.StdEncoding.EncodeToString([]byte(":"+personalAccessToken)),
+	)
 
 	log.Infof("POST %s", url)
 	resp, err := client.Do(req)
@@ -80,7 +87,11 @@ func createAzureDevOpsPullRequest(
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("failed to create pull request (status: %d), response body is: %s", resp.StatusCode, body)
+		return fmt.Errorf(
+			"failed to create pull request (status: %d), response body is: %s",
+			resp.StatusCode,
+			body,
+		)
 	}
 
 	log.Info("Successfully created Azure DevOps pull request")
@@ -88,7 +99,10 @@ func createAzureDevOpsPullRequest(
 }
 
 // GetAzureDevOpsInfo extracts organization, project, and repo information from the remote URL
-func GetAzureDevOpsInfo(repo *git.Repository, personalAccessToken string) (info AzureDevOpsInfo, err error) {
+func GetAzureDevOpsInfo(
+	repo *git.Repository,
+	personalAccessToken string,
+) (info AzureDevOpsInfo, err error) {
 	remoteURL, err := getRemoteRepoURL(repo)
 	if err != nil {
 		return info, err
@@ -109,14 +123,22 @@ func GetAzureDevOpsInfo(repo *git.Repository, personalAccessToken string) (info 
 	}
 
 	// fetch repositoryId using Azure DevOps API
-	url := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories/%s?api-version=6.0", organizationName, projectName, repositoryName)
+	url := fmt.Sprintf(
+		"https://dev.azure.com/%s/%s/_apis/git/repositories/%s?api-version=6.0",
+		organizationName,
+		projectName,
+		repositoryName,
+	)
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return info, err
 	}
 
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(":"+personalAccessToken)))
+	req.Header.Set(
+		"Authorization",
+		"Basic "+base64.StdEncoding.EncodeToString([]byte(":"+personalAccessToken)),
+	)
 
 	log.Infof("GET %s", url)
 	resp, err := client.Do(req)
@@ -125,7 +147,7 @@ func GetAzureDevOpsInfo(repo *git.Repository, personalAccessToken string) (info 
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return info, err
 	}

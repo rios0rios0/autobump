@@ -9,7 +9,10 @@ import (
 	"github.com/xanzy/go-gitlab"
 )
 
-// TODO: this should be better using an Adapter pattern (interface with many providers and implementing the methods)
+// TODO: this should be better using an Adapter pattern
+//
+//	(interface with many providers and implementing the methods)
+//
 // createGitLabMergeRequest creates a new merge request on GitLab
 func createGitLabMergeRequest(
 	globalConfig *GlobalConfig,
@@ -48,10 +51,10 @@ func createGitLabMergeRequest(
 	mrTitle := fmt.Sprintf("chore(bump): bumped version to %s", newVersion)
 
 	mergeRequestOptions := &gitlab.CreateMergeRequestOptions{
-		SourceBranch:       gitlab.String(sourceBranch),
-		TargetBranch:       gitlab.String("main"),
+		SourceBranch:       gitlab.Ptr(sourceBranch),
+		TargetBranch:       gitlab.Ptr("main"),
 		Title:              &mrTitle,
-		RemoveSourceBranch: gitlab.Bool(true),
+		RemoveSourceBranch: gitlab.Ptr(true),
 	}
 
 	_, _, err = gitlabClient.MergeRequests.CreateMergeRequest(projectID, mergeRequestOptions)

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,7 +51,7 @@ func updateVersion(globalConfig *GlobalConfig, projectConfig *ProjectConfig) err
 	}
 
 	if !oneVersionFileExists {
-		return errors.New(fmt.Sprintf("No version file found for %s", projectConfig.Language))
+		return fmt.Errorf("No version file found for %s", projectConfig.Language)
 	}
 
 	return nil
@@ -72,7 +71,7 @@ func getVersionFiles(
 
 	languageConfig, exists := globalConfig.LanguagesConfig[projectConfig.Language]
 	if !exists {
-		return nil, errors.New(fmt.Sprintf("Language %s not found in config", language))
+		return nil, fmt.Errorf("Language %s not found in config", language)
 	}
 
 	for _, versionFile := range languageConfig.VersionFiles {

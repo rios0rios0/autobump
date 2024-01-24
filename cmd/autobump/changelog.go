@@ -12,7 +12,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const defaultChangelogUrl = "https://raw.githubusercontent.com/rios0rios0/autobump/main/configs/CHANGELOG.template.md"
+const defaultChangelogUrl = "https://raw.githubusercontent.com/rios0rios0/" +
+	"autobump/main/configs/CHANGELOG.template.md"
 
 func updateChangelogFile(changelogPath string) (*semver.Version, error) {
 	lines, err := readLines(changelogPath)
@@ -51,12 +52,12 @@ func getNextVersion(changelogPath string) (*semver.Version, error) {
 func createChangelogIfNotExists(changelogPath string) (bool, error) {
 	if _, err := os.Stat(changelogPath); os.IsNotExist(err) {
 		log.Warnf("Creating empty CHANGELOG file at '%s'.", changelogPath)
-		var fileContent, err = downloadFile(defaultChangelogUrl)
+		fileContent, err := downloadFile(defaultChangelogUrl)
 		if err != nil {
 			log.Errorf("It wasn't possible to download the CHANGELOG model file: %v", err)
 		}
 
-		err = os.WriteFile(changelogPath, fileContent, 0644)
+		err = os.WriteFile(changelogPath, fileContent, 0o644)
 		if err != nil {
 			log.Errorf("Error creating CHANGELOG file: %v", err)
 			return false, err
@@ -88,7 +89,8 @@ func isChangelogUnreleasedEmpty(changelogPath string) (bool, error) {
 		}
 
 		if unreleased {
-			if match, _ := regexp.MatchString(`^\s*-\s*[^ ]+`, line); match {
+			re := regexp.MustCompile(`^\s*-\s*[^ ]+`)
+			if match := re.MatchString(line); match {
 				return false, nil
 			}
 		}
@@ -230,17 +232,14 @@ func updateSection(
 		for i := 0; i < majorChanges; i++ {
 			nextVersion = nextVersion.IncMajor()
 		}
-		break
 	case minorChanges > 0:
 		for i := 0; i < minorChanges; i++ {
 			nextVersion = nextVersion.IncMinor()
 		}
-		break
 	case patchChanges > 0:
 		for i := 0; i < patchChanges; i++ {
 			nextVersion = nextVersion.IncPatch()
 		}
-		break
 	}
 
 	// Sort the items inside the sections alphabetically

@@ -21,7 +21,6 @@ var (
 			cwd, err := os.Getwd()
 			if err != nil {
 				log.Fatalf("Failed to get the current working directory: %v", err)
-				os.Exit(1)
 			}
 
 			projectConfig := &ProjectConfig{
@@ -34,7 +33,6 @@ var (
 				projectLanguage, err := detectLanguage(globalConfig, projectConfig.Path)
 				if err != nil {
 					log.Fatalf("Failed to detect project language: %v", err)
-					os.Exit(1)
 				}
 				projectConfig.Language = projectLanguage
 			}
@@ -42,10 +40,8 @@ var (
 			err = processRepo(globalConfig, projectConfig)
 			if err != nil {
 				log.Fatalf("Failed to process repo: %v", err)
-
-				// TODO: rollback the process removing the branch if exists, reverting the files and going back to main
-
-				os.Exit(1)
+				// TODO: rollback the process removing the branch if exists,
+				//       reverting the files and going back to main
 			}
 		},
 	}
@@ -58,7 +54,6 @@ var (
 			err := iterateProjects(globalConfig)
 			if err != nil {
 				log.Fatalf("Failed to iterate projects: %v", err)
-				os.Exit(1)
 			}
 		},
 	}
@@ -73,7 +68,6 @@ func findReadAndValidateConfig(configPath string) *GlobalConfig {
 	globalConfig, err := readConfig(configPath)
 	if err != nil {
 		log.Fatalf("Failed to read config: %v", err)
-		os.Exit(1)
 	}
 
 	if err = validateGlobalConfig(globalConfig, false); err != nil {
@@ -84,16 +78,18 @@ func findReadAndValidateConfig(configPath string) *GlobalConfig {
 			data, err = downloadFile(defaultConfigUrl)
 			if err != nil {
 				log.Fatalf("Failed to download default config: %v", err)
-				os.Exit(1)
 			}
 
 			var defaultConfig *GlobalConfig
 			defaultConfig, err = decodeConfig(data)
+			if err != nil {
+				log.Fatalf("Failed to decode default config: %v", err)
+			}
+
 			// TODO: this merge could be done, for each language
 			globalConfig.LanguagesConfig = defaultConfig.LanguagesConfig
 		} else {
 			log.Fatalf("Config validation failed: %v", err)
-			os.Exit(1)
 		}
 	}
 
@@ -106,5 +102,8 @@ func main() {
 	batchCmd.Flags().StringVarP(&configPath, "config", "c", "", "config file path")
 
 	rootCmd.AddCommand(batchCmd)
-	rootCmd.Execute()
+	err := rootCmd.Execute()
+	if err != nil {
+		log.Fatalf("Uncaught error: %v", err)
+	}
 }
