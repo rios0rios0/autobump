@@ -2,9 +2,8 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,7 +11,7 @@ import (
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 // readLines reads a whole file into memory
@@ -53,7 +52,7 @@ func findFile(locations []string, filename string) (string, error) {
 			return location, nil
 		}
 	}
-	return "", errors.New(filename + " not found")
+	return "", fmt.Errorf(filename + " not found")
 }
 
 // downloadFile downloads a file from the given URL
@@ -66,7 +65,7 @@ func downloadFile(url string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	data, err = ioutil.ReadAll(resp.Body)
+	data, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +85,14 @@ func getGpgKey(gpgKeyId, gpgKeyPath string) (*openpgp.Entity, error) {
 
 		if _, err = os.Stat(location); os.IsNotExist(err) {
 			// TODO: until today Go is not capable to read the key from the keyring (kbx)
-			cmd := exec.Command("gpg", "--export-secret-key", "--output", location, "--armor", gpgKeyId)
+			cmd := exec.Command(
+				"gpg",
+				"--export-secret-key",
+				"--output",
+				location,
+				"--armor",
+				gpgKeyId,
+			)
 			err = cmd.Run()
 			if err != nil {
 				return nil, fmt.Errorf("failed to execute command GPG: %w", err)
@@ -96,7 +102,7 @@ func getGpgKey(gpgKeyId, gpgKeyPath string) (*openpgp.Entity, error) {
 
 	privateKeyFile, err := os.Open(location)
 	if err != nil {
-		return nil, errors.New("failed to open private key file")
+		return nil, fmt.Errorf("failed to open private key file")
 	}
 	defer privateKeyFile.Close()
 
@@ -112,7 +118,7 @@ func getGpgKey(gpgKeyId, gpgKeyPath string) (*openpgp.Entity, error) {
 
 	fmt.Print("Enter the passphrase for your GPG key: ")
 	var passphrase []byte
-	passphrase, err = terminal.ReadPassword(0)
+	passphrase, err = term.ReadPassword(0)
 	// assume the passphrase to be empty if unable to read from the terminal
 	if err != nil {
 		if strings.TrimSpace(err.Error()) == "inappropriate ioctl for device" {

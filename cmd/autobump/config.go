@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -40,9 +39,10 @@ type ProjectConfig struct {
 	NewVersion         string
 }
 
-const defaultConfigUrl = "https://raw.githubusercontent.com/rios0rios0/autobump/main/configs/autobump.yaml"
+const defaultConfigUrl = "https://raw.githubusercontent.com/rios0rios0/autobump/" +
+	"main/configs/autobump.yaml"
 
-var missingLanguagesKeyError = errors.New("missing languages key")
+var missingLanguagesKeyError = fmt.Errorf("missing languages key")
 
 // readConfig reads the config file and returns a GlobalConfig struct
 func readConfig(configPath string) (*GlobalConfig, error) {
@@ -93,7 +93,10 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 	if globalConfig.AzureDevOpsAccessToken != "" {
 		_, err = os.Stat(globalConfig.AzureDevOpsAccessToken)
 		if !os.IsNotExist(err) {
-			log.Infof("Reading Azure DevOps access token from file %s", globalConfig.AzureDevOpsAccessToken)
+			log.Infof(
+				"Reading Azure DevOps access token from file %s",
+				globalConfig.AzureDevOpsAccessToken,
+			)
 			token, err := os.ReadFile(globalConfig.AzureDevOpsAccessToken)
 			if err != nil {
 				return nil, err
@@ -125,7 +128,7 @@ func decodeConfig(data []byte) (*GlobalConfig, error) {
 func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 	var missingKeys []string
 
-	if batch == true && len(globalConfig.Projects) == 0 {
+	if batch && len(globalConfig.Projects) == 0 {
 		missingKeys = append(missingKeys, "projects")
 	}
 
@@ -133,17 +136,18 @@ func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 		if projectConfig.Path == "" {
 			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].path", i))
 		}
-		if batch == true && globalConfig.GitLabAccessToken == "" &&
+		if batch && globalConfig.GitLabAccessToken == "" &&
 			projectConfig.ProjectAccessToken == "" {
 			log.Error(
-				"Project access token is required when personal access token is not set in batch mode",
+				"Project access token is required when personal access token " +
+					"is not set in batch mode",
 			)
 			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].project_access_token", i))
 		}
 	}
 
 	if len(missingKeys) > 0 {
-		return errors.New("missing keys: " + strings.Join(missingKeys, ", "))
+		return fmt.Errorf("missing keys: " + strings.Join(missingKeys, ", "))
 	}
 
 	if globalConfig.LanguagesConfig == nil {
@@ -161,7 +165,10 @@ func findConfigOnMissing(configPath string) string {
 		var err error
 		configPath, err = findConfig()
 		if err != nil {
-			log.Warn("Config file not found in default locations, using the repository configuration as the last resort")
+			log.Warn(
+				"Config file not found in default locations, " +
+					"using the repository configuration as the last resort",
+			)
 			configPath = defaultConfigUrl
 		}
 
