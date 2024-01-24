@@ -69,6 +69,18 @@ func getVersionFiles(
 	projectName := strings.Replace(projectConfig.Name, "-", "_", -1)
 	var versionFiles []VersionFile
 
+	// try to get the project name from the language interface
+	languageInterface := getLanguageInterface(*projectConfig)
+	if languageInterface != nil {
+		languageProjectName, err := languageInterface.GetProjectName()
+		if err == nil && languageProjectName != "" {
+			log.Infof("Using project name '%s' from language interface", languageProjectName)
+			projectName = languageProjectName
+		}
+	} else {
+		log.Infof("Language '%s' does not have a language interface", projectConfig.Language)
+	}
+
 	languageConfig, exists := globalConfig.LanguagesConfig[projectConfig.Language]
 	if !exists {
 		return nil, fmt.Errorf("Language %s not found in config", language)

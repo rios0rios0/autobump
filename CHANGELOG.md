@@ -16,6 +16,14 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added the feature to read project names from the language's configuration file
+
+### Changed
+
+- refactored the project to eliminate warnings from golangci-lint
+
 ## [2.11.0] - 2024-01-23
 
 ### Added
