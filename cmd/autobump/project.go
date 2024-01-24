@@ -1,15 +1,15 @@
 package main
 
 import (
-	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	log "github.com/sirupsen/logrus"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 // detectLanguage detects the language of a project by looking at the files in the project
@@ -72,7 +72,7 @@ func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
 		return detected, nil
 	}
 
-	return "", errors.New("project language not recognized")
+	return "", fmt.Errorf("project language not recognized")
 }
 
 // getGlobalGitConfig gets a Git option from local and global Git config
@@ -237,6 +237,10 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 	// get version file relative path
 	for _, versionFile := range versionFiles {
 		versionFileRelativePath, err := filepath.Rel(projectPath, versionFile.Path)
+		if err != nil {
+			return err
+		}
+
 		if _, err := os.Stat(versionFile.Path); os.IsNotExist(err) {
 			continue
 		}
@@ -362,7 +366,6 @@ func iterateProjects(globalConfig *GlobalConfig) error {
 
 		// verify if the project path exists
 		if _, err = os.Stat(project.Path); os.IsNotExist(err) {
-
 			// if the project path does not exist, check if it is a remote repository
 			if !strings.HasPrefix(project.Path, "https://") &&
 				!strings.HasPrefix(project.Path, "git@") {
@@ -370,7 +373,7 @@ func iterateProjects(globalConfig *GlobalConfig) error {
 				// if it is neither a local path nor a remote repository, skip the project
 				log.Errorf("Project path does not exist: %s\n", project.Path)
 				log.Warn("Skipping project")
-				err = errors.New("project path does not exist")
+				err = fmt.Errorf("project path does not exist")
 				continue
 			}
 		}
