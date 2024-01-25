@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.12.0] - 2024-01-25
+
 ### Added
 
 - added the feature to read project names from the language's configuration file
