@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed the error where `-` characters are not replaced with `_` in the project names
+
 ## [2.12.0] - 2024-01-25
 
 ### Added

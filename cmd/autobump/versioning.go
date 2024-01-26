@@ -75,7 +75,7 @@ func getVersionFiles(
 		languageProjectName, err := languageInterface.GetProjectName()
 		if err == nil && languageProjectName != "" {
 			log.Infof("Using project name '%s' from language interface", languageProjectName)
-			projectName = languageProjectName
+			projectName = strings.Replace(languageProjectName, "-", "_", -1)
 		}
 	} else {
 		log.Infof("Language '%s' does not have a language interface", projectConfig.Language)
