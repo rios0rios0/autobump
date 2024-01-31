@@ -227,19 +227,12 @@ func updateSection(
 		}
 	}
 
-	switch {
-	case majorChanges > 0:
-		for i := 0; i < majorChanges; i++ {
-			nextVersion = nextVersion.IncMajor()
-		}
-	case minorChanges > 0:
-		for i := 0; i < minorChanges; i++ {
-			nextVersion = nextVersion.IncMinor()
-		}
-	case patchChanges > 0:
-		for i := 0; i < patchChanges; i++ {
-			nextVersion = nextVersion.IncPatch()
-		}
+	if majorChanges > 0 {
+		nextVersion = nextVersion.IncMajor()
+	} else if minorChanges > 0 {
+		nextVersion = nextVersion.IncMinor()
+	} else if patchChanges > 0 {
+		nextVersion = nextVersion.IncPatch()
 	}
 
 	// Sort the items inside the sections alphabetically
