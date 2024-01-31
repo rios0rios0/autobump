@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- increment the version number only by one since it is the more common practice and eliminate discontinuity in the version numbers
+
 ### Fixed
 
 - fixed the error where `-` characters are not replaced with `_` in the project names
