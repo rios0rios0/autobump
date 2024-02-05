@@ -251,7 +251,7 @@ func updateSection(
 	// add a blank line between sections
 	newSection = append(newSection, "")
 
-	keys := []string{"Added", "Changed", "Removed"}
+	keys := []string{"Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"}
 	for _, key := range keys {
 		section := sections[key]
 
