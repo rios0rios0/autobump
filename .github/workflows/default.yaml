@@ -1,0 +1,5 @@
+name: 'default'
+on: [ 'workflow_dispatch' ]
+jobs:
+  default:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@feat/#19'
