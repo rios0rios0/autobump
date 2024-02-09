@@ -16,9 +16,13 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added the workflow to have a complete pipeline with security and quality checks
+
 ### Changed
 
-- increment the version number only by one since it is the more common practice and eliminate discontinuity in the version numbers
+- changed to increment the version number only by one since it is the most common practice and eliminates discontinuity in the version numbers
 
 ### Fixed
 
