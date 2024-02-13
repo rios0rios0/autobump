@@ -26,8 +26,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
-- fixed the issue where some sections are left out in the `CHANGELOG.md` file
 - fixed the error where `-` characters are not replaced with `_` in the project names
+- fixed the issue where some sections are left out in the `CHANGELOG.md` file
 
 ## [2.12.0] - 2024-01-25
 
