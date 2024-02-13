@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.13.0] - 2024-02-13
+
 ### Added
 
 - added the workflow to have a complete pipeline with security and quality checks
