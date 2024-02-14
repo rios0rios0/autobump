@@ -15,9 +15,8 @@ permissions:
   checks: 'write' # code_check-style_golangci_lint
   contents: 'write' # delivery-release
 
-env:
-  BINARY_NAME: 'autobump'
-
 jobs:
   default:
     uses: 'rios0rios0/pipelines/.github/workflows/go-binary.yaml@main'
+    with:
+      binary_name: 'autobump'
