@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added the feature to automatically fix incorrect section heading levels
+
 ## [2.13.0] - 2024-02-13
 
 ### Added
