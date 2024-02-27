@@ -182,6 +182,15 @@ func updateSection(
 	unreleasedSection []string,
 	nextVersion semver.Version,
 ) ([]string, *semver.Version, error) {
+	// Fix incorrect section heading levels
+	re := regexp.MustCompile(`(?i)^\s*#+\s*(Added|Changed|Deprecated|Removed|Fixed|Security)`)
+	for i, line := range unreleasedSection {
+		if re.MatchString(line) {
+			correctedLine := "### " + strings.TrimSpace(strings.Replace(line, "#", "", -1))
+			unreleasedSection[i] = correctedLine
+		}
+	}
+
 	var newSection []string
 	var currentSection *[]string
 	sections := map[string]*[]string{
@@ -262,6 +271,10 @@ func updateSection(
 			newSection = append(newSection, *section...)
 			newSection = append(newSection, "")
 		}
+	}
+
+	if majorChanges == 0 && minorChanges == 0 && patchChanges == 0 {
+		return nil, nil, fmt.Errorf("no changes found in the unreleased section")
 	}
 
 	return newSection, &nextVersion, nil
