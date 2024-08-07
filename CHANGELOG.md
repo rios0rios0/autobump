@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Removed
+
+- removed redundant release pipeline
+
 ## [2.14.0] - 2024-03-01
 
 ### Added
