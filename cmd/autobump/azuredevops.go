@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +13,13 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	log "github.com/sirupsen/logrus"
+)
+
+const contextTimeout = 10
+
+var (
+	ErrUnknownURLType            = errors.New("unknown remote URL type")
+	ErrFailedToCreatePullRequest = errors.New("failed to create pull request")
 )
 
 // AzureDevOpsInfo struct to hold organization, project, and repo info
@@ -22,7 +31,7 @@ type AzureDevOpsInfo struct {
 
 // RepoInfo struct to hold repository id answer
 type RepoInfo struct {
-	Id string `json:"id"`
+	ID string `json:"id"`
 }
 
 // TODO: this should be better using an Adapter pattern (interface with many providers and implementing the methods)
@@ -54,22 +63,24 @@ func createAzureDevOpsPullRequest(
 		azureInfo.ProjectName,
 		azureInfo.RepositoryID,
 	)
-	prTitle := fmt.Sprintf("chore(bump): bumped version to %s", newVersion)
+	prTitle := "chore(bump): bumped version to " + newVersion
 	payload := map[string]interface{}{
-		"sourceRefName": fmt.Sprintf("refs/heads/%s", sourceBranch),
+		"sourceRefName": "refs/heads/" + sourceBranch,
 		"targetRefName": "refs/heads/main",
 		"title":         prTitle,
 	}
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	client := &http.Client{}
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
+	ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(payloadBytes))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -79,16 +90,18 @@ func createAzureDevOpsPullRequest(
 	)
 
 	log.Infof("POST %s", url)
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create pull request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf(
-			"failed to create pull request (status: %d), response body is: %s",
+			"%w: %d - %s",
+			ErrFailedToCreatePullRequest,
 			resp.StatusCode,
 			body,
 		)
@@ -102,7 +115,8 @@ func createAzureDevOpsPullRequest(
 func GetAzureDevOpsInfo(
 	repo *git.Repository,
 	personalAccessToken string,
-) (info AzureDevOpsInfo, err error) {
+) (AzureDevOpsInfo, error) {
+	var info AzureDevOpsInfo
 	remoteURL, err := getRemoteRepoURL(repo)
 	if err != nil {
 		return info, err
@@ -110,16 +124,18 @@ func GetAzureDevOpsInfo(
 
 	var organizationName, projectName, repositoryName string
 	parts := strings.Split(remoteURL, "/")
-	if strings.HasPrefix(remoteURL, "git@") {
+
+	switch {
+	case strings.HasPrefix(remoteURL, "git@"):
 		organizationName = parts[1]
 		projectName = parts[2]
 		repositoryName = parts[3]
-	} else if strings.HasPrefix(remoteURL, "https://") {
+	case strings.HasPrefix(remoteURL, "https://"):
 		organizationName = parts[3]
 		projectName = parts[4]
 		repositoryName = parts[5]
-	} else {
-		return info, fmt.Errorf("unknown URL format")
+	default:
+		return info, fmt.Errorf("%w: %s", ErrUnknownURLType, remoteURL)
 	}
 
 	// fetch repositoryId using Azure DevOps API
@@ -129,10 +145,14 @@ func GetAzureDevOpsInfo(
 		projectName,
 		repositoryName,
 	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+	defer cancel()
+
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return info, err
+		return info, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set(
@@ -143,24 +163,24 @@ func GetAzureDevOpsInfo(
 	log.Infof("GET %s", url)
 	resp, err := client.Do(req)
 	if err != nil {
-		return info, err
+		return info, fmt.Errorf("failed to fetch repository info: %w", err)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return info, err
+		return info, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var repoInfo RepoInfo
 	err = json.Unmarshal(bodyBytes, &repoInfo)
 	if err != nil {
-		return info, err
+		return info, fmt.Errorf("failed to unmarshal response body: %w", err)
 	}
 
 	return AzureDevOpsInfo{
 		OrganizationName: organizationName,
 		ProjectName:      projectName,
-		RepositoryID:     repoInfo.Id,
+		RepositoryID:     repoInfo.ID,
 	}, nil
 }
