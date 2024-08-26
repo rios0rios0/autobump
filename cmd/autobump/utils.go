@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,11 +16,21 @@ import (
 	"golang.org/x/term"
 )
 
+var (
+	ErrFileNotFound                         = errors.New("file not found")
+	ErrCannotFindPrivKey                    = errors.New("cannot find private key")
+	ErrCannotFindPrivKeyMatchingFingerprint = errors.New(
+		"cannot find private key matching fingerprint",
+	)
+)
+
+const downloadTimeout = 10
+
 // readLines reads a whole file into memory
 func readLines(filePath string) ([]string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
 
@@ -27,14 +39,18 @@ func readLines(filePath string) ([]string, error) {
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
-	return lines, scanner.Err()
+	err = scanner.Err()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+	return lines, nil
 }
 
 // writeLines writes the lines to the given file
 func writeLines(filePath string, lines []string) error {
 	file, err := os.Create(filePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create file: %w", err)
 	}
 	defer file.Close()
 
@@ -42,32 +58,35 @@ func writeLines(filePath string, lines []string) error {
 	for _, line := range lines {
 		fmt.Fprintln(writer, line)
 	}
-	return writer.Flush()
-}
 
-// findFile returns the first location where the file exists
-func findFile(locations []string, filename string) (string, error) {
-	for _, location := range locations {
-		if _, err := os.Stat(location); !os.IsNotExist(err) {
-			return location, nil
-		}
+	err = writer.Flush()
+	if err != nil {
+		return fmt.Errorf("failed to write to file: %w", err)
 	}
-	return "", fmt.Errorf(filename + " not found")
+	return nil
 }
 
 // downloadFile downloads a file from the given URL
 func downloadFile(url string) ([]byte, error) {
 	var data []byte
 
-	resp, err := http.Get(url)
+	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create download request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
 	defer resp.Body.Close()
 
 	data, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	return data, nil
@@ -75,13 +94,13 @@ func downloadFile(url string) ([]byte, error) {
 
 // getGpgKey returns GPG key entity from the given path
 // it prompts for the passphrase to decrypt the key
-func getGpgKey(gpgKeyId, gpgKeyPath string) (*openpgp.Entity, error) {
+func getGpgKey(gpgKeyID, gpgKeyPath string) (*openpgp.Entity, error) {
 	var err error
 
 	location := gpgKeyPath
 	if location == "" {
-		location = os.ExpandEnv(fmt.Sprintf("$HOME/.gnupg/autobump-%s.asc", gpgKeyId))
-		log.Warnf("No key path provided, attempting to read (%s) at: %s", gpgKeyId, location)
+		location = os.ExpandEnv(fmt.Sprintf("$HOME/.gnupg/autobump-%s.asc", gpgKeyID))
+		log.Warnf("No key path provided, attempting to read (%s) at: %s", gpgKeyID, location)
 
 		if _, err = os.Stat(location); os.IsNotExist(err) {
 			// TODO: until today Go is not capable to read the key from the keyring (kbx)
@@ -91,7 +110,7 @@ func getGpgKey(gpgKeyId, gpgKeyPath string) (*openpgp.Entity, error) {
 				"--output",
 				location,
 				"--armor",
-				gpgKeyId,
+				gpgKeyID,
 			)
 			err = cmd.Run()
 			if err != nil {
@@ -102,21 +121,21 @@ func getGpgKey(gpgKeyId, gpgKeyPath string) (*openpgp.Entity, error) {
 
 	privateKeyFile, err := os.Open(location)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open private key file")
+		return nil, fmt.Errorf("failed to open private key file: %w", err)
 	}
 	defer privateKeyFile.Close()
 
 	entityList, err := openpgp.ReadArmoredKeyRing(privateKeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read private key file: %s", err)
+		return nil, fmt.Errorf("failed to read private key file: %w", err)
 	}
 
 	entity := entityList[0]
 	if entity == nil {
-		return nil, fmt.Errorf("failed to find key with fingerprint %s", gpgKeyId)
+		return nil, fmt.Errorf("%w: %s", ErrCannotFindPrivKeyMatchingFingerprint, gpgKeyID)
 	}
 
-	fmt.Print("Enter the passphrase for your GPG key: ")
+	fmt.Print("Enter the passphrase for your GPG key: ") //nolint:forbidigo // this line is not for debugging
 	var passphrase []byte
 	passphrase, err = term.ReadPassword(0)
 	// assume the passphrase to be empty if unable to read from the terminal
@@ -124,18 +143,18 @@ func getGpgKey(gpgKeyId, gpgKeyPath string) (*openpgp.Entity, error) {
 		if strings.TrimSpace(err.Error()) == "inappropriate ioctl for device" {
 			passphrase = []byte("")
 		} else {
-			return nil, err
+			return nil, fmt.Errorf("failed to read passphrase: %w", err)
 		}
 	}
-	fmt.Println()
+	fmt.Println() //nolint:forbidigo // this line is not for debugging
 
 	if entity.PrivateKey == nil {
-		return nil, fmt.Errorf("failed to find private key for %s", gpgKeyId)
+		return nil, fmt.Errorf("%w: %s", ErrCannotFindPrivKey, gpgKeyID)
 	}
 
 	err = entity.PrivateKey.Decrypt(passphrase)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt GPG key: %v", err)
+		return nil, fmt.Errorf("failed to decrypt GPG key: %w", err)
 	}
 
 	log.Info("Successfully decrypted GPG key")

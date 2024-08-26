@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,11 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+)
+
+var (
+	ErrNoVersionFileFound       = errors.New("no version file found")
+	ErrLanguageNotFoundInConfig = errors.New("language not found in config")
 )
 
 // updateVersion updates the version in the version files.
@@ -21,7 +27,8 @@ func updateVersion(globalConfig *GlobalConfig, projectConfig *ProjectConfig) err
 	oneVersionFileExists := false
 	for _, versionFile := range versionFiles {
 		// check if the file exists
-		info, err := os.Stat(versionFile.Path)
+		var info os.FileInfo
+		info, err = os.Stat(versionFile.Path)
 		if os.IsNotExist(err) {
 			log.Warnf("Version file %s does not exist", versionFile.Path)
 			continue
@@ -31,9 +38,10 @@ func updateVersion(globalConfig *GlobalConfig, projectConfig *ProjectConfig) err
 		originalFileMode := info.Mode()
 		oneVersionFileExists = true
 
-		content, err := os.ReadFile(versionFile.Path)
+		var content []byte
+		content, err = os.ReadFile(versionFile.Path)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read file %s: %w", versionFile.Path, err)
 		}
 
 		updatedContent := string(content)
@@ -46,12 +54,12 @@ func updateVersion(globalConfig *GlobalConfig, projectConfig *ProjectConfig) err
 
 		err = os.WriteFile(versionFile.Path, []byte(updatedContent), originalFileMode)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to write to file %s: %w", versionFile.Path, err)
 		}
 	}
 
 	if !oneVersionFileExists {
-		return fmt.Errorf("No version file found for %s", projectConfig.Language)
+		return fmt.Errorf("%w: %s", ErrNoVersionFileFound, projectConfig.Language)
 	}
 
 	return nil
@@ -66,16 +74,18 @@ func getVersionFiles(
 	if projectConfig.Name == "" {
 		projectConfig.Name = filepath.Base(projectConfig.Path)
 	}
-	projectName := strings.Replace(projectConfig.Name, "-", "_", -1)
+	projectName := strings.ReplaceAll(projectConfig.Name, "-", "_")
 	var versionFiles []VersionFile
 
 	// try to get the project name from the language interface
-	languageInterface := getLanguageInterface(*projectConfig)
+	var languageInterface Language
+	getLanguageInterface(*projectConfig, &languageInterface)
+
 	if languageInterface != nil {
 		languageProjectName, err := languageInterface.GetProjectName()
 		if err == nil && languageProjectName != "" {
 			log.Infof("Using project name '%s' from language interface", languageProjectName)
-			projectName = strings.Replace(languageProjectName, "-", "_", -1)
+			projectName = strings.ReplaceAll(languageProjectName, "-", "_")
 		}
 	} else {
 		log.Infof("Language '%s' does not have a language interface", projectConfig.Language)
@@ -83,7 +93,7 @@ func getVersionFiles(
 
 	languageConfig, exists := globalConfig.LanguagesConfig[projectConfig.Language]
 	if !exists {
-		return nil, fmt.Errorf("Language %s not found in config", language)
+		return nil, fmt.Errorf("%w: %s", ErrLanguageNotFoundInConfig, projectConfig.Language)
 	}
 
 	for _, versionFile := range languageConfig.VersionFiles {
@@ -94,7 +104,7 @@ func getVersionFiles(
 			),
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get version files: %w", err)
 		}
 		for _, match := range matches {
 			versionFiles = append(
