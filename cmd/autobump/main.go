@@ -2,21 +2,27 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-var (
+type Config struct {
 	language   string
 	configPath string
+}
 
-	rootCmd = &cobra.Command{
+func initRootCmd(config *Config) *cobra.Command {
+	return &cobra.Command{
 		Use:   "autobump",
 		Short: "AutoBump is a tool that automatically updates CHANGELOG.md",
-		Run: func(cmd *cobra.Command, args []string) {
-			globalConfig := findReadAndValidateConfig(configPath)
+		Run: func(_ *cobra.Command, _ []string) {
+			globalConfig, err := findReadAndValidateConfig(config.configPath)
+			if err != nil {
+				log.Fatalf("Failed to read config: %v", err)
+			}
 
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -25,12 +31,13 @@ var (
 
 			projectConfig := &ProjectConfig{
 				Path:     cwd,
-				Language: language,
+				Language: config.language,
 			}
 
 			// detect the project language if not manually set
 			if projectConfig.Language == "" {
-				projectLanguage, err := detectLanguage(globalConfig, projectConfig.Path)
+				var projectLanguage string
+				projectLanguage, err = detectProjectLanguage(globalConfig, projectConfig.Path)
 				if err != nil {
 					log.Fatalf("Failed to detect project language: %v", err)
 				}
@@ -45,61 +52,70 @@ var (
 			}
 		},
 	}
+}
 
-	batchCmd = &cobra.Command{
+func initBatchCmd(config *Config) *cobra.Command {
+	return &cobra.Command{
 		Use:   "batch",
 		Short: "Run AutoBump for all projects in the configuration",
-		Run: func(cmd *cobra.Command, args []string) {
-			globalConfig := findReadAndValidateConfig(configPath)
-			err := iterateProjects(globalConfig)
+		Run: func(_ *cobra.Command, _ []string) {
+			globalConfig, err := findReadAndValidateConfig(config.configPath)
+			if err != nil {
+				log.Fatalf("Failed to read config: %v", err)
+			}
+
+			err = iterateProjects(globalConfig)
 			if err != nil {
 				log.Fatalf("Failed to iterate projects: %v", err)
 			}
 		},
 	}
-)
+}
 
 // findReadAndValidateConfig finds, reads and validates the config file
-func findReadAndValidateConfig(configPath string) *GlobalConfig {
+func findReadAndValidateConfig(configPath string) (*GlobalConfig, error) {
 	// find the config file if not manually set
 	configPath = findConfigOnMissing(configPath)
 
 	// read the config file
 	globalConfig, err := readConfig(configPath)
 	if err != nil {
-		log.Fatalf("Failed to read config: %v", err)
+		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
-	if err = validateGlobalConfig(globalConfig, false); err != nil {
-		if errors.Is(err, missingLanguagesKeyError) {
-			log.Warn("Missing languages key, using the default configuration")
+	err = validateGlobalConfig(globalConfig, false)
+	if errors.Is(err, ErrMissingLanguagesKeyError) {
+		log.Warn("Missing languages key, using the default configuration")
 
-			var data []byte
-			data, err = downloadFile(defaultConfigUrl)
-			if err != nil {
-				log.Fatalf("Failed to download default config: %v", err)
-			}
-
-			var defaultConfig *GlobalConfig
-			defaultConfig, err = decodeConfig(data)
-			if err != nil {
-				log.Fatalf("Failed to decode default config: %v", err)
-			}
-
-			// TODO: this merge could be done, for each language
-			globalConfig.LanguagesConfig = defaultConfig.LanguagesConfig
-		} else {
-			log.Fatalf("Config validation failed: %v", err)
+		var data []byte
+		data, err = downloadFile(defaultConfigURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to download default config: %w", err)
 		}
+
+		var defaultConfig *GlobalConfig
+		defaultConfig, err = decodeConfig(data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode default config: %w", err)
+		}
+
+		// TODO: this merge could be done for each language
+		globalConfig.LanguagesConfig = defaultConfig.LanguagesConfig
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to validate global config: %w", err)
 	}
 
-	return globalConfig
+	return globalConfig, nil
 }
 
 func main() {
-	rootCmd.Flags().StringVarP(&configPath, "config", "c", "", "config file path")
-	rootCmd.Flags().StringVarP(&language, "language", "l", "", "project language")
-	batchCmd.Flags().StringVarP(&configPath, "config", "c", "", "config file path")
+	config := &Config{}
+	rootCmd := initRootCmd(config)
+	batchCmd := initBatchCmd(config)
+
+	rootCmd.Flags().StringVarP(&config.configPath, "config", "c", "", "config file path")
+	rootCmd.Flags().StringVarP(&config.language, "language", "l", "", "project language")
+	batchCmd.Flags().StringVarP(&config.configPath, "config", "c", "", "config file path")
 
 	rootCmd.AddCommand(batchCmd)
 	err := rootCmd.Execute()

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -12,8 +13,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const defaultChangelogUrl = "https://raw.githubusercontent.com/rios0rios0/" +
+const defaultChangelogURL = "https://raw.githubusercontent.com/rios0rios0/" +
 	"autobump/main/configs/CHANGELOG.template.md"
+
+var (
+	ErrNoVersionFoundInChangelog  = errors.New("no version found in the changelog")
+	ErrNoChangesFoundInUnreleased = errors.New("no changes found in the unreleased section")
+)
 
 func updateChangelogFile(changelogPath string) (*semver.Version, error) {
 	lines, err := readLines(changelogPath)
@@ -52,15 +58,16 @@ func getNextVersion(changelogPath string) (*semver.Version, error) {
 func createChangelogIfNotExists(changelogPath string) (bool, error) {
 	if _, err := os.Stat(changelogPath); os.IsNotExist(err) {
 		log.Warnf("Creating empty CHANGELOG file at '%s'.", changelogPath)
-		fileContent, err := downloadFile(defaultChangelogUrl)
+		var fileContent []byte
+		fileContent, err = downloadFile(defaultChangelogURL)
 		if err != nil {
 			log.Errorf("It wasn't possible to download the CHANGELOG model file: %v", err)
 		}
 
-		err = os.WriteFile(changelogPath, fileContent, 0o644)
+		err = os.WriteFile(changelogPath, fileContent, 0o644) //nolint:gosec // the CHANGLOG file is not sensitive
 		if err != nil {
 			log.Errorf("Error creating CHANGELOG file: %v", err)
-			return false, err
+			return false, fmt.Errorf("error creating CHANGELOG file: %w", err)
 		}
 
 		return false, nil
@@ -114,7 +121,7 @@ func findLatestVersion(lines []string) (*semver.Version, error) {
 			version, err := semver.NewVersion(versionMatch[1])
 			if err != nil {
 				log.Errorf("Error parsing version '%s': %v", versionMatch[1], err)
-				return nil, err
+				return nil, fmt.Errorf("error parsing version '%s': %w", versionMatch[1], err)
 			}
 
 			if latestVersion == nil || version.GreaterThan(latestVersion) {
@@ -124,9 +131,7 @@ func findLatestVersion(lines []string) (*semver.Version, error) {
 	}
 
 	if latestVersion == nil {
-		err := fmt.Errorf("no version found in changelog")
-		log.Errorf("Error: %v", err)
-		return nil, err
+		return nil, ErrNoVersionFoundInChangelog
 	}
 
 	return latestVersion, nil
@@ -148,14 +153,15 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 
 	nextVersion := *latestVersion
 	for _, line := range lines {
-
 		if strings.Contains(line, "[Unreleased]") {
 			unreleased = true
 		} else if strings.HasPrefix(line, fmt.Sprintf("## [%s]", latestVersion.String())) {
 			unreleased = false
 			if len(unreleasedSection) > 0 {
 				// Process the unreleased section
-				updatedSection, updatedVersion, err := updateSection(unreleasedSection, nextVersion)
+				var updatedSection []string
+				var updatedVersion *semver.Version
+				updatedSection, updatedVersion, err = updateSection(unreleasedSection, nextVersion)
 				if err != nil {
 					log.Errorf("Error updating section: %v", err)
 					return nil, nil, err
@@ -178,21 +184,92 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 	return &nextVersion, newContent, nil
 }
 
+// fixSectionHeadings fixes the section headings in the unreleased section
+func fixSectionHeadings(unreleasedSection []string) {
+	re := regexp.MustCompile(`(?i)^\s*#+\s*(Added|Changed|Deprecated|Removed|Fixed|Security)`)
+	for i, line := range unreleasedSection {
+		if re.MatchString(line) {
+			correctedLine := "### " + strings.TrimSpace(strings.ReplaceAll(line, "#", ""))
+			unreleasedSection[i] = correctedLine
+		}
+	}
+}
+
+// makeNewSections creates new section contents for the beginning of the CHANGELOG file
+func makeNewSections(
+	sections map[string]*[]string,
+	nextVersion semver.Version,
+) []string {
+	var newSection []string
+	// Create a new unreleased section
+	newSection = append(newSection, "## [Unreleased]")
+	newSection = append(newSection, "")
+
+	// Create the new section with the next version and the current date
+	newSection = append(
+		newSection,
+		fmt.Sprintf("## [%s] - %s", nextVersion.String(), time.Now().Format("2006-01-02")),
+	)
+	// add a blank line between sections
+	newSection = append(newSection, "")
+
+	// Add the sections to the newly created release section
+	keys := []string{"Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"}
+	for _, key := range keys {
+		section := sections[key]
+
+		// Append sections only if they have content
+		if len(*section) > 0 {
+			newSection = append(newSection, "### "+key)
+			newSection = append(newSection, "")
+			newSection = append(newSection, *section...)
+			newSection = append(newSection, "")
+		}
+	}
+	return newSection
+}
+
+func parseUnreleasedIntoSections(
+	unreleasedSection []string,
+	sections map[string]*[]string,
+	currentSection *[]string,
+	majorChanges, minorChanges, patchChanges *int,
+) {
+	for _, line := range unreleasedSection {
+		trimmedLine := strings.TrimSpace(line)
+
+		// Check if the line is a section header
+		for header := range sections {
+			if strings.HasPrefix(trimmedLine, "### "+header) {
+				currentSection = sections[header]
+			}
+		}
+
+		// If the line is not empty, and not a section header, add it to the current section
+		if currentSection != nil && trimmedLine != "" && trimmedLine != "-" &&
+			!strings.HasPrefix(trimmedLine, "##") {
+			*currentSection = append(*currentSection, line)
+
+			// Increment the change counters based on the line content
+			switch {
+			case strings.HasPrefix(line, "- **BREAKING CHANGE:**"):
+				*majorChanges++
+			case currentSection == sections["Added"]:
+				*minorChanges++
+			default:
+				*patchChanges++
+			}
+		}
+	}
+}
+
 func updateSection(
 	unreleasedSection []string,
 	nextVersion semver.Version,
 ) ([]string, *semver.Version, error) {
-	// Fix incorrect section heading levels
-	re := regexp.MustCompile(`(?i)^\s*#+\s*(Added|Changed|Deprecated|Removed|Fixed|Security)`)
-	for i, line := range unreleasedSection {
-		if re.MatchString(line) {
-			correctedLine := "### " + strings.TrimSpace(strings.Replace(line, "#", "", -1))
-			unreleasedSection[i] = correctedLine
-		}
-	}
+	// Fix the section headings
+	fixSectionHeadings(unreleasedSection)
 
-	var newSection []string
-	var currentSection *[]string
 	sections := map[string]*[]string{
 		"Added":      {},
 		"Changed":    {},
@@ -202,45 +279,29 @@ func updateSection(
 		"Security":   {},
 	}
 
-	majorChanges := 0
-	minorChanges := 0
-	patchChanges := 0
+	var currentSection *[]string
+	majorChanges, minorChanges, patchChanges := 0, 0, 0
 
-	for _, line := range unreleasedSection {
-		trimmedLine := strings.TrimSpace(line)
-		switch {
-		case strings.Contains(line, "### Added"):
-			currentSection = sections["Added"]
-		case strings.Contains(line, "### Changed"):
-			currentSection = sections["Changed"]
-		case strings.Contains(line, "### Deprecated"):
-			currentSection = sections["Deprecated"]
-		case strings.Contains(line, "### Removed"):
-			currentSection = sections["Removed"]
-		case strings.Contains(line, "### Fixed"):
-			currentSection = sections["Fixed"]
-		case strings.Contains(line, "### Security"):
-			currentSection = sections["Security"]
-		default:
-			if currentSection != nil && trimmedLine != "" && trimmedLine != "-" &&
-				!strings.HasPrefix(trimmedLine, "##") {
-				*currentSection = append(*currentSection, line)
-				if strings.HasPrefix(line, "- **BREAKING CHANGE:**") {
-					majorChanges++
-				} else if currentSection == sections["Added"] {
-					minorChanges++
-				} else {
-					patchChanges++
-				}
-			}
-		}
+	parseUnreleasedIntoSections(
+		unreleasedSection,
+		sections,
+		currentSection,
+		&majorChanges,
+		&minorChanges,
+		&patchChanges,
+	)
+
+	// If no changes were found, return an error
+	if majorChanges == 0 && minorChanges == 0 && patchChanges == 0 {
+		return nil, nil, ErrNoChangesFoundInUnreleased
 	}
 
-	if majorChanges > 0 {
+	switch {
+	case majorChanges > 0:
 		nextVersion = nextVersion.IncMajor()
-	} else if minorChanges > 0 {
+	case minorChanges > 0:
 		nextVersion = nextVersion.IncMinor()
-	} else if patchChanges > 0 {
+	case patchChanges > 0:
 		nextVersion = nextVersion.IncPatch()
 	}
 
@@ -249,33 +310,6 @@ func updateSection(
 		sort.Strings(*section)
 	}
 
-	// Create the new section with the next version and the current date
-	newSection = append(newSection, "## [Unreleased]")
-	newSection = append(newSection, "")
-
-	newSection = append(
-		newSection,
-		fmt.Sprintf("## [%s] - %s", nextVersion.String(), time.Now().Format("2006-01-02")),
-	)
-	// add a blank line between sections
-	newSection = append(newSection, "")
-
-	keys := []string{"Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"}
-	for _, key := range keys {
-		section := sections[key]
-
-		// Append sections only if they have content
-		if len(*section) > 0 {
-			newSection = append(newSection, fmt.Sprintf("### %s", key))
-			newSection = append(newSection, "")
-			newSection = append(newSection, *section...)
-			newSection = append(newSection, "")
-		}
-	}
-
-	if majorChanges == 0 && minorChanges == 0 && patchChanges == 0 {
-		return nil, nil, fmt.Errorf("no changes found in the unreleased section")
-	}
-
+	newSection := makeNewSections(sections, nextVersion)
 	return newSection, &nextVersion, nil
 }

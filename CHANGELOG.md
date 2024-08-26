@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- updated code to satisfy various golangci-lint linters
+
 ### Removed
 
 - removed redundant release pipeline

@@ -16,5 +16,4 @@ run:
 	go run ./cmd/autobump
 
 install:
-	make build
 	sudo cp -v bin/autobump /usr/local/bin/autobump

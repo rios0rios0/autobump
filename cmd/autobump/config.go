@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -17,7 +19,7 @@ type GlobalConfig struct {
 	GpgKeyPath             string                    `yaml:"gpg_key_path"`
 	GitLabAccessToken      string                    `yaml:"gitlab_access_token"`
 	AzureDevOpsAccessToken string                    `yaml:"azure_devops_access_token"`
-	GitLabCIJobToken       string
+	GitLabCIJobToken       string                    `yaml:"gitlab_ci_job_token"`
 }
 
 type LanguageConfig struct {
@@ -36,33 +38,23 @@ type ProjectConfig struct {
 	Name               string `yaml:"name"`
 	Language           string `yaml:"language"`
 	ProjectAccessToken string `yaml:"project_access_token"`
-	NewVersion         string
+	NewVersion         string `yaml:"new_version"`
 }
 
-const defaultConfigUrl = "https://raw.githubusercontent.com/rios0rios0/autobump/" +
+const defaultConfigURL = "https://raw.githubusercontent.com/rios0rios0/autobump/" +
 	"main/configs/autobump.yaml"
 
-var missingLanguagesKeyError = fmt.Errorf("missing languages key")
+var (
+	ErrMissingLanguagesKeyError = errors.New("missing languages key")
+	ErrConfigFileNotFoundError  = errors.New("config file not found")
+	ErrConfigKeyMissingError    = errors.New("config keys missing")
+)
 
 // readConfig reads the config file and returns a GlobalConfig struct
 func readConfig(configPath string) (*GlobalConfig, error) {
-	var err error
-	var data []byte
-
-	// check if configPath is a URL
-	uri, err := url.Parse(configPath)
-	if err != nil || uri.Scheme == "" || uri.Host == "" {
-		// it's not a URL, read the data from file
-		data, err = os.ReadFile(configPath)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		// it's a URL, so read the data from the URL
-		data, err = downloadFile(configPath)
-		if err != nil {
-			return nil, err
-		}
+	data, err := readData(configPath)
+	if err != nil {
+		return nil, err
 	}
 
 	globalConfig, err := decodeConfig(data)
@@ -78,36 +70,44 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 		}
 	}
 
-	// TODO: transform this structure in a loop to avoid code duplication
-	if globalConfig.GitLabAccessToken != "" {
-		_, err = os.Stat(globalConfig.GitLabAccessToken)
-		if !os.IsNotExist(err) {
-			log.Infof("Reading GitLab access token from file %s", globalConfig.GitLabAccessToken)
-			token, err := os.ReadFile(globalConfig.GitLabAccessToken)
-			if err != nil {
-				return nil, err
-			}
-			globalConfig.GitLabAccessToken = strings.TrimSpace(string(token))
-		}
-	}
-	if globalConfig.AzureDevOpsAccessToken != "" {
-		_, err = os.Stat(globalConfig.AzureDevOpsAccessToken)
-		if !os.IsNotExist(err) {
-			log.Infof(
-				"Reading Azure DevOps access token from file %s",
-				globalConfig.AzureDevOpsAccessToken,
-			)
-			token, err := os.ReadFile(globalConfig.AzureDevOpsAccessToken)
-			if err != nil {
-				return nil, err
-			}
-			globalConfig.AzureDevOpsAccessToken = strings.TrimSpace(string(token))
-		}
-	}
+	handleTokenFile("GitLab", &globalConfig.GitLabAccessToken)
+	handleTokenFile("Azure DevOps", &globalConfig.AzureDevOpsAccessToken)
 
 	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
 
 	return globalConfig, nil
+}
+
+// readData reads data from a file or a URL
+func readData(configPath string) ([]byte, error) {
+	uri, err := url.Parse(configPath)
+	if err != nil || uri.Scheme == "" || uri.Host == "" {
+		// It's not a URL, read the data from file
+		var data []byte
+		data, err = os.ReadFile(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
+		return data, nil
+	}
+	// It's a URL, so read the data from the URL
+	return downloadFile(configPath)
+}
+
+// handleTokenFile reads the token from a file if it exists and replaces the token string
+func handleTokenFile(name string, token *string) {
+	if *token != "" {
+		if _, err := os.Stat(*token); !os.IsNotExist(err) {
+			log.Infof("Reading %s access token from file %s", name, *token)
+			var fileToken []byte
+			fileToken, err = os.ReadFile(*token)
+			if err != nil {
+				log.Errorf("failed to read %s access token: %v", name, err)
+			} else {
+				*token = strings.TrimSpace(string(fileToken))
+			}
+		}
+	}
 }
 
 // decodeConfig decodes the config file and returns a GlobalConfig struct
@@ -118,7 +118,7 @@ func decodeConfig(data []byte) (*GlobalConfig, error) {
 	decoder.KnownFields(true)
 	err := decoder.Decode(&globalConfig)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode config: %w", err)
 	}
 
 	return &globalConfig, nil
@@ -132,9 +132,9 @@ func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 		missingKeys = append(missingKeys, "projects")
 	}
 
-	for i, projectConfig := range globalConfig.Projects {
+	for projectIndex, projectConfig := range globalConfig.Projects {
 		if projectConfig.Path == "" {
-			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].path", i))
+			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].path", projectIndex))
 		}
 		if batch && globalConfig.GitLabAccessToken == "" &&
 			projectConfig.ProjectAccessToken == "" {
@@ -142,16 +142,19 @@ func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 				"Project access token is required when personal access token " +
 					"is not set in batch mode",
 			)
-			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].project_access_token", i))
+			missingKeys = append(
+				missingKeys,
+				fmt.Sprintf("projects[%d].project_access_token", projectIndex),
+			)
 		}
 	}
 
 	if len(missingKeys) > 0 {
-		return fmt.Errorf("missing keys: " + strings.Join(missingKeys, ", "))
+		return fmt.Errorf("%w: %s", ErrConfigKeyMissingError, strings.Join(missingKeys, ", "))
 	}
 
 	if globalConfig.LanguagesConfig == nil {
-		return missingLanguagesKeyError
+		return ErrMissingLanguagesKeyError
 	}
 
 	return nil
@@ -169,7 +172,7 @@ func findConfigOnMissing(configPath string) string {
 				"Config file not found in default locations, " +
 					"using the repository configuration as the last resort",
 			)
-			configPath = defaultConfigUrl
+			configPath = defaultConfigURL
 		}
 
 		log.Infof("Using config file: \"%v\"", configPath)
@@ -178,35 +181,43 @@ func findConfigOnMissing(configPath string) string {
 	return configPath
 }
 
-// findConfig finds the config file in a list of default locations
+// findConfig finds the config file in a list of default locations using globbing
 func findConfig() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
-	// TODO: it doesn't need a for loop to find the file, just a regex matching the name
+	// list of directories to search, in descending order of priority
 	locations := []string{
+		".",
+		".config",
+		"configs",
+		homeDir,
+		filepath.Join(homeDir, ".config"),
+	}
+
+	// all possible config file names
+	patterns := []string{
 		".autobump.yaml",
 		".autobump.yml",
-		".config/autobump.yaml",
-		".config/autobump.yml",
 		"autobump.yaml",
 		"autobump.yml",
-		"configs/.autobump.yaml",
-		"configs/.autobump.yml",
-		"configs/autobump.yaml",
-		"configs/autobump.yml",
-		fmt.Sprintf("%s/.autobump.yaml", homeDir),
-		fmt.Sprintf("%s/.autobump.yml", homeDir),
-		fmt.Sprintf("%s/.config/autobump.yaml", homeDir),
-		fmt.Sprintf("%s/.config/autobump.yml", homeDir),
 	}
 
-	location, err := findFile(locations, "config file")
-	if err != nil {
-		return "", err
+	for _, location := range locations {
+		for _, pattern := range patterns {
+			configPath := filepath.Join(location, pattern)
+			_, err = os.Stat(configPath)
+			if err == nil {
+				return configPath, nil
+			}
+			// if the error is not a "file not found" error, log it
+			if !os.IsNotExist(err) {
+				log.Warnf("Failed to check '%s' for config file: %v", configPath, err)
+			}
+		}
 	}
 
-	return location, nil
+	return "", ErrConfigFileNotFoundError
 }

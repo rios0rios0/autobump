@@ -1,12 +1,19 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 	log "github.com/sirupsen/logrus"
 	"github.com/xanzy/go-gitlab"
+)
+
+var (
+	ErrInvalidSSHRepoURL  = errors.New("invalid SSH repository URL")
+	ErrInvalidRepoURL     = errors.New("invalid repository URL")
+	ErrCannotParseRepoURL = errors.New("unable to parse repository URL")
 )
 
 // TODO: this should be better using an Adapter pattern
@@ -32,7 +39,7 @@ func createGitLabMergeRequest(
 
 	gitlabClient, err := gitlab.NewClient(accessToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create GitLab client: %w", err)
 	}
 
 	// Get the project owner and name
@@ -44,11 +51,11 @@ func createGitLabMergeRequest(
 	// Get the project ID using the GitLab API
 	project, _, err := gitlabClient.Projects.GetProject(projectName, &gitlab.GetProjectOptions{})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get project ID: %w", err)
 	}
 	projectID := project.ID
 
-	mrTitle := fmt.Sprintf("chore(bump): bumped version to %s", newVersion)
+	mrTitle := "chore(bump): bumped version to " + newVersion
 
 	mergeRequestOptions := &gitlab.CreateMergeRequestOptions{
 		SourceBranch:       gitlab.Ptr(sourceBranch),
@@ -58,11 +65,14 @@ func createGitLabMergeRequest(
 	}
 
 	_, _, err = gitlabClient.MergeRequests.CreateMergeRequest(projectID, mergeRequestOptions)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to create merge request: %w", err)
+	}
+	return nil
 }
 
 // getRemoteRepoFullProjectName returns the full project name of the remote repository
-func getRemoteRepoFullProjectName(repo *git.Repository) (fullProjectName string, err error) {
+func getRemoteRepoFullProjectName(repo *git.Repository) (string, error) {
 	remoteURL, err := getRemoteRepoURL(repo)
 	if err != nil {
 		return "", err
@@ -71,22 +81,24 @@ func getRemoteRepoFullProjectName(repo *git.Repository) (fullProjectName string,
 	// remove .git if it exists
 	trimmedURL := strings.TrimSuffix(remoteURL, ".git")
 
-	if strings.HasPrefix(trimmedURL, "git@") {
+	var fullProjectName string
+	switch {
+	case strings.HasPrefix(trimmedURL, "git@"):
 		parts := strings.Split(trimmedURL, ":")
-		if len(parts) == 2 {
-			fullProjectName = parts[1]
+		if len(parts) == 2 { //nolint:mnd // 2 is the minimum number of parts
+			fullProjectName = parts[len(parts)-1]
 		} else {
-			return "", fmt.Errorf("invalid SSH repository URL")
+			return "", ErrInvalidSSHRepoURL
 		}
-	} else if strings.HasPrefix(trimmedURL, "https://") {
-		parts := strings.SplitN(trimmedURL, "/", 4)
-		if len(parts) >= 4 {
-			fullProjectName = parts[3]
+	case strings.HasPrefix(trimmedURL, "https://"):
+		parts := strings.Split(trimmedURL, "/")
+		if len(parts) >= 4 { //nolint:mnd // 4 is the minimum number of parts
+			fullProjectName = parts[len(parts)-1]
 		} else {
-			return "", fmt.Errorf("unable to parse repository URL")
+			return "", ErrCannotParseRepoURL
 		}
-	} else {
-		return "", fmt.Errorf("invalid repository URL: must be SSH or HTTPS")
+	default:
+		return "", ErrInvalidRepoURL
 	}
 
 	return fullProjectName, nil

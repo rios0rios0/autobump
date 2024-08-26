@@ -4,11 +4,8 @@ type Language interface {
 	GetProjectName() (string, error)
 }
 
-func getLanguageInterface(projectConfig ProjectConfig) Language {
-	switch projectConfig.Language {
-	case "python":
-		return Python{ProjectConfig: projectConfig}
-	default:
-		return nil
+func getLanguageInterface(projectConfig ProjectConfig, languageInterface *Language) {
+	if projectConfig.Language == "python" {
+		*languageInterface = &Python{ProjectConfig: projectConfig}
 	}
 }
