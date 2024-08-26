@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,70 +10,99 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	log "github.com/sirupsen/logrus"
 )
 
-// detectLanguage detects the language of a project by looking at the files in the project
-func detectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
+var (
+	ErrBranchExists                 = errors.New("branch already exists")
+	ErrProjectPathDoesNotExist      = errors.New("project path does not exist")
+	ErrProjectLanguageNotRecognized = errors.New("project language not recognized")
+	ErrUnsupportedRemoteURL         = errors.New("unsupported remote URL")
+)
+
+type RepoContext struct {
+	globalConfig    *GlobalConfig
+	projectConfig   *ProjectConfig
+	globalGitConfig *config.Config
+	repo            *git.Repository
+	worktree        *git.Worktree
+	head            *plumbing.Reference
+}
+
+// detectProjectLanguage detects the language of a project by looking at the files in the project
+func detectProjectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
 	log.Info("Detecting project language")
 
 	absPath, err := filepath.Abs(cwd)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	// check the project type by special files
+	// Check the project type by special files
+	if language := detectBySpecialPatterns(globalConfig, absPath); language != "" {
+		return language, nil
+	}
+
+	// Check the project type by file extensions
+	language, err := detectByExtensions(globalConfig, absPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to walk project directory: %w", err)
+	}
+	if language != "" {
+		return language, nil
+	}
+
+	return "", ErrProjectLanguageNotRecognized
+}
+
+// detectBySpecialPatterns checks the project type using special file patterns
+func detectBySpecialPatterns(globalConfig *GlobalConfig, absPath string) string {
 	for language, config := range globalConfig.LanguagesConfig {
 		for _, pattern := range config.SpecialPatterns {
 			matches, _ := filepath.Glob(filepath.Join(absPath, pattern))
 			if len(matches) > 0 {
-				log.Infof(
-					"Project language detected as %s via file pattern '%s'",
-					language,
-					pattern,
-				)
-				return language, nil
+				log.Infof("Project language detected as %s via file pattern '%s'", language, pattern)
+				return language
 			}
 		}
 	}
+	return ""
+}
 
-	// check the project type by file extensions
+// detectByExtensions checks the project type using file extensions
+func detectByExtensions(globalConfig *GlobalConfig, absPath string) (string, error) {
 	var detected string
-	err = filepath.Walk(absPath, func(p string, info os.FileInfo, err error) error {
+	err := filepath.Walk(absPath, func(_ string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-
-		if info.IsDir() {
+		if info.IsDir() || detected != "" {
 			return nil
 		}
-
-		if detected != "" {
-			return filepath.SkipDir
-		}
-
 		for language, config := range globalConfig.LanguagesConfig {
-			for _, ext := range config.Extensions {
-				if strings.HasSuffix(info.Name(), "."+ext) {
-					detected = language
-					return filepath.SkipDir
-				}
+			if hasMatchingExtension(info.Name(), config.Extensions) {
+				detected = language
+				return filepath.SkipDir
 			}
 		}
-
 		return nil
 	})
-
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to walk project directory: %w", err)
 	}
+	return detected, nil
+}
 
-	if detected != "" {
-		log.Infof("Project language detected as '%s' via file extension", detected)
-		return detected, nil
+// hasMatchingExtension checks if the file has one of the specified extensions
+func hasMatchingExtension(filename string, extensions []string) bool {
+	for _, ext := range extensions {
+		if strings.HasSuffix(filename, "."+ext) {
+			return true
+		}
 	}
-
-	return "", fmt.Errorf("project language not recognized")
+	return false
 }
 
 // getGlobalGitConfig gets a Git option from local and global Git config
@@ -84,246 +114,72 @@ func getOptionFromConfig(cfg, globalCfg *config.Config, section string, option s
 	return opt
 }
 
-// processRepo:
-// - clones the repository if it is a remote repository
-// - creates the chore/bump branch
-// - updates the CHANGELOG.md file
-// - updates the version file
-// - commits the changes
-// - pushes the branch to the remote repository
-// - creates a new merge request on GitLab
-func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error {
-	globalGitConfig, err := getGlobalGitConfig()
+// cloneRepo clones a remote repository into a temporary directory
+func cloneRepo(
+	projectConfig *ProjectConfig,
+	globalGitConfig *config.Config,
+	globalConfig *GlobalConfig,
+) (string, error) {
+	// create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "autobump-")
 	if err != nil {
-		return err
+		return "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 
-	// check if project.Path starts with https:// or git@
-	// if these prefixes exist, it means the project is a remote repository and should be cloned
-	if strings.HasPrefix(projectConfig.Path, "https://") ||
-		strings.HasPrefix(projectConfig.Path, "git@") {
-		tmpDir, err := os.MkdirTemp("", "autobump-")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(tmpDir)
-		log.Infof("Cloning %s into %s", projectConfig.Path, tmpDir)
-		cloneOptions := &git.CloneOptions{
-			URL:   projectConfig.Path,
-			Depth: 1,
-		}
-
-		service := getServiceTypeByURL(projectConfig.Path)
-		authMethods, err := getAuthMethods(
-			service,
-			globalGitConfig.Raw.Section("user").Option("name"),
-			globalConfig,
-			projectConfig,
-		)
-		if err != nil {
-			return err
-		}
-
-		// try each authentication method
-		clonedSuccessfully := false
-		for _, auth := range authMethods {
-			cloneOptions.Auth = auth
-			_, err = git.PlainClone(tmpDir, false, cloneOptions)
-
-			// if action finished successfully, return
-			if err == nil {
-				log.Infof("Successfully cloned %s", projectConfig.Path)
-				projectConfig.Path = tmpDir
-				clonedSuccessfully = true
-				break
-			}
-		}
-
-		// if all authentication methods failed, return the last error
-		if !clonedSuccessfully {
-			return err
-		}
+	// setup the clone options
+	log.Infof("Cloning %s into %s", projectConfig.Path, tmpDir)
+	cloneOptions := &git.CloneOptions{
+		URL:   projectConfig.Path,
+		Depth: 1,
 	}
 
-	projectPath := projectConfig.Path
-	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
+	service := getServiceTypeByURL(projectConfig.Path)
 
-	exists, err := createChangelogIfNotExists(changelogPath)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		err = addCurrentVersion(changelogPath)
-		if err != nil {
-			return err
-		}
-		// TODO: after creating the new file in the project,
-		//			 we should commit and push it to the main branch
-	}
-
-	bumpEmpty, err := isChangelogUnreleasedEmpty(changelogPath)
-	if err != nil {
-		return err
-	}
-	if bumpEmpty {
-		log.Infof("Bump is empty, skipping project %s", projectConfig.Name)
-		return nil
-	}
-
-	// detect the project language if not manually set
-	if projectConfig.Language == "" {
-		projectLanguage, err := detectLanguage(globalConfig, projectConfig.Path)
-		if err != nil {
-			return err
-		}
-		projectConfig.Language = projectLanguage
-	}
-
-	repo, err := openRepo(projectPath)
-	if err != nil {
-		return err
-	}
-
-	worktree, err := repo.Worktree()
-	if err != nil {
-		return err
-	}
-
-	head, err := repo.Head()
-	if err != nil {
-		return err
-	}
-
-	nextVersion, err := getNextVersion(changelogPath)
-	if err != nil {
-		return err
-	}
-
-	branchName := fmt.Sprintf("chore/bump-%s", nextVersion.String())
-
-	// check if branch already exists
-	branchExists, err := checkBranchExists(repo, branchName)
-	if err != nil {
-		return err
-	}
-	if branchExists {
-		return fmt.Errorf("branch %s already exists", branchName)
-	}
-
-	err = createAndSwitchBranch(repo, worktree, branchName, head.Hash())
-	if err != nil {
-		return err
-	}
-
-	log.Info("Updating CHANGELOG.md file")
-	version, err := updateChangelogFile(changelogPath)
-	if err != nil {
-		log.Errorf("No version found in CHANGELOG.md for project at %s\n", projectConfig.Path)
-		return err
-	}
-
-	projectConfig.NewVersion = version.String()
-	log.Infof("Updating version to %s", projectConfig.NewVersion)
-	err = updateVersion(globalConfig, projectConfig)
-	if err != nil {
-		return err
-	}
-
-	versionFiles, err := getVersionFiles(globalConfig, projectConfig)
-	if err != nil {
-		return err
-	}
-
-	// get version file relative path
-	for _, versionFile := range versionFiles {
-		versionFileRelativePath, err := filepath.Rel(projectPath, versionFile.Path)
-		if err != nil {
-			return err
-		}
-
-		if _, err := os.Stat(versionFile.Path); os.IsNotExist(err) {
-			continue
-		}
-
-		log.Infof("Adding version file %s", versionFileRelativePath)
-		_, err = worktree.Add(versionFileRelativePath)
-		if err != nil {
-			return err
-		}
-	}
-
-	changelogRelativePath, err := filepath.Rel(projectPath, changelogPath)
-	if err != nil {
-		return err
-	}
-	_, err = worktree.Add(changelogRelativePath)
-	if err != nil {
-		return err
-	}
-
-	cfg, err := repo.Config()
-	if err != nil {
-		return err
-	}
-
-	gpgSign := getOptionFromConfig(cfg, globalGitConfig, "commit", "gpgsign")
-	gpgFormat := getOptionFromConfig(cfg, globalGitConfig, "gpg", "format")
-
-	var signKey *openpgp.Entity
-	if gpgSign == "true" && gpgFormat != "ssh" {
-		log.Info("Signing commit with GPG key")
-		gpgKeyId := getOptionFromConfig(cfg, globalGitConfig, "user", "signingkey")
-		signKey, err = getGpgKey(gpgKeyId, globalConfig.GpgKeyPath)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	commitMessage := "chore(bump): bumped version to " + projectConfig.NewVersion
-	commit, err := commitChanges(
-		worktree,
-		commitMessage,
-		signKey,
+	// get authentication methods
+	var authMethods []transport.AuthMethod
+	authMethods, err = getAuthMethods(
+		service,
 		globalGitConfig.Raw.Section("user").Option("name"),
-		globalGitConfig.Raw.Section("user").Option("email"),
+		globalConfig,
+		projectConfig,
 	)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	_, err = repo.CommitObject(commit)
-	if err != nil {
-		return err
-	}
+	// try each authentication method
+	clonedSuccessfully := false
+	for _, auth := range authMethods {
+		cloneOptions.Auth = auth
+		_, err = git.PlainClone(tmpDir, false, cloneOptions)
 
-	refSpec := config.RefSpec("refs/heads/" + branchName + ":refs/heads/" + branchName)
-
-	remoteCfg, err := repo.Remote("origin")
-	if err != nil {
-		return err
-	}
-
-	remoteURL := remoteCfg.Config().URLs[0]
-	if strings.HasPrefix(remoteURL, "git@") {
-		err = pushChangesSsh(repo, refSpec)
-	} else if strings.HasPrefix(remoteURL, "https://") || strings.HasPrefix(remoteURL, "http://") {
-		err = pushChangesHttps(repo, cfg, refSpec, globalConfig, projectConfig)
-	}
-
-	if err != nil {
-		if err.Error() == "object not found" {
-			log.Error("Got error object not found (remote branch already exists?)")
+		// if action finished successfully, return
+		if err == nil {
+			log.Infof("Successfully cloned %s", projectConfig.Path)
+			projectConfig.Path = tmpDir
+			clonedSuccessfully = true
+			break
 		}
-		return err
 	}
 
-	serviceType, err := getRemoteServiceType(repo)
-	if err != nil {
-		return err
+	// if all authentication methods failed, return the last error
+	if !clonedSuccessfully {
+		return "", fmt.Errorf("failed to clone %s: %w", projectConfig.Path, err)
 	}
 
-	if serviceType == "GitLab" {
+	return tmpDir, nil
+}
+
+func createPullRequest(
+	globalConfig *GlobalConfig,
+	projectConfig *ProjectConfig,
+	repo *git.Repository,
+	branchName string,
+	serviceType ServiceType,
+) error {
+	var err error
+	switch serviceType { //nolint:exhaustive // unsupported service types are handled by the default case
+	case GITLAB:
 		err = createGitLabMergeRequest(
 			globalConfig,
 			projectConfig,
@@ -334,7 +190,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		if err != nil {
 			return err
 		}
-	} else if serviceType == "AzureDevOps" {
+	case AZUREDEVOPS:
 		err = createAzureDevOpsPullRequest(
 			globalConfig,
 			projectConfig,
@@ -345,35 +201,354 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		if err != nil {
 			return err
 		}
-	} else {
-		log.Warnf("Service type '%s' not supported yet...", serviceType)
+	default:
+		log.Warnf("Service type '%v' not supported yet...", serviceType)
 	}
 
-	err = checkoutBranch(worktree, "main")
+	return nil
+}
+
+// processRepo:
+// - clones the repository if it is a remote repository
+// - creates the chore/bump branch
+// - updates the CHANGELOG.md file
+// - updates the version file
+// - commits the changes
+// - pushes the branch to the remote repository
+// - creates a new merge request on GitLab
+func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error {
+	// Initialize RepoContext
+	ctx := &RepoContext{
+		globalConfig:  globalConfig,
+		projectConfig: projectConfig,
+	}
+
+	// Get global Git config
+	var err error
+	ctx.globalGitConfig, err = getGlobalGitConfig()
 	if err != nil {
-		return checkoutBranch(worktree, "master")
+		return err
 	}
 
-	log.Infof("Successfully processed project '%s'", projectConfig.Name)
+	// Clone repository if needed
+	var tmpDir string
+	tmpDir, err = cloneRepoIfNeeded(ctx)
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
 
+	projectPath := ctx.projectConfig.Path
+	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
+
+	// Set up the changelog
+	err = setupChangelog(changelogPath)
+	if err != nil {
+		return err
+	}
+
+	// Determine if bump is needed
+	bumpNeeded, err := shouldBumpProject(ctx, changelogPath)
+	if err != nil {
+		return err
+	}
+	if !bumpNeeded {
+		return nil
+	}
+
+	// Ensure the project language is detected
+	err = ensureProjectLanguage(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Setup repository and worktree
+	err = setupRepo(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Create and switch to bump branch
+	branchName, err := createBumpBranch(ctx, changelogPath)
+	if err != nil {
+		return err
+	}
+
+	// Update changelog and version files
+	err = updateChangelogAndVersionFiles(ctx, changelogPath)
+	if err != nil {
+		return err
+	}
+
+	// Commit and push changes
+	err = commitAndPushChanges(ctx, branchName)
+	if err != nil {
+		return err
+	}
+
+	// Create and checkout pull request
+	err = createAndCheckoutPullRequest(ctx, branchName)
+	if err != nil {
+		return err
+	}
+
+	log.Infof("Successfully processed project '%s'", ctx.projectConfig.Name)
+	return nil
+}
+
+func cloneRepoIfNeeded(ctx *RepoContext) (string, error) {
+	if strings.HasPrefix(ctx.projectConfig.Path, "https://") || strings.HasPrefix(ctx.projectConfig.Path, "git@") {
+		return cloneRepo(ctx.projectConfig, ctx.globalGitConfig, ctx.globalConfig)
+	}
+	return "", nil
+}
+
+func setupChangelog(changelogPath string) error {
+	exists, err := createChangelogIfNotExists(changelogPath)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		err = addCurrentVersion(changelogPath)
+		if err != nil {
+			return err
+		}
+		// TODO: commit and push the newly created file
+	}
+	return nil
+}
+
+func shouldBumpProject(ctx *RepoContext, changelogPath string) (bool, error) {
+	bumpEmpty, err := isChangelogUnreleasedEmpty(changelogPath)
+	if err != nil {
+		return false, err
+	}
+	if bumpEmpty {
+		log.Infof("Bump is empty, skipping project %s", ctx.projectConfig.Name)
+		return false, nil
+	}
+	return true, nil
+}
+
+func ensureProjectLanguage(ctx *RepoContext) error {
+	if ctx.projectConfig.Language == "" {
+		projectLanguage, err := detectProjectLanguage(ctx.globalConfig, ctx.projectConfig.Path)
+		if err != nil {
+			return err
+		}
+		ctx.projectConfig.Language = projectLanguage
+	}
+	return nil
+}
+
+func setupRepo(ctx *RepoContext) error {
+	repo, err := openRepo(ctx.projectConfig.Path)
+	if err != nil {
+		return err
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	head, err := repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to get repo HEAD: %w", err)
+	}
+
+	ctx.repo = repo
+	ctx.worktree = worktree
+	ctx.head = head
+
+	return nil
+}
+
+func createBumpBranch(ctx *RepoContext, changelogPath string) (string, error) {
+	nextVersion, err := getNextVersion(changelogPath)
+	if err != nil {
+		return "", err
+	}
+
+	branchName := "chore/bump-" + nextVersion.String()
+
+	branchExists, err := checkBranchExists(ctx.repo, branchName)
+	if err != nil {
+		return "", err
+	}
+	if branchExists {
+		return "", fmt.Errorf("%w: %s", ErrBranchExists, branchName)
+	}
+
+	err = createAndSwitchBranch(ctx.repo, ctx.worktree, branchName, ctx.head.Hash())
+	if err != nil {
+		return "", err
+	}
+
+	return branchName, nil
+}
+
+func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) error {
+	log.Info("Updating CHANGELOG.md file")
+	version, err := updateChangelogFile(changelogPath)
+	if err != nil {
+		log.Errorf("No version found in CHANGELOG.md for project at %s\n", ctx.projectConfig.Path)
+		return err
+	}
+
+	ctx.projectConfig.NewVersion = version.String()
+	log.Infof("Updating version to %s", ctx.projectConfig.NewVersion)
+	err = updateVersion(ctx.globalConfig, ctx.projectConfig)
+	if err != nil {
+		return err
+	}
+
+	return addFilesToWorktree(ctx, changelogPath)
+}
+
+func addFilesToWorktree(ctx *RepoContext, changelogPath string) error {
+	versionFiles, err := getVersionFiles(ctx.globalConfig, ctx.projectConfig)
+	if err != nil {
+		return err
+	}
+
+	projectPath := ctx.projectConfig.Path
+
+	for _, versionFile := range versionFiles {
+		var versionFileRelativePath string
+		versionFileRelativePath, err = filepath.Rel(projectPath, versionFile.Path)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path for version file: %w", err)
+		}
+
+		if _, err = os.Stat(versionFile.Path); os.IsNotExist(err) {
+			continue
+		}
+
+		log.Infof("Adding version file %s", versionFileRelativePath)
+		_, err = ctx.worktree.Add(versionFileRelativePath)
+		if err != nil {
+			return fmt.Errorf("failed to add version file: %w", err)
+		}
+	}
+
+	changelogRelativePath, err := filepath.Rel(projectPath, changelogPath)
+	if err != nil {
+		return fmt.Errorf("failed to get relative path for changelog file: %w", err)
+	}
+	_, err = ctx.worktree.Add(changelogRelativePath)
+	if err != nil {
+		return fmt.Errorf("failed to add changelog file: %w", err)
+	}
+
+	return nil
+}
+
+func commitAndPushChanges(ctx *RepoContext, branchName string) error {
+	_, err := commitChangesWithGPG(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = pushChanges(ctx, branchName)
+	if err != nil {
+		if err.Error() == "object not found" {
+			log.Error("Got error object not found (remote branch already exists?)")
+		}
+		return err
+	}
+
+	return nil
+}
+
+func commitChangesWithGPG(ctx *RepoContext) (plumbing.Hash, error) {
+	cfg, err := ctx.repo.Config()
+	if err != nil {
+		return plumbing.Hash{}, fmt.Errorf("failed to get repo config: %w", err)
+	}
+
+	gpgSign := getOptionFromConfig(cfg, ctx.globalGitConfig, "commit", "gpgsign")
+	gpgFormat := getOptionFromConfig(cfg, ctx.globalGitConfig, "gpg", "format")
+
+	var signKey *openpgp.Entity
+	if gpgSign == "true" && gpgFormat != "ssh" {
+		log.Info("Signing commit with GPG key")
+		gpgKeyID := getOptionFromConfig(cfg, ctx.globalGitConfig, "user", "signingkey")
+		signKey, err = getGpgKey(gpgKeyID, ctx.globalConfig.GpgKeyPath)
+	}
+	if err != nil {
+		return plumbing.Hash{}, err
+	}
+
+	commitMessage := "chore(bump): bumped version to " + ctx.projectConfig.NewVersion
+	return commitChanges(
+		ctx.worktree,
+		commitMessage,
+		signKey,
+		ctx.globalGitConfig.Raw.Section("user").Option("name"),
+		ctx.globalGitConfig.Raw.Section("user").Option("email"),
+	)
+}
+
+func pushChanges(ctx *RepoContext, branchName string) error {
+	refSpec := config.RefSpec("refs/heads/" + branchName + ":refs/heads/" + branchName)
+
+	remoteCfg, err := ctx.repo.Remote("origin")
+	if err != nil {
+		return fmt.Errorf("failed to get remote origin: %w", err)
+	}
+
+	remoteURL := remoteCfg.Config().URLs[0]
+	if strings.HasPrefix(remoteURL, "git@") {
+		return pushChangesSSH(ctx.repo, refSpec)
+	} else if strings.HasPrefix(remoteURL, "https://") || strings.HasPrefix(remoteURL, "http://") {
+		var cfg *config.Config
+		cfg, err = ctx.repo.Config()
+		if err != nil {
+			return fmt.Errorf("failed to get repo config: %w", err)
+		}
+		return pushChangesHTTPS(ctx.repo, cfg, refSpec, ctx.globalConfig, ctx.projectConfig)
+	}
+
+	// If none of the conditions match, return an error
+	return fmt.Errorf("%w: %s", ErrUnsupportedRemoteURL, remoteURL)
+}
+
+func createAndCheckoutPullRequest(ctx *RepoContext, branchName string) error {
+	serviceType, err := getRemoteServiceType(ctx.repo)
+	if err != nil {
+		return err
+	}
+
+	err = createPullRequest(ctx.globalConfig, ctx.projectConfig, ctx.repo, branchName, serviceType)
+	if err != nil {
+		return err
+	}
+
+	return checkoutToMainBranch(ctx)
+}
+
+func checkoutToMainBranch(ctx *RepoContext) error {
+	err := checkoutBranch(ctx.worktree, "main")
+	if err != nil {
+		return checkoutBranch(ctx.worktree, "master")
+	}
 	return nil
 }
 
 // iterateProjects iterates over the projects and processes them using the processRepo function
 func iterateProjects(globalConfig *GlobalConfig) error {
-	var err error = nil
+	var err error
 	for _, project := range globalConfig.Projects {
-
 		// verify if the project path exists
 		if _, err = os.Stat(project.Path); os.IsNotExist(err) {
 			// if the project path does not exist, check if it is a remote repository
 			if !strings.HasPrefix(project.Path, "https://") &&
 				!strings.HasPrefix(project.Path, "git@") {
-
 				// if it is neither a local path nor a remote repository, skip the project
 				log.Errorf("Project path does not exist: %s\n", project.Path)
 				log.Warn("Skipping project")
-				err = fmt.Errorf("project path does not exist")
+				err = ErrProjectPathDoesNotExist
 				continue
 			}
 		}
