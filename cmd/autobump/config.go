@@ -45,7 +45,7 @@ const defaultConfigURL = "https://raw.githubusercontent.com/rios0rios0/autobump/
 	"main/configs/autobump.yaml"
 
 var (
-	ErrMissingLanguagesKeyError = errors.New("missing languages key")
+	ErrLanguagesKeyMissingError = errors.New("missing languages key")
 	ErrConfigFileNotFoundError  = errors.New("config file not found")
 	ErrConfigKeyMissingError    = errors.New("config keys missing")
 )
@@ -154,7 +154,7 @@ func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 	}
 
 	if globalConfig.LanguagesConfig == nil {
-		return ErrMissingLanguagesKeyError
+		return ErrLanguagesKeyMissingError
 	}
 
 	return nil

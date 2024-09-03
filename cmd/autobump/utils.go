@@ -92,47 +92,61 @@ func downloadFile(url string) ([]byte, error) {
 	return data, nil
 }
 
-// getGpgKey returns GPG key entity from the given path
-// it prompts for the passphrase to decrypt the key
-func getGpgKey(gpgKeyID, gpgKeyPath string) (*openpgp.Entity, error) {
-	var err error
+func exportGpgKey(gpgKeyID string, gpgKeyExportPath string) error {
+	// TODO: until today Go is not capable to read the key from the keyring (kbx)
+	cmd := exec.Command(
+		"gpg",
+		"--export-secret-key",
+		"--output",
+		gpgKeyExportPath,
+		"--armor",
+		gpgKeyID,
+	)
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to execute command GPG: %w", err)
+	}
+	return nil
+}
 
-	location := gpgKeyPath
-	if location == "" {
-		location = os.ExpandEnv(fmt.Sprintf("$HOME/.gnupg/autobump-%s.asc", gpgKeyID))
-		log.Warnf("No key path provided, attempting to read (%s) at: %s", gpgKeyID, location)
+func getGpgKeyReader(gpgKeyID string, gpgKeyPath string) (*io.Reader, error) {
+	// if no key path is provided, try to read the key from the default location
+	if gpgKeyPath == "" {
+		gpgKeyPath = os.ExpandEnv(fmt.Sprintf("$HOME/.gnupg/autobump-%s.asc", gpgKeyID))
+		log.Warnf("No key path provided, attempting to read (%s) at: %s", gpgKeyID, gpgKeyPath)
 
-		if _, err = os.Stat(location); os.IsNotExist(err) {
-			// TODO: until today Go is not capable to read the key from the keyring (kbx)
-			cmd := exec.Command(
-				"gpg",
-				"--export-secret-key",
-				"--output",
-				location,
-				"--armor",
-				gpgKeyID,
-			)
-			err = cmd.Run()
+		// if the key does not exist, try to export it from the keyring
+		if _, err := os.Stat(gpgKeyPath); os.IsNotExist(err) {
+			err = exportGpgKey(gpgKeyID, gpgKeyPath)
 			if err != nil {
-				return nil, fmt.Errorf("failed to execute command GPG: %w", err)
+				return nil, err
 			}
 		}
 	}
 
-	privateKeyFile, err := os.Open(location)
+	gpgKeyFile, err := os.Open(gpgKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open private key file: %w", err)
 	}
-	defer privateKeyFile.Close()
+	defer gpgKeyFile.Close()
 
-	entityList, err := openpgp.ReadArmoredKeyRing(privateKeyFile)
+	reader := io.Reader(gpgKeyFile)
+	return &reader, nil
+}
+
+// getGpgKey returns GPG key entity from the given path
+// it prompts for the passphrase to decrypt the key
+func getGpgKey(gpgKeyReader io.Reader) (*openpgp.Entity, error) {
+	var err error
+
+	entityList, err := openpgp.ReadArmoredKeyRing(gpgKeyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key file: %w", err)
 	}
 
 	entity := entityList[0]
 	if entity == nil {
-		return nil, fmt.Errorf("%w: %s", ErrCannotFindPrivKeyMatchingFingerprint, gpgKeyID)
+		return nil, ErrCannotFindPrivKeyMatchingFingerprint
 	}
 
 	fmt.Print("Enter the passphrase for your GPG key: ") //nolint:forbidigo // this line is not for debugging
@@ -149,7 +163,7 @@ func getGpgKey(gpgKeyID, gpgKeyPath string) (*openpgp.Entity, error) {
 	fmt.Println() //nolint:forbidigo // this line is not for debugging
 
 	if entity.PrivateKey == nil {
-		return nil, fmt.Errorf("%w: %s", ErrCannotFindPrivKey, gpgKeyID)
+		return nil, ErrCannotFindPrivKey
 	}
 
 	err = entity.PrivateKey.Decrypt(passphrase)
