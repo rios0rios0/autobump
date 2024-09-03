@@ -76,15 +76,10 @@ func createChangelogIfNotExists(changelogPath string) (bool, error) {
 	return true, nil
 }
 
-func isChangelogUnreleasedEmpty(changelogPath string) (bool, error) {
-	lines, err := readLines(changelogPath)
-	if err != nil {
-		return false, err
-	}
-
+func isChangelogUnreleasedEmpty(lines []string) (bool, error) {
 	latestVersion, err := findLatestVersion(lines)
 	if err != nil {
-		return false, err
+		return true, err
 	}
 
 	unreleased := false
