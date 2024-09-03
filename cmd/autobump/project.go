@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,11 +116,7 @@ func getOptionFromConfig(cfg, globalCfg *config.Config, section string, option s
 }
 
 // cloneRepo clones a remote repository into a temporary directory
-func cloneRepo(
-	projectConfig *ProjectConfig,
-	globalGitConfig *config.Config,
-	globalConfig *GlobalConfig,
-) (string, error) {
+func cloneRepo(ctx *RepoContext) (string, error) {
 	// create a temporary directory
 	tmpDir, err := os.MkdirTemp("", "autobump-")
 	if err != nil {
@@ -127,21 +124,21 @@ func cloneRepo(
 	}
 
 	// setup the clone options
-	log.Infof("Cloning %s into %s", projectConfig.Path, tmpDir)
+	log.Infof("Cloning %s into %s", ctx.projectConfig.Path, tmpDir)
 	cloneOptions := &git.CloneOptions{
-		URL:   projectConfig.Path,
+		URL:   ctx.projectConfig.Path,
 		Depth: 1,
 	}
 
-	service := getServiceTypeByURL(projectConfig.Path)
+	service := getServiceTypeByURL(ctx.projectConfig.Path)
 
 	// get authentication methods
 	var authMethods []transport.AuthMethod
 	authMethods, err = getAuthMethods(
 		service,
-		globalGitConfig.Raw.Section("user").Option("name"),
-		globalConfig,
-		projectConfig,
+		ctx.globalGitConfig.Raw.Section("user").Option("name"),
+		ctx.globalConfig,
+		ctx.projectConfig,
 	)
 	if err != nil {
 		return "", err
@@ -151,12 +148,12 @@ func cloneRepo(
 	clonedSuccessfully := false
 	for _, auth := range authMethods {
 		cloneOptions.Auth = auth
-		_, err = git.PlainClone(tmpDir, false, cloneOptions)
+		ctx.repo, err = git.PlainClone(tmpDir, false, cloneOptions)
 
 		// if action finished successfully, return
 		if err == nil {
-			log.Infof("Successfully cloned %s", projectConfig.Path)
-			projectConfig.Path = tmpDir
+			log.Infof("Successfully cloned %s", ctx.projectConfig.Path)
+			ctx.projectConfig.Path = tmpDir
 			clonedSuccessfully = true
 			break
 		}
@@ -164,7 +161,7 @@ func cloneRepo(
 
 	// if all authentication methods failed, return the last error
 	if !clonedSuccessfully {
-		return "", fmt.Errorf("failed to clone %s: %w", projectConfig.Path, err)
+		return "", fmt.Errorf("failed to clone %s: %w", ctx.projectConfig.Path, err)
 	}
 
 	return tmpDir, nil
@@ -208,108 +205,20 @@ func createPullRequest(
 	return nil
 }
 
-// processRepo:
-// - clones the repository if it is a remote repository
-// - creates the chore/bump branch
-// - updates the CHANGELOG.md file
-// - updates the version file
-// - commits the changes
-// - pushes the branch to the remote repository
-// - creates a new merge request on GitLab
-func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error {
-	// Initialize RepoContext
-	ctx := &RepoContext{
-		globalConfig:  globalConfig,
-		projectConfig: projectConfig,
-	}
-
-	// Get global Git config
-	var err error
-	ctx.globalGitConfig, err = getGlobalGitConfig()
-	if err != nil {
-		return err
-	}
-
-	// Clone repository if needed
-	var tmpDir string
-	tmpDir, err = cloneRepoIfNeeded(ctx)
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmpDir)
-
-	projectPath := ctx.projectConfig.Path
-	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
-
-	// Set up the changelog
-	err = setupChangelog(changelogPath)
-	if err != nil {
-		return err
-	}
-
-	// Determine if bump is needed
-	bumpNeeded, err := shouldBumpProject(ctx, changelogPath)
-	if err != nil {
-		return err
-	}
-	if !bumpNeeded {
-		return nil
-	}
-
-	// Ensure the project language is detected
-	err = ensureProjectLanguage(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Setup repository and worktree
-	err = setupRepo(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Create and switch to bump branch
-	branchName, err := createBumpBranch(ctx, changelogPath)
-	if err != nil {
-		return err
-	}
-
-	// Update changelog and version files
-	err = updateChangelogAndVersionFiles(ctx, changelogPath)
-	if err != nil {
-		return err
-	}
-
-	// Commit and push changes
-	err = commitAndPushChanges(ctx, branchName)
-	if err != nil {
-		return err
-	}
-
-	// Create and checkout pull request
-	err = createAndCheckoutPullRequest(ctx, branchName)
-	if err != nil {
-		return err
-	}
-
-	log.Infof("Successfully processed project '%s'", ctx.projectConfig.Name)
-	return nil
-}
-
 func cloneRepoIfNeeded(ctx *RepoContext) (string, error) {
 	if strings.HasPrefix(ctx.projectConfig.Path, "https://") || strings.HasPrefix(ctx.projectConfig.Path, "git@") {
-		return cloneRepo(ctx.projectConfig, ctx.globalGitConfig, ctx.globalConfig)
+		return cloneRepo(ctx)
 	}
 	return "", nil
 }
 
-func setupChangelog(changelogPath string) error {
+func setupChangelog(ctx *RepoContext, changelogPath string) error {
 	exists, err := createChangelogIfNotExists(changelogPath)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		err = addCurrentVersion(changelogPath)
+		err = addCurrentVersion(ctx, changelogPath)
 		if err != nil {
 			return err
 		}
@@ -319,7 +228,12 @@ func setupChangelog(changelogPath string) error {
 }
 
 func shouldBumpProject(ctx *RepoContext, changelogPath string) (bool, error) {
-	bumpEmpty, err := isChangelogUnreleasedEmpty(changelogPath)
+	lines, err := readLines(changelogPath)
+	if err != nil {
+		return false, err
+	}
+
+	bumpEmpty, err := isChangelogUnreleasedEmpty(lines)
 	if err != nil {
 		return false, err
 	}
@@ -342,23 +256,24 @@ func ensureProjectLanguage(ctx *RepoContext) error {
 }
 
 func setupRepo(ctx *RepoContext) error {
-	repo, err := openRepo(ctx.projectConfig.Path)
-	if err != nil {
-		return err
+	if ctx.repo != nil {
+		var err error
+		ctx.repo, err = openRepo(ctx.projectConfig.Path)
+		if err != nil {
+			return err
+		}
 	}
 
-	worktree, err := repo.Worktree()
+	worktree, err := ctx.repo.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
+	ctx.worktree = worktree
 
-	head, err := repo.Head()
+	head, err := ctx.repo.Head()
 	if err != nil {
 		return fmt.Errorf("failed to get repo HEAD: %w", err)
 	}
-
-	ctx.repo = repo
-	ctx.worktree = worktree
 	ctx.head = head
 
 	return nil
@@ -474,10 +389,17 @@ func commitChangesWithGPG(ctx *RepoContext) (plumbing.Hash, error) {
 	if gpgSign == "true" && gpgFormat != "ssh" {
 		log.Info("Signing commit with GPG key")
 		gpgKeyID := getOptionFromConfig(cfg, ctx.globalGitConfig, "user", "signingkey")
-		signKey, err = getGpgKey(gpgKeyID, ctx.globalConfig.GpgKeyPath)
-	}
-	if err != nil {
-		return plumbing.Hash{}, err
+
+		var gpgKeyReader *io.Reader
+		gpgKeyReader, err = getGpgKeyReader(gpgKeyID, ctx.globalConfig.GpgKeyPath)
+		if err != nil {
+			return plumbing.Hash{}, err
+		}
+
+		signKey, err = getGpgKey(*gpgKeyReader)
+		if err != nil {
+			return plumbing.Hash{}, err
+		}
 	}
 
 	commitMessage := "chore(bump): bumped version to " + ctx.projectConfig.NewVersion
@@ -536,6 +458,121 @@ func checkoutToMainBranch(ctx *RepoContext) error {
 	return nil
 }
 
+// addCurrentVersion adds the current version to the CHANGELOG file
+func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
+	lines, err := readLines(changelogPath)
+	if err != nil {
+		return err
+	}
+
+	latestTag, err := getLatestTag(ctx.repo)
+	if err != nil {
+		return err
+	}
+
+	// TODO: we should replace <LINK TO THE PLATFORM TO OPEN THE PULL REQUEST> with the actual link
+
+	// add lines to the end of the file
+	lines = append(lines, []string{
+		fmt.Sprintf("\n## [%s] - %s\n", latestTag.Tag, latestTag.Date.Format("2006-01-02")),
+		"The changes weren't tracked until this version.",
+	}...)
+	err = writeLines(changelogPath, lines)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// processRepo:
+// - clones the repository if it is a remote repository
+// - creates the chore/bump branch
+// - updates the CHANGELOG.md file
+// - updates the version file
+// - commits the changes
+// - pushes the branch to the remote repository
+// - creates a new merge request on GitLab
+func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error {
+	// Initialize RepoContext
+	ctx := &RepoContext{
+		globalConfig:  globalConfig,
+		projectConfig: projectConfig,
+	}
+
+	// Get global Git config
+	var err error
+	ctx.globalGitConfig, err = getGlobalGitConfig()
+	if err != nil {
+		return err
+	}
+
+	// Clone repository if needed
+	var tmpDir string
+	tmpDir, err = cloneRepoIfNeeded(ctx)
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	projectPath := ctx.projectConfig.Path
+	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
+
+	// Setup repository and worktree
+	err = setupRepo(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Set up the changelog
+	err = setupChangelog(ctx, changelogPath)
+	if err != nil {
+		return err
+	}
+
+	// Determine if bump is needed
+	bumpNeeded, err := shouldBumpProject(ctx, changelogPath)
+	if err != nil {
+		return err
+	}
+	if !bumpNeeded {
+		return nil
+	}
+
+	// Ensure the project language is detected
+	err = ensureProjectLanguage(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Create and switch to bump branch
+	branchName, err := createBumpBranch(ctx, changelogPath)
+	if err != nil {
+		return err
+	}
+
+	// Update changelog and version files
+	err = updateChangelogAndVersionFiles(ctx, changelogPath)
+	if err != nil {
+		return err
+	}
+
+	// Commit and push changes
+	err = commitAndPushChanges(ctx, branchName)
+	if err != nil {
+		return err
+	}
+
+	// Create and checkout pull request
+	err = createAndCheckoutPullRequest(ctx, branchName)
+	if err != nil {
+		return err
+	}
+
+	log.Infof("Successfully processed project '%s'", ctx.projectConfig.Name)
+	return nil
+}
+
 // iterateProjects iterates over the projects and processes them using the processRepo function
 func iterateProjects(globalConfig *GlobalConfig) error {
 	var err error
@@ -560,31 +597,4 @@ func iterateProjects(globalConfig *GlobalConfig) error {
 	}
 
 	return err
-}
-
-// addCurrentVersion adds the current version to the CHANGELOG file
-func addCurrentVersion(changelogPath string) error {
-	lines, err := readLines(changelogPath)
-	if err != nil {
-		return err
-	}
-
-	latestTag, err := getLatestTag()
-	if err != nil {
-		return err
-	}
-
-	// TODO: we should replace <LINK TO THE PLATFORM TO OPEN THE PULL REQUEST> with the actual link
-
-	// add lines to the end of the file
-	lines = append(lines, []string{
-		fmt.Sprintf("\n## [%s] - %s\n", latestTag.Tag, latestTag.Date.Format("2006-01-02")),
-		"The changes weren't tracked until this version.",
-	}...)
-	err = writeLines(changelogPath, lines)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }

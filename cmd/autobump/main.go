@@ -84,7 +84,7 @@ func findReadAndValidateConfig(configPath string) (*GlobalConfig, error) {
 	}
 
 	err = validateGlobalConfig(globalConfig, false)
-	if errors.Is(err, ErrMissingLanguagesKeyError) {
+	if errors.Is(err, ErrLanguagesKeyMissingError) {
 		log.Warn("Missing languages key, using the default configuration")
 
 		var data []byte

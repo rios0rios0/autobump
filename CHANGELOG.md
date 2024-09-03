@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added tests for various components
+
 ### Changed
 
 - updated code to satisfy various golangci-lint linters
@@ -23,6 +27,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Removed
 
 - removed redundant release pipeline
+
+### Fixed
+
+- fixed a typo in authentication method selection
 
 ## [2.14.0] - 2024-03-01
 
