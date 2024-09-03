@@ -22,6 +22,11 @@ import (
 
 type ServiceType int
 
+type LatestTag struct {
+	Tag  *semver.Version
+	Date time.Time
+}
+
 const (
 	UNKNOWN ServiceType = iota
 	GITHUB
@@ -37,7 +42,7 @@ const (
 )
 
 var (
-	ErrNoAuthMethod       = errors.New("no authentication method found")
+	ErrNoAuthMethodFound  = errors.New("no authentication method found")
 	ErrAuthNotImplemented = errors.New("authentication method not implemented")
 	ErrNoRemoteURL        = errors.New("no remote URL found for repository")
 	ErrNoTagsFound        = errors.New("no tags found in Git history")
@@ -206,7 +211,7 @@ func getAuthMethods(
 	var authMethods []transport.AuthMethod
 
 	switch service { //nolint:exhaustive // Unimplemented services are handled by the default case
-	case GITHUB:
+	case GITLAB:
 		// TODO: this lines of code MUST be refactored to avoid code duplication
 		// project access token
 		if projectConfig.ProjectAccessToken != "" {
@@ -250,7 +255,7 @@ func getAuthMethods(
 
 	if len(authMethods) == 0 {
 		log.Error("No authentication credentials found for any authentication method")
-		return nil, ErrNoAuthMethod
+		return nil, ErrNoAuthMethodFound
 	}
 
 	return authMethods, nil
@@ -324,18 +329,8 @@ func getAmountCommits(repo *git.Repository) (int, error) {
 	return amountCommits, nil
 }
 
-type LatestTag struct {
-	Tag  *semver.Version
-	Date time.Time
-}
-
 // getLatestTag find the latest tag in the Git history
-func getLatestTag() (*LatestTag, error) {
-	repo, err := git.PlainOpen(".")
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func getLatestTag(repo *git.Repository) (*LatestTag, error) {
 	tags, err := repo.Tags()
 	if err != nil {
 		log.Fatal(err)
@@ -347,18 +342,11 @@ func getLatestTag() (*LatestTag, error) {
 		return nil
 	})
 
-	// get the date time of the tag
-	commit, err := repo.CommitObject(latestTag.Hash())
-	latestTagDate := commit.Committer.When
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	commits, _ := getAmountCommits(repo)
+	numCommits, _ := getAmountCommits(repo)
 	if latestTag == nil {
 		// if the project is already started with no tags in the history
 		// TODO: review this section
-		if commits >= maxAcceptableInitialCommits {
+		if numCommits >= maxAcceptableInitialCommits {
 			log.Warnf("No tags found in Git history, falling back to '%s'", defaultGitTag)
 			version, _ := semver.NewVersion(defaultGitTag)
 			return &LatestTag{
@@ -370,6 +358,13 @@ func getLatestTag() (*LatestTag, error) {
 		// if the project is new, we should not use any tag and just commit the file
 		log.Warn("This project seems be a new project, the CHANGELOG should be committed by itself.")
 		return nil, ErrNoTagsFound
+	}
+
+	// get the date time of the tag
+	commit, err := repo.CommitObject(latestTag.Hash())
+	latestTagDate := commit.Committer.When
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	version, _ := semver.NewVersion(latestTag.Name().Short())
