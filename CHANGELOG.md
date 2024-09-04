@@ -30,6 +30,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- fixed a null pointer dereference when opening repositories
 - fixed SAST tool warnings
 - fixed a typo in authentication method selection
 
