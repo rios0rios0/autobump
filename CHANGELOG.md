@@ -30,6 +30,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- fixed SAST tool warnings
 - fixed a typo in authentication method selection
 
 ## [2.14.0] - 2024-03-01

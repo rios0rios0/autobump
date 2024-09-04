@@ -1,14 +1,16 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"testing"
 
 	"github.com/go-faker/faker/v4"
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/stretchr/testify/assert"
@@ -147,6 +149,10 @@ func TestGetLatestTag_Success(t *testing.T) {
 
 	// Commit the changes
 	_, err = wt.Commit(faker.Sentence(), &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  faker.Name(),
+			Email: faker.Email(),
+		},
 		All: true,
 	})
 	require.NoError(t, err)
@@ -155,8 +161,16 @@ func TestGetLatestTag_Success(t *testing.T) {
 	head, err := repo.Head()
 	require.NoError(t, err)
 
-	// Create a tag on the commit
-	testTag := fmt.Sprintf("%d.%d.%d", rand.Intn(10), rand.Intn(10), rand.Intn(10))
+	// Create a random tag on the commit
+	randMax := big.NewInt(10)
+	major, err := rand.Int(rand.Reader, randMax)
+	require.NoError(t, err)
+	minor, err := rand.Int(rand.Reader, randMax)
+	require.NoError(t, err)
+	patch, err := rand.Int(rand.Reader, randMax)
+	require.NoError(t, err)
+
+	testTag := fmt.Sprintf("%d.%d.%d", major, minor, patch)
 	_, err = repo.CreateTag(testTag, head.Hash(), nil)
 	require.NoError(t, err)
 
@@ -195,6 +209,10 @@ func TestGetLatestTag_NoTagsFound(t *testing.T) {
 
 	// Commit the changes
 	_, err = wt.Commit("initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  faker.Name(),
+			Email: faker.Email(),
+		},
 		All: true,
 	})
 	require.NoError(t, err)
