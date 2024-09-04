@@ -256,7 +256,7 @@ func ensureProjectLanguage(ctx *RepoContext) error {
 }
 
 func setupRepo(ctx *RepoContext) error {
-	if ctx.repo != nil {
+	if ctx.repo == nil {
 		var err error
 		ctx.repo, err = openRepo(ctx.projectConfig.Path)
 		if err != nil {
