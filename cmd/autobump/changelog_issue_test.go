@@ -124,3 +124,82 @@ func TestProcessChangelogWithMalformedHeaders(t *testing.T) {
 	assert.Contains(t, newChangelogString, "fixed a null pointer dereference")
 	assert.Contains(t, newChangelogString, "fixed SAST tool warnings")
 }
+
+// Test with all sections to ensure complete ordering is correct
+const changelogWithAllSections = `# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+
+### Added
+
+- new feature A
+- new feature B
+
+### Changed
+
+- changed feature C
+
+### Deprecated
+
+- deprecated feature D
+
+### Removed
+
+- removed feature E
+
+### Fixed
+
+- fixed bug F
+- fixed bug G
+
+### Security
+
+- security fix H
+
+## [1.0.0] - 2024-01-01
+
+### Added
+
+- initial release`
+
+func TestProcessChangelogWithAllSections(t *testing.T) {
+	// Arrange
+	changelog := strings.Split(changelogWithAllSections, "\n")
+
+	// Act
+	version, newChangelog, err := processChangelog(changelog)
+
+	// Assert
+	require.NoError(t, err)
+	assert.NotNil(t, version)
+	assert.NotNil(t, newChangelog)
+
+	newChangelogString := strings.Join(newChangelog, "\n")
+	fmt.Println("=== PROCESSED CHANGELOG WITH ALL SECTIONS ===")
+	fmt.Println(newChangelogString)
+	fmt.Println("=== END CHANGELOG ===")
+
+	// Check that all sections are preserved
+	assert.Contains(t, newChangelogString, "### Added")
+	assert.Contains(t, newChangelogString, "### Changed")
+	assert.Contains(t, newChangelogString, "### Deprecated")
+	assert.Contains(t, newChangelogString, "### Fixed")
+	assert.Contains(t, newChangelogString, "### Removed")
+	assert.Contains(t, newChangelogString, "### Security")
+
+	// Verify the correct order: Added, Changed, Deprecated, Fixed, Removed, Security
+	addedIndex := strings.Index(newChangelogString, "### Added")
+	changedIndex := strings.Index(newChangelogString, "### Changed")
+	deprecatedIndex := strings.Index(newChangelogString, "### Deprecated")
+	fixedIndex := strings.Index(newChangelogString, "### Fixed")
+	removedIndex := strings.Index(newChangelogString, "### Removed")
+	securityIndex := strings.Index(newChangelogString, "### Security")
+
+	assert.True(t, addedIndex < changedIndex, "Added should come before Changed")
+	assert.True(t, changedIndex < deprecatedIndex, "Changed should come before Deprecated")
+	assert.True(t, deprecatedIndex < fixedIndex, "Deprecated should come before Fixed")
+	assert.True(t, fixedIndex < removedIndex, "Fixed should come before Removed")
+	assert.True(t, removedIndex < securityIndex, "Removed should come before Security")
+}
