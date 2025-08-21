@@ -209,7 +209,7 @@ func makeNewSections(
 	newSection = append(newSection, "")
 
 	// Add the sections to the newly created release section
-	keys := []string{"Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"}
+	keys := []string{"Added", "Changed", "Deprecated", "Fixed", "Removed", "Security"}
 	for _, key := range keys {
 		section := sections[key]
 
