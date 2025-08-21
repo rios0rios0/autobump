@@ -57,10 +57,17 @@ func createGitLabMergeRequest(
 
 	mrTitle := "chore(bump): bumped version to " + newVersion
 
+	// Read PR template if available
+	templateContent, err := readPullRequestTemplate()
+	if err != nil {
+		log.Warnf("Failed to read PR template: %v", err)
+	}
+
 	mergeRequestOptions := &gitlab.CreateMergeRequestOptions{
 		SourceBranch:       gitlab.Ptr(sourceBranch),
 		TargetBranch:       gitlab.Ptr("main"),
 		Title:              &mrTitle,
+		Description:        gitlab.Ptr(templateContent),
 		RemoveSourceBranch: gitlab.Ptr(true),
 	}
 

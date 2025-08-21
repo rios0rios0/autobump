@@ -64,10 +64,18 @@ func createAzureDevOpsPullRequest(
 		azureInfo.RepositoryID,
 	)
 	prTitle := "chore(bump): bumped version to " + newVersion
+
+	// Read PR template if available
+	templateContent, err := readPullRequestTemplate()
+	if err != nil {
+		log.Warnf("Failed to read PR template: %v", err)
+	}
+
 	payload := map[string]interface{}{
 		"sourceRefName": "refs/heads/" + sourceBranch,
 		"targetRefName": "refs/heads/main",
 		"title":         prTitle,
+		"description":   templateContent,
 	}
 
 	payloadBytes, err := json.Marshal(payload)
