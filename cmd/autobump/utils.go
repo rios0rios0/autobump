@@ -174,29 +174,3 @@ func getGpgKey(gpgKeyReader io.Reader) (*openpgp.Entity, error) {
 	log.Info("Successfully decrypted GPG key")
 	return entity, nil
 }
-
-// readPullRequestTemplate reads the appropriate PR template from .github directory
-// For AutoBump, we prioritize the bump.md template for version bump PRs
-func readPullRequestTemplate() (string, error) {
-	// Try to find templates in .github directory
-	templatePaths := []string{
-		".github/pull_request_template/bump.md",    // Specific template for version bumps
-		".github/pull_request_template/default.md", // Default template
-		".github/pull_request_template.md",         // Single template file
-	}
-
-	for _, templatePath := range templatePaths {
-		if _, err := os.Stat(templatePath); err == nil {
-			content, err := os.ReadFile(templatePath)
-			if err != nil {
-				log.Warnf("Failed to read PR template from %s: %v", templatePath, err)
-				continue
-			}
-			log.Infof("Using PR template from: %s", templatePath)
-			return string(content), nil
-		}
-	}
-
-	log.Warn("No PR template found, using default description")
-	return "", nil
-}
