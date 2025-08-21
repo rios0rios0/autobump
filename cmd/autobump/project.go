@@ -198,6 +198,17 @@ func createPullRequest(
 		if err != nil {
 			return err
 		}
+	case GITHUB:
+		err = createGitHubPullRequest(
+			globalConfig,
+			projectConfig,
+			repo,
+			branchName,
+			projectConfig.NewVersion,
+		)
+		if err != nil {
+			return err
+		}
 	default:
 		log.Warnf("Service type '%v' not supported yet...", serviceType)
 	}

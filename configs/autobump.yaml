@@ -2,12 +2,14 @@
 # example: "gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobump.asc"
 #gpg_key_path: "/home/user/.gnupg/autobump.asc"
 
-# GitLab/Azure DevOps personal access token used to create MRs/PRs
+# GitLab/Azure DevOps/GitHub personal access token used to create MRs/PRs
 # set it to a path to read the token from a file
 gitlab_access_token: "glpat-TOKEN"
 #gitlab_access_token: ".secure_files/gitlab_access_token.key"
 azure_devops_access_token: "azure-devops-token"
 #azure_devops_access_token: ".secure_files/azure_devops_access_token.key"
+github_access_token: "ghp_TOKEN"
+#github_access_token: ".secure_files/github_access_token.key"
 
 # rules for automatically detecting project languages
 languages:

@@ -248,6 +248,25 @@ func getAuthMethods(
 			Username: username,
 			Password: globalConfig.AzureDevOpsAccessToken,
 		})
+	case GITHUB:
+		// TODO: this lines of code MUST be refactored to avoid code duplication
+		// project access token
+		if projectConfig.ProjectAccessToken != "" {
+			log.Infof("Using project access token to authenticate")
+			authMethods = append(authMethods, &http.BasicAuth{
+				Username: "x-access-token",
+				Password: projectConfig.ProjectAccessToken,
+			})
+		}
+
+		// GitHub personal access token
+		if globalConfig.GitHubAccessToken != "" {
+			log.Infof("Using GitHub access token to authenticate")
+			authMethods = append(authMethods, &http.BasicAuth{
+				Username: "x-access-token",
+				Password: globalConfig.GitHubAccessToken,
+			})
+		}
 	default:
 		log.Errorf("No authentication mechanism implemented for service type '%v'", service)
 		return nil, ErrAuthNotImplemented

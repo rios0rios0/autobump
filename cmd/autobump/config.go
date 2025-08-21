@@ -19,6 +19,7 @@ type GlobalConfig struct {
 	GpgKeyPath             string                    `yaml:"gpg_key_path"`
 	GitLabAccessToken      string                    `yaml:"gitlab_access_token"`
 	AzureDevOpsAccessToken string                    `yaml:"azure_devops_access_token"`
+	GitHubAccessToken      string                    `yaml:"github_access_token"`
 	GitLabCIJobToken       string                    `yaml:"gitlab_ci_job_token"`
 }
 
@@ -72,6 +73,7 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 
 	handleTokenFile("GitLab", &globalConfig.GitLabAccessToken)
 	handleTokenFile("Azure DevOps", &globalConfig.AzureDevOpsAccessToken)
+	handleTokenFile("GitHub", &globalConfig.GitHubAccessToken)
 
 	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
 
@@ -137,6 +139,8 @@ func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].path", projectIndex))
 		}
 		if batch && globalConfig.GitLabAccessToken == "" &&
+			globalConfig.AzureDevOpsAccessToken == "" &&
+			globalConfig.GitHubAccessToken == "" &&
 			projectConfig.ProjectAccessToken == "" {
 			log.Error(
 				"Project access token is required when personal access token " +

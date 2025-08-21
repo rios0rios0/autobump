@@ -18,6 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+- added GitHub support for pull request creation with personal access tokens
 - added tests for various components
 
 ### Changed
