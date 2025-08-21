@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -56,16 +55,16 @@ func TestProcessChangelogWithFixedSection(t *testing.T) {
 	assert.NotNil(t, newChangelog)
 
 	newChangelogString := strings.Join(newChangelog, "\n")
-	fmt.Println("=== PROCESSED CHANGELOG ===")
-	fmt.Println(newChangelogString)
-	fmt.Println("=== END CHANGELOG ===")
+	t.Log("=== PROCESSED CHANGELOG ===")
+	t.Log(newChangelogString)
+	t.Log("=== END CHANGELOG ===")
 
 	// Check if Fixed section is preserved
 	assert.Contains(t, newChangelogString, "### Fixed")
 	assert.Contains(t, newChangelogString, "fixed a null pointer dereference")
 	assert.Contains(t, newChangelogString, "fixed SAST tool warnings")
 	assert.Contains(t, newChangelogString, "fixed a typo in authentication")
-	
+
 	// Check the order: Fixed should come before Removed according to user requirements
 	fixedIndex := strings.Index(newChangelogString, "### Fixed")
 	removedIndex := strings.Index(newChangelogString, "### Removed")
@@ -115,9 +114,9 @@ func TestProcessChangelogWithMalformedHeaders(t *testing.T) {
 	assert.NotNil(t, newChangelog)
 
 	newChangelogString := strings.Join(newChangelog, "\n")
-	fmt.Println("=== PROCESSED CHANGELOG WITH MALFORMED HEADERS ===")
-	fmt.Println(newChangelogString)
-	fmt.Println("=== END CHANGELOG ===")
+	t.Log("=== PROCESSED CHANGELOG WITH MALFORMED HEADERS ===")
+	t.Log(newChangelogString)
+	t.Log("=== END CHANGELOG ===")
 
 	// Check if Fixed section is preserved even with malformed headers
 	assert.Contains(t, newChangelogString, "### Fixed")
@@ -177,9 +176,9 @@ func TestProcessChangelogWithAllSections(t *testing.T) {
 	assert.NotNil(t, newChangelog)
 
 	newChangelogString := strings.Join(newChangelog, "\n")
-	fmt.Println("=== PROCESSED CHANGELOG WITH ALL SECTIONS ===")
-	fmt.Println(newChangelogString)
-	fmt.Println("=== END CHANGELOG ===")
+	t.Log("=== PROCESSED CHANGELOG WITH ALL SECTIONS ===")
+	t.Log(newChangelogString)
+	t.Log("=== END CHANGELOG ===")
 
 	// Check that all sections are preserved
 	assert.Contains(t, newChangelogString, "### Added")
