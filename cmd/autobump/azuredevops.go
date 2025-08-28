@@ -187,15 +187,3 @@ func GetAzureDevOpsInfo(
 		RepositoryID:     repoInfo.ID,
 	}, nil
 }
-
-// createAzureDevOpsPullRequest maintains backwards compatibility during refactoring
-func createAzureDevOpsPullRequest(
-	globalConfig *GlobalConfig,
-	projectConfig *ProjectConfig,
-	repo *git.Repository,
-	sourceBranch string,
-	newVersion string,
-) error {
-	adapter := &AzureDevOpsAdapter{}
-	return adapter.CreatePullRequest(globalConfig, projectConfig, repo, sourceBranch, newVersion)
-}

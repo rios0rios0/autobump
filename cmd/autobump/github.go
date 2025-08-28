@@ -99,15 +99,3 @@ func getGitHubRepoInfo(repo *git.Repository) (string, string, error) {
 
 	return owner, repoName, nil
 }
-
-// createGitHubPullRequest maintains backwards compatibility during refactoring
-func createGitHubPullRequest(
-	globalConfig *GlobalConfig,
-	projectConfig *ProjectConfig,
-	repo *git.Repository,
-	sourceBranch string,
-	newVersion string,
-) error {
-	adapter := &GitHubAdapter{}
-	return adapter.CreatePullRequest(globalConfig, projectConfig, repo, sourceBranch, newVersion)
-}

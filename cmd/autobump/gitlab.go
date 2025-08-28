@@ -102,15 +102,3 @@ func getRemoteRepoFullProjectName(repo *git.Repository) (string, error) {
 
 	return fullProjectName, nil
 }
-
-// createGitLabMergeRequest maintains backwards compatibility during refactoring
-func createGitLabMergeRequest(
-	globalConfig *GlobalConfig,
-	projectConfig *ProjectConfig,
-	repo *git.Repository,
-	sourceBranch string,
-	newVersion string,
-) error {
-	adapter := &GitLabAdapter{}
-	return adapter.CreatePullRequest(globalConfig, projectConfig, repo, sourceBranch, newVersion)
-}
