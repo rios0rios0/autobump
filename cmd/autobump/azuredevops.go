@@ -34,8 +34,11 @@ type RepoInfo struct {
 	ID string `json:"id"`
 }
 
-// TODO: this should be better using an Adapter pattern (interface with many providers and implementing the methods)
-func createAzureDevOpsPullRequest(
+// AzureDevOpsAdapter implements PullRequestProvider for Azure DevOps
+type AzureDevOpsAdapter struct{}
+
+// CreatePullRequest creates a new pull request on Azure DevOps
+func (a *AzureDevOpsAdapter) CreatePullRequest(
 	globalConfig *GlobalConfig,
 	projectConfig *ProjectConfig,
 	repo *git.Repository,
@@ -183,4 +186,16 @@ func GetAzureDevOpsInfo(
 		ProjectName:      projectName,
 		RepositoryID:     repoInfo.ID,
 	}, nil
+}
+
+// createAzureDevOpsPullRequest maintains backwards compatibility during refactoring
+func createAzureDevOpsPullRequest(
+	globalConfig *GlobalConfig,
+	projectConfig *ProjectConfig,
+	repo *git.Repository,
+	sourceBranch string,
+	newVersion string,
+) error {
+	adapter := &AzureDevOpsAdapter{}
+	return adapter.CreatePullRequest(globalConfig, projectConfig, repo, sourceBranch, newVersion)
 }
