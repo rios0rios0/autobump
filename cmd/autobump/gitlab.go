@@ -16,12 +16,11 @@ var (
 	ErrCannotParseRepoURL = errors.New("unable to parse repository URL")
 )
 
-// TODO: this should be better using an Adapter pattern
-//
-//	(interface with many providers and implementing the methods)
-//
-// createGitLabMergeRequest creates a new merge request on GitLab
-func createGitLabMergeRequest(
+// GitLabAdapter implements PullRequestProvider for GitLab
+type GitLabAdapter struct{}
+
+// CreatePullRequest creates a new merge request on GitLab
+func (g *GitLabAdapter) CreatePullRequest(
 	globalConfig *GlobalConfig,
 	projectConfig *ProjectConfig,
 	repo *git.Repository,

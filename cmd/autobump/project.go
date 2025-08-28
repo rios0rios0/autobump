@@ -174,46 +174,19 @@ func createPullRequest(
 	branchName string,
 	serviceType ServiceType,
 ) error {
-	var err error
-	switch serviceType { //nolint:exhaustive // unsupported service types are handled by the default case
-	case GITLAB:
-		err = createGitLabMergeRequest(
-			globalConfig,
-			projectConfig,
-			repo,
-			branchName,
-			projectConfig.NewVersion,
-		)
-		if err != nil {
-			return err
-		}
-	case AZUREDEVOPS:
-		err = createAzureDevOpsPullRequest(
-			globalConfig,
-			projectConfig,
-			repo,
-			branchName,
-			projectConfig.NewVersion,
-		)
-		if err != nil {
-			return err
-		}
-	case GITHUB:
-		err = createGitHubPullRequest(
-			globalConfig,
-			projectConfig,
-			repo,
-			branchName,
-			projectConfig.NewVersion,
-		)
-		if err != nil {
-			return err
-		}
-	default:
+	provider := NewPullRequestProvider(serviceType)
+	if provider == nil {
 		log.Warnf("Service type '%v' not supported yet...", serviceType)
+		return nil
 	}
 
-	return nil
+	return provider.CreatePullRequest(
+		globalConfig,
+		projectConfig,
+		repo,
+		branchName,
+		projectConfig.NewVersion,
+	)
 }
 
 func cloneRepoIfNeeded(ctx *RepoContext) (string, error) {
