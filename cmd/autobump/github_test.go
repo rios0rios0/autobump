@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -81,6 +82,63 @@ func TestGetGitHubRepoInfo(t *testing.T) {
 				assert.Equal(t, tt.expected.repo, repo)
 			}
 		})
+	}
+}
+
+func TestGetServiceTypeByURL_GitHub(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		expected ServiceType
+	}{
+		{
+			name:     "GitHub HTTPS",
+			url:      "https://github.com/owner/repo.git",
+			expected: GITHUB,
+		},
+		{
+			name:     "GitHub SSH",
+			url:      "git@github.com:owner/repo.git",
+			expected: GITHUB,
+		},
+		{
+			name:     "GitLab HTTPS",
+			url:      "https://gitlab.com/owner/repo.git",
+			expected: GITLAB,
+		},
+		{
+			name:     "Azure DevOps",
+			url:      "https://dev.azure.com/owner/project/_git/repo",
+			expected: AZUREDEVOPS,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getServiceTypeByURL(tt.url)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGitHubAuthMethods(t *testing.T) {
+	globalConfig := &GlobalConfig{
+		GitHubAccessToken: "test-token",
+	}
+	projectConfig := &ProjectConfig{
+		ProjectAccessToken: "project-token",
+	}
+
+	authMethods, err := getAuthMethods(GITHUB, "testuser", globalConfig, projectConfig)
+
+	assert.NoError(t, err)
+	assert.Len(t, authMethods, 2) // Both project and global tokens should be included
+
+	// Verify the auth methods are BasicAuth with correct username
+	for _, method := range authMethods {
+		basicAuth, ok := method.(*http.BasicAuth)
+		assert.True(t, ok)
+		assert.Equal(t, "x-access-token", basicAuth.Username)
 	}
 }
 
