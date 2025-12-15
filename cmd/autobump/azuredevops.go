@@ -72,10 +72,32 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 			if strings.HasPrefix(refName, "refs/heads/") {
 				targetBranch = strings.TrimPrefix(refName, "refs/heads/")
 			} else {
-				targetBranch = "main" // fallback
+				// Try main first, then master as fallback
+				mainExists, _ := checkBranchExists(repo, "main")
+				if mainExists {
+					targetBranch = "main"
+				} else {
+					masterExists, _ := checkBranchExists(repo, "master")
+					if masterExists {
+						targetBranch = "master"
+					} else {
+						targetBranch = "main" // ultimate fallback
+					}
+				}
 			}
 		} else {
-			targetBranch = "main" // fallback
+			// Try main first, then master as fallback
+			mainExists, _ := checkBranchExists(repo, "main")
+			if mainExists {
+				targetBranch = "main"
+			} else {
+				masterExists, _ := checkBranchExists(repo, "master")
+				if masterExists {
+					targetBranch = "master"
+				} else {
+					targetBranch = "main" // ultimate fallback
+				}
+			}
 		}
 	} else {
 		// DefaultBranch from API is in format "refs/heads/main", extract just the branch name
