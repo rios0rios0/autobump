@@ -10,12 +10,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// TODO: this should be better using an Adapter pattern
-//
-//	(interface with many providers and implementing the methods)
-//
-// createGitHubPullRequest creates a new pull request on GitHub
-func createGitHubPullRequest(
+// GitHubAdapter implements PullRequestProvider for GitHub
+type GitHubAdapter struct{}
+
+// CreatePullRequest creates a new pull request on GitHub
+func (g *GitHubAdapter) CreatePullRequest(
 	globalConfig *GlobalConfig,
 	projectConfig *ProjectConfig,
 	repo *git.Repository,
