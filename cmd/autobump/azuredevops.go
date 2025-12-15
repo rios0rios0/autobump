@@ -27,11 +27,13 @@ type AzureDevOpsInfo struct {
 	OrganizationName string
 	ProjectName      string
 	RepositoryID     string
+	DefaultBranch    string
 }
 
-// RepoInfo struct to hold repository id answer
+// RepoInfo struct to hold repository info from Azure DevOps API
 type RepoInfo struct {
-	ID string `json:"id"`
+	ID            string `json:"id"`
+	DefaultBranch string `json:"defaultBranch"`
 }
 
 // AzureDevOpsAdapter implements PullRequestProvider for Azure DevOps
@@ -59,18 +61,49 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 		return err
 	}
 
+	// Determine target branch - use default branch from repository, fallback to main/master
+	targetBranch := azureInfo.DefaultBranch
+	if targetBranch == "" {
+		// Try to get default branch from repository HEAD
+		head, err := repo.Head()
+		if err == nil {
+			// Extract branch name from ref (e.g., "refs/heads/main" -> "main")
+			refName := head.Name().String()
+			if strings.HasPrefix(refName, "refs/heads/") {
+				targetBranch = strings.TrimPrefix(refName, "refs/heads/")
+			} else {
+				targetBranch = "main" // fallback
+			}
+		} else {
+			targetBranch = "main" // fallback
+		}
+	} else {
+		// DefaultBranch from API is in format "refs/heads/main", extract just the branch name
+		if strings.HasPrefix(targetBranch, "refs/heads/") {
+			targetBranch = strings.TrimPrefix(targetBranch, "refs/heads/")
+		}
+	}
+
+	// Ensure targetRefName is in correct format
+	targetRefName := targetBranch
+	if !strings.HasPrefix(targetRefName, "refs/heads/") {
+		targetRefName = "refs/heads/" + targetRefName
+	}
+
 	// TODO: refactor to use this library: https://github.com/microsoft/azure-devops-go-api
 	url := fmt.Sprintf(
-		"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/pullrequests?api-version=6.0",
+		"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/pullrequests?api-version=7.1",
 		azureInfo.OrganizationName,
 		azureInfo.ProjectName,
 		azureInfo.RepositoryID,
 	)
 	prTitle := "chore(bump): bumped version to " + newVersion
+	prDescription := fmt.Sprintf("Automated version bump to %s\n\nThis PR was automatically created by AutoBump.", newVersion)
 	payload := map[string]interface{}{
 		"sourceRefName": "refs/heads/" + sourceBranch,
-		"targetRefName": "refs/heads/main",
+		"targetRefName": targetRefName,
 		"title":         prTitle,
+		"description":   prDescription,
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -100,13 +133,29 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
 	if resp.StatusCode != http.StatusCreated {
+		// Try to parse error response for better error message
+		var errorResponse map[string]interface{}
+		if json.Unmarshal(body, &errorResponse) == nil {
+			if message, ok := errorResponse["message"].(string); ok {
+				return fmt.Errorf(
+					"%w: %d - %s",
+					ErrFailedToCreatePullRequest,
+					resp.StatusCode,
+					message,
+				)
+			}
+		}
 		return fmt.Errorf(
 			"%w: %d - %s",
 			ErrFailedToCreatePullRequest,
 			resp.StatusCode,
-			body,
+			string(body),
 		)
 	}
 
@@ -175,15 +224,28 @@ func GetAzureDevOpsInfo(
 		return info, fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		return info, fmt.Errorf(
+			"failed to fetch repository info: %d - %s",
+			resp.StatusCode,
+			string(bodyBytes),
+		)
+	}
+
 	var repoInfo RepoInfo
 	err = json.Unmarshal(bodyBytes, &repoInfo)
 	if err != nil {
 		return info, fmt.Errorf("failed to unmarshal response body: %w", err)
 	}
 
+	if repoInfo.ID == "" {
+		return info, fmt.Errorf("repository ID not found in response")
+	}
+
 	return AzureDevOpsInfo{
 		OrganizationName: organizationName,
 		ProjectName:      projectName,
 		RepositoryID:     repoInfo.ID,
+		DefaultBranch:    repoInfo.DefaultBranch,
 	}, nil
 }

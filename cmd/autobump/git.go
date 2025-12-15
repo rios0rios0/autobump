@@ -49,7 +49,7 @@ var (
 )
 
 // getGlobalGitConfig reads the global git configuration file and returns a config.Config object
-func getGlobalGitConfig() (*config.Config, error) {
+func getGlobalGitConfig() (cfg *config.Config, err error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("could not get user home directory: %w", err)
@@ -61,7 +61,17 @@ func getGlobalGitConfig() (*config.Config, error) {
 		return nil, fmt.Errorf("could not read global git config: %w", err)
 	}
 
-	cfg := &config.Config{}
+	cfg = config.NewConfig()
+
+	// Recover from panics in go-git's Config.Unmarshal (known bug with certain git configs)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Warnf("go-git panicked while parsing git config (known bug), using minimal config: %v", r)
+			cfg = config.NewConfig()
+			err = nil
+		}
+	}()
+
 	if err = cfg.Unmarshal(configBytes); err != nil {
 		return nil, fmt.Errorf("could not unmarshal global git config: %w", err)
 	}

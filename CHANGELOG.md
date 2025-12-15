@@ -24,6 +24,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - updated code to satisfy various golangci-lint linters
+- corrected configuration merging methods
 
 ### Removed
 
