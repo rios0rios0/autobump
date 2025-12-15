@@ -61,7 +61,7 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 		return err
 	}
 
-	// Determine target branch - use default branch from repository, fallback to main/master
+	// Determine target branch - use default branch from repository, fallback to main
 	targetBranch := azureInfo.DefaultBranch
 	if targetBranch == "" {
 		// Try to get default branch from repository HEAD
