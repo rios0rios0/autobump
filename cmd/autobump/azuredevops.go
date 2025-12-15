@@ -139,28 +139,30 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		// Try to parse error response for better error message
-		var errorResponse map[string]interface{}
-		if json.Unmarshal(body, &errorResponse) == nil {
-			if message, ok := errorResponse["message"].(string); ok {
-				return fmt.Errorf(
-					"%w: %d - %s",
-					ErrFailedToCreatePullRequest,
-					resp.StatusCode,
-					message,
-				)
-			}
-		}
+		errorMsg := parseErrorResponse(body)
 		return fmt.Errorf(
 			"%w: %d - %s",
 			ErrFailedToCreatePullRequest,
 			resp.StatusCode,
-			string(body),
+			errorMsg,
 		)
 	}
 
 	log.Info("Successfully created Azure DevOps pull request")
 	return nil
+}
+
+// parseErrorResponse attempts to extract a user-friendly error message from the response body.
+// It tries to parse the body as JSON and extract a "message" field.
+// If parsing fails or no message is found, it returns the raw body as a string.
+func parseErrorResponse(body []byte) string {
+	var errorResponse map[string]interface{}
+	if err := json.Unmarshal(body, &errorResponse); err == nil {
+		if message, ok := errorResponse["message"].(string); ok {
+			return message
+		}
+	}
+	return string(body)
 }
 
 // GetAzureDevOpsInfo extracts organization, project, and repo information from the remote URL
