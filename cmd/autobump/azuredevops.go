@@ -41,24 +41,27 @@ type AzureDevOpsAdapter struct{}
 
 // determineFallbackBranch determines the target branch by checking if main or master exist
 func determineFallbackBranch(repo *git.Repository) (string, error) {
-	// Try main first, then master as fallback
-	mainExists, err := checkBranchExists(repo, "main")
-	if err != nil {
-		log.Warnf("Failed to check if 'main' branch exists: %v", err)
-	}
-	if mainExists {
+	// Try main first
+	mainExists, mainErr := checkBranchExists(repo, "main")
+	if mainErr == nil && mainExists {
 		return "main", nil
 	}
 
-	masterExists, err := checkBranchExists(repo, "master")
-	if err != nil {
-		log.Warnf("Failed to check if 'master' branch exists: %v", err)
-	}
-	if masterExists {
+	// Try master as fallback
+	masterExists, masterErr := checkBranchExists(repo, "master")
+	if masterErr == nil && masterExists {
 		return "master", nil
 	}
 
-	// Neither main nor master exist
+	// Log any errors encountered
+	if mainErr != nil {
+		log.Warnf("Failed to check if 'main' branch exists: %v", mainErr)
+	}
+	if masterErr != nil {
+		log.Warnf("Failed to check if 'master' branch exists: %v", masterErr)
+	}
+
+	// Neither main nor master exist or both checks failed
 	return "", fmt.Errorf("neither 'main' nor 'master' branch exists in repository")
 }
 
