@@ -39,6 +39,29 @@ type RepoInfo struct {
 // AzureDevOpsAdapter implements PullRequestProvider for Azure DevOps
 type AzureDevOpsAdapter struct{}
 
+// determineFallbackBranch determines the target branch by checking if main or master exist
+func determineFallbackBranch(repo *git.Repository) (string, error) {
+	// Try main first, then master as fallback
+	mainExists, err := checkBranchExists(repo, "main")
+	if err != nil {
+		log.Warnf("Failed to check if 'main' branch exists: %v", err)
+	}
+	if mainExists {
+		return "main", nil
+	}
+
+	masterExists, err := checkBranchExists(repo, "master")
+	if err != nil {
+		log.Warnf("Failed to check if 'master' branch exists: %v", err)
+	}
+	if masterExists {
+		return "master", nil
+	}
+
+	// Neither main nor master exist
+	return "", fmt.Errorf("neither 'main' nor 'master' branch exists in repository")
+}
+
 // CreatePullRequest creates a new pull request on Azure DevOps
 func (a *AzureDevOpsAdapter) CreatePullRequest(
 	globalConfig *GlobalConfig,
@@ -72,31 +95,17 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 			if strings.HasPrefix(refName, "refs/heads/") {
 				targetBranch = strings.TrimPrefix(refName, "refs/heads/")
 			} else {
-				// Try main first, then master as fallback
-				mainExists, _ := checkBranchExists(repo, "main")
-				if mainExists {
-					targetBranch = "main"
-				} else {
-					masterExists, _ := checkBranchExists(repo, "master")
-					if masterExists {
-						targetBranch = "master"
-					} else {
-						targetBranch = "main" // ultimate fallback
-					}
+				// HEAD doesn't point to a branch, try main/master fallback
+				targetBranch, err = determineFallbackBranch(repo)
+				if err != nil {
+					return fmt.Errorf("failed to determine target branch: %w", err)
 				}
 			}
 		} else {
-			// Try main first, then master as fallback
-			mainExists, _ := checkBranchExists(repo, "main")
-			if mainExists {
-				targetBranch = "main"
-			} else {
-				masterExists, _ := checkBranchExists(repo, "master")
-				if masterExists {
-					targetBranch = "master"
-				} else {
-					targetBranch = "main" // ultimate fallback
-				}
+			// Failed to get HEAD, try main/master fallback
+			targetBranch, err = determineFallbackBranch(repo)
+			if err != nil {
+				return fmt.Errorf("failed to determine target branch: %w", err)
 			}
 		}
 	} else {
