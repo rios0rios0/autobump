@@ -61,22 +61,10 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 		return err
 	}
 
-	// Determine target branch - use default branch from repository, fallback to main/master
+	// Determine target branch - use default branch from repository, fallback to main
 	targetBranch := azureInfo.DefaultBranch
 	if targetBranch == "" {
-		// Try to get default branch from repository HEAD
-		head, err := repo.Head()
-		if err == nil {
-			// Extract branch name from ref (e.g., "refs/heads/main" -> "main")
-			refName := head.Name().String()
-			if strings.HasPrefix(refName, "refs/heads/") {
-				targetBranch = strings.TrimPrefix(refName, "refs/heads/")
-			} else {
-				targetBranch = "main" // fallback
-			}
-		} else {
-			targetBranch = "main" // fallback
-		}
+		targetBranch = "main" // fallback to main when API doesn't provide default branch
 	} else {
 		// DefaultBranch from API is in format "refs/heads/main", extract just the branch name
 		if strings.HasPrefix(targetBranch, "refs/heads/") {
