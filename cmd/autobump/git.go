@@ -248,15 +248,33 @@ func getAuthMethods(
 			})
 		}
 	case AZUREDEVOPS:
-		log.Infof("Using Azure DevOps access token to authenticate")
-		transport.UnsupportedCapabilities = append( //nolint:reassign // required to disable ThinPack for Azure DevOps
-			transport.UnsupportedCapabilities,
+		// Azure DevOps requires capabilities multi_ack / multi_ack_detailed,
+		// which are not fully implemented in go-git and by default are included in
+		// transport.UnsupportedCapabilities. By replacing (not appending!) the list
+		// with only ThinPack, we allow go-git to use multi_ack for initial clones.
+		// See: https://github.com/go-git/go-git/blob/master/_examples/azure_devops/main.go
+		transport.UnsupportedCapabilities = []capability.Capability{ //nolint:reassign // required for Azure DevOps compatibility
 			capability.ThinPack,
-		)
-		authMethods = append(authMethods, &http.BasicAuth{
-			Username: username,
-			Password: globalConfig.AzureDevOpsAccessToken,
-		})
+		}
+
+		// TODO: this lines of code MUST be refactored to avoid code duplication
+		// project access token
+		if projectConfig.ProjectAccessToken != "" {
+			log.Infof("Using project access token to authenticate")
+			authMethods = append(authMethods, &http.BasicAuth{
+				Username: "pat",
+				Password: projectConfig.ProjectAccessToken,
+			})
+		}
+
+		// Azure DevOps personal access token
+		if globalConfig.AzureDevOpsAccessToken != "" {
+			log.Infof("Using Azure DevOps access token to authenticate")
+			authMethods = append(authMethods, &http.BasicAuth{
+				Username: "pat",
+				Password: globalConfig.AzureDevOpsAccessToken,
+			})
+		}
 	case GITHUB:
 		// TODO: this lines of code MUST be refactored to avoid code duplication
 		// project access token
