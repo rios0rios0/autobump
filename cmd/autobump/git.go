@@ -85,7 +85,7 @@ func openRepo(projectPath string) (*git.Repository, error) {
 	return repo, nil
 }
 
-// createAndSwitchBranch checks if a given Git branch exists.
+// checkBranchExists checks if a given Git branch exists (local or remote).
 func checkBranchExists(repo *git.Repository, branchName string) (bool, error) {
 	refs, err := repo.References()
 	if err != nil {
@@ -93,8 +93,17 @@ func checkBranchExists(repo *git.Repository, branchName string) (bool, error) {
 	}
 
 	branchExists := false
+	remoteBranchName := "origin/" + branchName
 	err = refs.ForEach(func(ref *plumbing.Reference) error {
-		if ref.Name().IsBranch() && ref.Name().Short() == branchName {
+		refName := ref.Name().String()
+		shortName := ref.Name().Short()
+
+		// Check local branch
+		if ref.Name().IsBranch() && shortName == branchName {
+			branchExists = true
+		}
+		// Check remote branch (refs/remotes/origin/branchName)
+		if strings.HasPrefix(refName, "refs/remotes/") && shortName == remoteBranchName {
 			branchExists = true
 		}
 		return nil

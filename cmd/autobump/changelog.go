@@ -46,6 +46,14 @@ func getNextVersion(changelogPath string) (*semver.Version, error) {
 		return nil, err
 	}
 
+	// Check if this is a new changelog (no version found)
+	_, err = findLatestVersion(lines)
+	if errors.Is(err, ErrNoVersionFoundInChangelog) {
+		// For new changelogs, return 1.0.0 directly
+		version, _ := semver.NewVersion(initialReleaseVersion)
+		return version, nil
+	}
+
 	version, _, err := processChangelog(lines)
 	if err != nil {
 		return nil, err
@@ -78,7 +86,9 @@ func createChangelogIfNotExists(changelogPath string) (bool, error) {
 
 func isChangelogUnreleasedEmpty(lines []string) (bool, error) {
 	latestVersion, err := findLatestVersion(lines)
-	if err != nil {
+	// If no version found, check if unreleased section has content
+	noVersionFound := errors.Is(err, ErrNoVersionFoundInChangelog)
+	if err != nil && !noVersionFound {
 		return true, err
 	}
 
@@ -86,7 +96,9 @@ func isChangelogUnreleasedEmpty(lines []string) (bool, error) {
 	for _, line := range lines {
 		if strings.Contains(line, "[Unreleased]") {
 			unreleased = true
-		} else if strings.HasPrefix(line, fmt.Sprintf("## [%s]", latestVersion.String())) {
+		} else if !noVersionFound &&
+			strings.HasPrefix(line, fmt.Sprintf("## [%s]", latestVersion.String())) {
+			// Only stop at the version section if we found a version
 			unreleased = false
 		}
 
@@ -100,6 +112,10 @@ func isChangelogUnreleasedEmpty(lines []string) (bool, error) {
 
 	return true, nil
 }
+
+// initialReleaseVersion is the version used when no version is found in the changelog.
+// When a changelog only has [Unreleased] section, we bump directly to 1.0.0.
+const initialReleaseVersion = "1.0.0"
 
 func findLatestVersion(lines []string) (*semver.Version, error) {
 	// Regular expression to match version lines
@@ -140,13 +156,21 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 
 	// Find the latest version in the changelog
 	latestVersion, err := findLatestVersion(lines)
-	if err != nil {
+	isNewChangelog := errors.Is(err, ErrNoVersionFoundInChangelog)
+	if err != nil && !isNewChangelog {
 		log.Errorf("Error finding latest version: %v", err)
 		return nil, nil, err
 	}
-	log.Infof("Previous version: %s", latestVersion)
 
+	// For new changelogs (only [Unreleased] section), bump directly to 1.0.0
+	if isNewChangelog {
+		log.Infof("No previous version found, will release as %s", initialReleaseVersion)
+		return processNewChangelog(lines)
+	}
+
+	log.Infof("Previous version: %s", latestVersion)
 	nextVersion := *latestVersion
+
 	for _, line := range lines {
 		if strings.Contains(line, "[Unreleased]") {
 			unreleased = true
@@ -177,6 +201,66 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 
 	log.Infof("Next calculated version: %s", nextVersion)
 	return &nextVersion, newContent, nil
+}
+
+// processNewChangelog handles changelogs that only have [Unreleased] section.
+// It bumps directly to 1.0.0 without calculating based on changes.
+func processNewChangelog(lines []string) (*semver.Version, []string, error) {
+	var newContent []string
+	var unreleasedSection []string
+	unreleased := false
+
+	for _, line := range lines {
+		if strings.Contains(line, "[Unreleased]") {
+			unreleased = true
+		}
+
+		if unreleased {
+			unreleasedSection = append(unreleasedSection, line)
+		} else {
+			newContent = append(newContent, line)
+		}
+	}
+
+	// Create the initial release version
+	initialVersion, _ := semver.NewVersion(initialReleaseVersion)
+
+	if len(unreleasedSection) > 0 {
+		// Fix section headings
+		fixSectionHeadings(unreleasedSection)
+
+		// Create new section for 1.0.0 release
+		newSection := makeNewSectionsFromUnreleased(unreleasedSection, *initialVersion)
+		newContent = append(newContent, newSection...)
+	}
+
+	log.Infof("Next calculated version: %s", initialReleaseVersion)
+	return initialVersion, newContent, nil
+}
+
+// makeNewSectionsFromUnreleased creates new section contents for initial release.
+func makeNewSectionsFromUnreleased(unreleasedSection []string, version semver.Version) []string {
+	var newSection []string
+
+	// Create a new unreleased section
+	newSection = append(newSection, "## [Unreleased]")
+	newSection = append(newSection, "")
+
+	// Create the new section with the version and the current date
+	newSection = append(
+		newSection,
+		fmt.Sprintf("## [%s] - %s", version.String(), time.Now().Format("2006-01-02")),
+	)
+	newSection = append(newSection, "")
+
+	// Copy content from unreleased section (skip the [Unreleased] header)
+	for _, line := range unreleasedSection {
+		if !strings.Contains(line, "[Unreleased]") {
+			newSection = append(newSection, line)
+		}
+	}
+
+	return newSection
 }
 
 // fixSectionHeadings fixes the section headings in the unreleased section.

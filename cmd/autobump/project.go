@@ -154,10 +154,11 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 	}
 
 	// setup the clone options
+	// Note: We don't use shallow clone (Depth: 1) because it causes "object not found"
+	// errors when pushing new branches to the remote repository
 	log.Infof("Cloning %s into %s", cloneURL, tmpDir)
 	cloneOptions := &git.CloneOptions{
-		URL:   cloneURL,
-		Depth: 1,
+		URL: cloneURL,
 	}
 
 	// get authentication methods
@@ -292,28 +293,40 @@ func setupRepo(ctx *RepoContext) error {
 	return nil
 }
 
-func createBumpBranch(ctx *RepoContext, changelogPath string) (string, error) {
+// BranchStatus represents the status of the bump branch
+type BranchStatus int
+
+const (
+	BranchCreated        BranchStatus = iota // Branch was newly created
+	BranchExistsWithPR                       // Branch exists and PR exists - skip entirely
+	BranchExistsNoPR                         // Branch exists but no PR - need to create PR
+)
+
+func createBumpBranch(ctx *RepoContext, changelogPath string) (string, BranchStatus, error) {
 	nextVersion, err := getNextVersion(changelogPath)
 	if err != nil {
-		return "", err
+		return "", BranchCreated, err
 	}
 
 	branchName := "chore/bump-" + nextVersion.String()
+	// Store the version for PR creation even if branch exists
+	ctx.projectConfig.NewVersion = nextVersion.String()
 
 	branchExists, err := checkBranchExists(ctx.repo, branchName)
 	if err != nil {
-		return "", err
+		return "", BranchCreated, err
 	}
 	if branchExists {
-		return "", fmt.Errorf("%w: %s", ErrBranchExists, branchName)
+		log.Warnf("Branch '%s' already exists (local or remote)", branchName)
+		return branchName, BranchExistsNoPR, nil // Return branch name for PR check
 	}
 
 	err = createAndSwitchBranch(ctx.repo, ctx.worktree, branchName, ctx.head.Hash())
 	if err != nil {
-		return "", err
+		return "", BranchCreated, err
 	}
 
-	return branchName, nil
+	return branchName, BranchCreated, nil
 }
 
 func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) error {
@@ -555,12 +568,35 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 	// Ensure the project language is detected (optional - will only update changelog if unknown)
 	ensureProjectLanguage(ctx)
 
-	// Create and switch to bump branch
-	branchName, err := createBumpBranch(ctx, changelogPath)
+	// Create and switch to bump branch (or check if it already exists)
+	branchName, branchStatus, err := createBumpBranch(ctx, changelogPath)
 	if err != nil {
 		return err
 	}
 
+	// Handle branch already exists case
+	if branchStatus == BranchExistsNoPR {
+		// Branch exists, check if PR exists
+		prExists, prErr := checkPullRequestExists(ctx, branchName)
+		if prErr != nil {
+			log.Warnf("Failed to check if PR exists: %v, skipping project", prErr)
+			return nil
+		}
+		if prExists {
+			log.Infof("Pull request already exists for branch '%s', skipping project", branchName)
+			return nil
+		}
+		// PR doesn't exist, create it
+		log.Infof("Branch exists but no PR found, creating pull request for branch '%s'", branchName)
+		err = createAndCheckoutPullRequest(ctx, branchName)
+		if err != nil {
+			return err
+		}
+		log.Infof("Successfully created PR for existing branch in project '%s'", ctx.projectConfig.Name)
+		return nil
+	}
+
+	// Normal flow: branch was newly created
 	// Update changelog and version files
 	err = updateChangelogAndVersionFiles(ctx, changelogPath)
 	if err != nil {
@@ -581,6 +617,22 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 
 	log.Infof("Successfully processed project '%s'", ctx.projectConfig.Name)
 	return nil
+}
+
+// checkPullRequestExists checks if a PR exists for the given branch using the appropriate provider.
+func checkPullRequestExists(ctx *RepoContext, branchName string) (bool, error) {
+	serviceType, err := getRemoteServiceType(ctx.repo)
+	if err != nil {
+		return false, err
+	}
+
+	provider := NewPullRequestProvider(serviceType)
+	if provider == nil {
+		log.Warnf("Service type '%v' not supported for PR check", serviceType)
+		return false, nil // Assume no PR exists if provider not supported
+	}
+
+	return provider.PullRequestExists(ctx.globalConfig, ctx.projectConfig, ctx.repo, branchName)
 }
 
 // iterateProjects iterates over the projects and processes them using the processRepo function.

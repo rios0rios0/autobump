@@ -15,6 +15,49 @@ const expectedURLParts = 2
 // GitHubAdapter implements PullRequestProvider for GitHub.
 type GitHubAdapter struct{}
 
+// PullRequestExists checks if a pull request already exists for the given source branch.
+func (g *GitHubAdapter) PullRequestExists(
+	globalConfig *GlobalConfig,
+	projectConfig *ProjectConfig,
+	repo *git.Repository,
+	sourceBranch string,
+) (bool, error) {
+	log.Infof("Checking if pull request exists for branch '%s'", sourceBranch)
+
+	var accessToken string
+	if projectConfig.ProjectAccessToken != "" {
+		accessToken = projectConfig.ProjectAccessToken
+	} else {
+		accessToken = globalConfig.GitHubAccessToken
+	}
+
+	ctx := context.Background()
+	client := github.NewClient(nil).WithAuthToken(accessToken)
+
+	// Get the repository owner and name
+	owner, repoName, err := getGitHubRepoInfo(repo)
+	if err != nil {
+		return false, err
+	}
+
+	// List open pull requests for the source branch
+	prs, _, err := client.PullRequests.List(ctx, owner, repoName, &github.PullRequestListOptions{
+		Head:  fmt.Sprintf("%s:%s", owner, sourceBranch),
+		State: "open",
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to list pull requests: %w", err)
+	}
+
+	if len(prs) > 0 {
+		log.Infof("Found %d open pull request(s) for branch '%s'", len(prs), sourceBranch)
+		return true, nil
+	}
+
+	log.Infof("No open pull request found for branch '%s'", sourceBranch)
+	return false, nil
+}
+
 // CreatePullRequest creates a new pull request on GitHub.
 func (g *GitHubAdapter) CreatePullRequest(
 	globalConfig *GlobalConfig,
