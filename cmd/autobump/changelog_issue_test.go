@@ -43,32 +43,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - added the feature to automatically fix incorrect section heading levels`
 
 func TestProcessChangelogWithFixedSection(t *testing.T) {
-	// Arrange
-	changelog := strings.Split(changelogWithFixed, "\n")
+	t.Run("should preserve Fixed section when processing changelog", func(t *testing.T) {
+		// given
+		changelog := strings.Split(changelogWithFixed, "\n")
 
-	// Act
-	version, newChangelog, err := processChangelog(changelog)
+		// when
+		version, newChangelog, err := processChangelog(changelog)
 
-	// Assert
-	require.NoError(t, err)
-	assert.NotNil(t, version)
-	assert.NotNil(t, newChangelog)
+		// then
+		require.NoError(t, err, "should not return an error")
+		assert.NotNil(t, version, "version should not be nil")
+		assert.NotNil(t, newChangelog, "new changelog should not be nil")
 
-	newChangelogString := strings.Join(newChangelog, "\n")
-	t.Log("=== PROCESSED CHANGELOG ===")
-	t.Log(newChangelogString)
-	t.Log("=== END CHANGELOG ===")
+		newChangelogString := strings.Join(newChangelog, "\n")
 
-	// Check if Fixed section is preserved
-	assert.Contains(t, newChangelogString, "### Fixed")
-	assert.Contains(t, newChangelogString, "fixed a null pointer dereference")
-	assert.Contains(t, newChangelogString, "fixed SAST tool warnings")
-	assert.Contains(t, newChangelogString, "fixed a typo in authentication")
+		assert.Contains(t, newChangelogString, "### Fixed", "should contain Fixed section")
+		assert.Contains(t, newChangelogString, "fixed a null pointer dereference", "should contain fix item 1")
+		assert.Contains(t, newChangelogString, "fixed SAST tool warnings", "should contain fix item 2")
+		assert.Contains(t, newChangelogString, "fixed a typo in authentication", "should contain fix item 3")
+	})
 
-	// Check the order: Fixed should come before Removed according to user requirements
-	fixedIndex := strings.Index(newChangelogString, "### Fixed")
-	removedIndex := strings.Index(newChangelogString, "### Removed")
-	assert.Less(t, fixedIndex, removedIndex, "Fixed section should come before Removed section")
+	t.Run("should order Fixed section before Removed section", func(t *testing.T) {
+		// given
+		changelog := strings.Split(changelogWithFixed, "\n")
+
+		// when
+		_, newChangelog, err := processChangelog(changelog)
+
+		// then
+		require.NoError(t, err, "should not return an error")
+
+		newChangelogString := strings.Join(newChangelog, "\n")
+		fixedIndex := strings.Index(newChangelogString, "### Fixed")
+		removedIndex := strings.Index(newChangelogString, "### Removed")
+
+		assert.Less(t, fixedIndex, removedIndex, "Fixed section should come before Removed section")
+	})
 }
 
 // Test with malformed headers to see if that causes the issue.
@@ -102,26 +112,41 @@ All notable changes to this project will be documented in this file.
 - added the feature to automatically fix incorrect section heading levels`
 
 func TestProcessChangelogWithMalformedHeaders(t *testing.T) {
-	// Arrange
-	changelog := strings.Split(changelogWithMalformedHeaders, "\n")
+	t.Run("should fix malformed headers and preserve Fixed section", func(t *testing.T) {
+		// given
+		changelog := strings.Split(changelogWithMalformedHeaders, "\n")
 
-	// Act
-	version, newChangelog, err := processChangelog(changelog)
+		// when
+		version, newChangelog, err := processChangelog(changelog)
 
-	// Assert
-	require.NoError(t, err)
-	assert.NotNil(t, version)
-	assert.NotNil(t, newChangelog)
+		// then
+		require.NoError(t, err, "should not return an error")
+		assert.NotNil(t, version, "version should not be nil")
+		assert.NotNil(t, newChangelog, "new changelog should not be nil")
 
-	newChangelogString := strings.Join(newChangelog, "\n")
-	t.Log("=== PROCESSED CHANGELOG WITH MALFORMED HEADERS ===")
-	t.Log(newChangelogString)
-	t.Log("=== END CHANGELOG ===")
+		newChangelogString := strings.Join(newChangelog, "\n")
 
-	// Check if Fixed section is preserved even with malformed headers
-	assert.Contains(t, newChangelogString, "### Fixed")
-	assert.Contains(t, newChangelogString, "fixed a null pointer dereference")
-	assert.Contains(t, newChangelogString, "fixed SAST tool warnings")
+		assert.Contains(t, newChangelogString, "### Fixed", "should contain corrected Fixed section header")
+		assert.Contains(t, newChangelogString, "fixed a null pointer dereference", "should contain fix item 1")
+		assert.Contains(t, newChangelogString, "fixed SAST tool warnings", "should contain fix item 2")
+	})
+
+	t.Run("should correct ## Fixed to ### Fixed", func(t *testing.T) {
+		// given
+		changelog := strings.Split(changelogWithMalformedHeaders, "\n")
+
+		// when
+		_, newChangelog, err := processChangelog(changelog)
+
+		// then
+		require.NoError(t, err, "should not return an error")
+
+		newChangelogString := strings.Join(newChangelog, "\n")
+
+		// The malformed "## Fixed" should be corrected to "### Fixed"
+		// Note: we check that the output contains the corrected version
+		assert.Contains(t, newChangelogString, "### Fixed", "should contain corrected ### Fixed header")
+	})
 }
 
 // Test with all sections to ensure complete ordering is correct.
@@ -164,41 +189,51 @@ All notable changes to this project will be documented in this file.
 - initial release`
 
 func TestProcessChangelogWithAllSections(t *testing.T) {
-	// Arrange
-	changelog := strings.Split(changelogWithAllSections, "\n")
+	t.Run("should preserve all changelog sections", func(t *testing.T) {
+		// given
+		changelog := strings.Split(changelogWithAllSections, "\n")
 
-	// Act
-	version, newChangelog, err := processChangelog(changelog)
+		// when
+		version, newChangelog, err := processChangelog(changelog)
 
-	// Assert
-	require.NoError(t, err)
-	assert.NotNil(t, version)
-	assert.NotNil(t, newChangelog)
+		// then
+		require.NoError(t, err, "should not return an error")
+		assert.NotNil(t, version, "version should not be nil")
+		assert.NotNil(t, newChangelog, "new changelog should not be nil")
 
-	newChangelogString := strings.Join(newChangelog, "\n")
-	t.Log("=== PROCESSED CHANGELOG WITH ALL SECTIONS ===")
-	t.Log(newChangelogString)
-	t.Log("=== END CHANGELOG ===")
+		newChangelogString := strings.Join(newChangelog, "\n")
 
-	// Check that all sections are preserved
-	assert.Contains(t, newChangelogString, "### Added")
-	assert.Contains(t, newChangelogString, "### Changed")
-	assert.Contains(t, newChangelogString, "### Deprecated")
-	assert.Contains(t, newChangelogString, "### Fixed")
-	assert.Contains(t, newChangelogString, "### Removed")
-	assert.Contains(t, newChangelogString, "### Security")
+		assert.Contains(t, newChangelogString, "### Added", "should contain Added section")
+		assert.Contains(t, newChangelogString, "### Changed", "should contain Changed section")
+		assert.Contains(t, newChangelogString, "### Deprecated", "should contain Deprecated section")
+		assert.Contains(t, newChangelogString, "### Fixed", "should contain Fixed section")
+		assert.Contains(t, newChangelogString, "### Removed", "should contain Removed section")
+		assert.Contains(t, newChangelogString, "### Security", "should contain Security section")
+	})
 
-	// Verify the correct order: Added, Changed, Deprecated, Fixed, Removed, Security
-	addedIndex := strings.Index(newChangelogString, "### Added")
-	changedIndex := strings.Index(newChangelogString, "### Changed")
-	deprecatedIndex := strings.Index(newChangelogString, "### Deprecated")
-	fixedIndex := strings.Index(newChangelogString, "### Fixed")
-	removedIndex := strings.Index(newChangelogString, "### Removed")
-	securityIndex := strings.Index(newChangelogString, "### Security")
+	t.Run("should maintain correct section ordering", func(t *testing.T) {
+		// given
+		changelog := strings.Split(changelogWithAllSections, "\n")
 
-	assert.Less(t, addedIndex, changedIndex, "Added should come before Changed")
-	assert.Less(t, changedIndex, deprecatedIndex, "Changed should come before Deprecated")
-	assert.Less(t, deprecatedIndex, fixedIndex, "Deprecated should come before Fixed")
-	assert.Less(t, fixedIndex, removedIndex, "Fixed should come before Removed")
-	assert.Less(t, removedIndex, securityIndex, "Removed should come before Security")
+		// when
+		_, newChangelog, err := processChangelog(changelog)
+
+		// then
+		require.NoError(t, err, "should not return an error")
+
+		newChangelogString := strings.Join(newChangelog, "\n")
+
+		addedIndex := strings.Index(newChangelogString, "### Added")
+		changedIndex := strings.Index(newChangelogString, "### Changed")
+		deprecatedIndex := strings.Index(newChangelogString, "### Deprecated")
+		fixedIndex := strings.Index(newChangelogString, "### Fixed")
+		removedIndex := strings.Index(newChangelogString, "### Removed")
+		securityIndex := strings.Index(newChangelogString, "### Security")
+
+		assert.Less(t, addedIndex, changedIndex, "Added should come before Changed")
+		assert.Less(t, changedIndex, deprecatedIndex, "Changed should come before Deprecated")
+		assert.Less(t, deprecatedIndex, fixedIndex, "Deprecated should come before Fixed")
+		assert.Less(t, fixedIndex, removedIndex, "Fixed should come before Removed")
+		assert.Less(t, removedIndex, securityIndex, "Removed should come before Security")
+	})
 }
