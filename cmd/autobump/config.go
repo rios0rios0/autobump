@@ -58,7 +58,7 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 		return nil, err
 	}
 
-	globalConfig, err := decodeConfig(data)
+	globalConfig, err := decodeConfig(data, true)
 	if err != nil {
 		return nil, err
 	}
@@ -113,11 +113,13 @@ func handleTokenFile(name string, token *string) {
 }
 
 // decodeConfig decodes the config file and returns a GlobalConfig struct
-func decodeConfig(data []byte) (*GlobalConfig, error) {
+// If strict is true, unknown fields will cause an error (for user config)
+// If strict is false, unknown fields will be ignored (for default config)
+func decodeConfig(data []byte, strict bool) (*GlobalConfig, error) {
 	var globalConfig GlobalConfig
 
 	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
-	decoder.KnownFields(true)
+	decoder.KnownFields(strict)
 	err := decoder.Decode(&globalConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode config: %w", err)

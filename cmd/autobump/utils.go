@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	log "github.com/sirupsen/logrus"
@@ -24,7 +25,7 @@ var (
 	)
 )
 
-const downloadTimeout = 10
+const downloadTimeout = 30
 
 // readLines reads a whole file into memory
 func readLines(filePath string) ([]string, error) {
@@ -70,7 +71,7 @@ func writeLines(filePath string, lines []string) error {
 func downloadFile(url string) ([]byte, error) {
 	var data []byte
 
-	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
