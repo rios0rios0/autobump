@@ -28,6 +28,12 @@ const (
 	// HTTPS format: https://dev.azure.com/{org}/{project}/_git/{repo}
 	// Split result: ["https:", "", "dev.azure.com", "{org}", "{project}", "_git", "{repo}"].
 	minHTTPSURLParts = 7
+
+	// defaultBranchMain is the default branch name for most repositories.
+	defaultBranchMain = "main"
+
+	// defaultBranchMaster is the legacy default branch name.
+	defaultBranchMaster = "master"
 )
 
 var (
@@ -55,23 +61,23 @@ type AzureDevOpsAdapter struct{}
 // determineFallbackBranch determines the target branch by checking if main or master exist.
 func determineFallbackBranch(repo *git.Repository) (string, error) {
 	// Try main first
-	mainExists, mainErr := checkBranchExists(repo, "main")
+	mainExists, mainErr := checkBranchExists(repo, defaultBranchMain)
 	if mainErr == nil && mainExists {
-		return "main", nil
+		return defaultBranchMain, nil
 	}
 
 	// Try master as fallback
-	masterExists, masterErr := checkBranchExists(repo, "master")
+	masterExists, masterErr := checkBranchExists(repo, defaultBranchMaster)
 	if masterErr == nil && masterExists {
-		return "master", nil
+		return defaultBranchMaster, nil
 	}
 
 	// Log any errors encountered
 	if mainErr != nil {
-		log.Warnf("Failed to check if 'main' branch exists: %v", mainErr)
+		log.Warnf("Failed to check if '%s' branch exists: %v", defaultBranchMain, mainErr)
 	}
 	if masterErr != nil {
-		log.Warnf("Failed to check if 'master' branch exists: %v", masterErr)
+		log.Warnf("Failed to check if '%s' branch exists: %v", defaultBranchMaster, masterErr)
 	}
 
 	// Neither main nor master exist or both checks failed

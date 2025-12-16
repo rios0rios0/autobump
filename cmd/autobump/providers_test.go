@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,61 +8,93 @@ import (
 )
 
 func TestNewPullRequestProvider(t *testing.T) {
-	tests := []struct {
-		name        string
-		serviceType ServiceType
-		expectType  string
-		expectNil   bool
-	}{
-		{
-			name:        "GitHub provider",
-			serviceType: GITHUB,
-			expectType:  "*main.GitHubAdapter",
-			expectNil:   false,
-		},
-		{
-			name:        "GitLab provider",
-			serviceType: GITLAB,
-			expectType:  "*main.GitLabAdapter",
-			expectNil:   false,
-		},
-		{
-			name:        "Azure DevOps provider",
-			serviceType: AZUREDEVOPS,
-			expectType:  "*main.AzureDevOpsAdapter",
-			expectNil:   false,
-		},
-		{
-			name:        "Unknown provider",
-			serviceType: UNKNOWN,
-			expectType:  "",
-			expectNil:   true,
-		},
-		{
-			name:        "Unsupported provider",
-			serviceType: BITBUCKET,
-			expectType:  "",
-			expectNil:   true,
-		},
-	}
+	t.Run("should return gitHubServiceAdapter for GITHUB service type", func(t *testing.T) {
+		// given
+		serviceType := GITHUB
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			provider := NewPullRequestProvider(tt.serviceType)
+		// when
+		provider := NewPullRequestProvider(serviceType)
 
-			if tt.expectNil {
-				assert.Nil(t, provider)
-			} else {
-				require.NotNil(t, provider)
-				assert.Equal(t, tt.expectType, fmt.Sprintf("%T", provider))
-			}
-		})
-	}
+		// then
+		require.NotNil(t, provider, "provider should not be nil")
+		_, ok := provider.(*gitHubServiceAdapter)
+		assert.True(t, ok, "provider should be of type *gitHubServiceAdapter")
+	})
+
+	t.Run("should return gitLabServiceAdapter for GITLAB service type", func(t *testing.T) {
+		// given
+		serviceType := GITLAB
+
+		// when
+		provider := NewPullRequestProvider(serviceType)
+
+		// then
+		require.NotNil(t, provider, "provider should not be nil")
+		_, ok := provider.(*gitLabServiceAdapter)
+		assert.True(t, ok, "provider should be of type *gitLabServiceAdapter")
+	})
+
+	t.Run("should return azureDevOpsServiceAdapter for AZUREDEVOPS service type", func(t *testing.T) {
+		// given
+		serviceType := AZUREDEVOPS
+
+		// when
+		provider := NewPullRequestProvider(serviceType)
+
+		// then
+		require.NotNil(t, provider, "provider should not be nil")
+		_, ok := provider.(*azureDevOpsServiceAdapter)
+		assert.True(t, ok, "provider should be of type *azureDevOpsServiceAdapter")
+	})
+
+	t.Run("should return nil for UNKNOWN service type", func(t *testing.T) {
+		// given
+		serviceType := UNKNOWN
+
+		// when
+		provider := NewPullRequestProvider(serviceType)
+
+		// then
+		assert.Nil(t, provider, "provider should be nil for unknown service type")
+	})
+
+	t.Run("should return nil for BITBUCKET service type", func(t *testing.T) {
+		// given
+		serviceType := BITBUCKET
+
+		// when
+		provider := NewPullRequestProvider(serviceType)
+
+		// then
+		assert.Nil(t, provider, "provider should be nil for unsupported service type")
+	})
 }
 
-func TestPullRequestProviderImplementsInterface(_ *testing.T) {
-	// Test that all adapters implement the PullRequestProvider interface
-	var _ PullRequestProvider = &GitHubAdapter{}
-	var _ PullRequestProvider = &GitLabAdapter{}
-	var _ PullRequestProvider = &AzureDevOpsAdapter{}
+func TestPullRequestProviderImplementsInterface(t *testing.T) {
+	t.Run("should verify GitHubAdapter implements PullRequestProvider interface", func(t *testing.T) {
+		// given
+		var provider PullRequestProvider = &GitHubAdapter{}
+
+		// when & then
+		// If compilation succeeds and provider is not nil, the interface is implemented
+		require.NotNil(t, provider, "GitHubAdapter should implement PullRequestProvider")
+	})
+
+	t.Run("should verify GitLabAdapter implements PullRequestProvider interface", func(t *testing.T) {
+		// given
+		var provider PullRequestProvider = &GitLabAdapter{}
+
+		// when & then
+		// If compilation succeeds and provider is not nil, the interface is implemented
+		require.NotNil(t, provider, "GitLabAdapter should implement PullRequestProvider")
+	})
+
+	t.Run("should verify AzureDevOpsAdapter implements PullRequestProvider interface", func(t *testing.T) {
+		// given
+		var provider PullRequestProvider = &AzureDevOpsAdapter{}
+
+		// when & then
+		// If compilation succeeds and provider is not nil, the interface is implemented
+		require.NotNil(t, provider, "AzureDevOpsAdapter should implement PullRequestProvider")
+	})
 }
