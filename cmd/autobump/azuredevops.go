@@ -39,6 +39,32 @@ type RepoInfo struct {
 // AzureDevOpsAdapter implements PullRequestProvider for Azure DevOps
 type AzureDevOpsAdapter struct{}
 
+// determineFallbackBranch determines the target branch by checking if main or master exist
+func determineFallbackBranch(repo *git.Repository) (string, error) {
+	// Try main first
+	mainExists, mainErr := checkBranchExists(repo, "main")
+	if mainErr == nil && mainExists {
+		return "main", nil
+	}
+
+	// Try master as fallback
+	masterExists, masterErr := checkBranchExists(repo, "master")
+	if masterErr == nil && masterExists {
+		return "master", nil
+	}
+
+	// Log any errors encountered
+	if mainErr != nil {
+		log.Warnf("Failed to check if 'main' branch exists: %v", mainErr)
+	}
+	if masterErr != nil {
+		log.Warnf("Failed to check if 'master' branch exists: %v", masterErr)
+	}
+
+	// Neither main nor master exist or both checks failed
+	return "", fmt.Errorf("neither 'main' nor 'master' branch exists in repository")
+}
+
 // CreatePullRequest creates a new pull request on Azure DevOps
 func (a *AzureDevOpsAdapter) CreatePullRequest(
 	globalConfig *GlobalConfig,
@@ -72,10 +98,18 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 			if strings.HasPrefix(refName, "refs/heads/") {
 				targetBranch = strings.TrimPrefix(refName, "refs/heads/")
 			} else {
-				targetBranch = "main" // fallback
+				// HEAD doesn't point to a branch, try main/master fallback
+				targetBranch, err = determineFallbackBranch(repo)
+				if err != nil {
+					return fmt.Errorf("failed to determine target branch: %w", err)
+				}
 			}
 		} else {
-			targetBranch = "main" // fallback
+			// Failed to get HEAD, try main/master fallback
+			targetBranch, err = determineFallbackBranch(repo)
+			if err != nil {
+				return fmt.Errorf("failed to determine target branch: %w", err)
+			}
 		}
 	} else {
 		// DefaultBranch from API is in format "refs/heads/main", extract just the branch name
