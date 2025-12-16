@@ -10,12 +10,13 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	log "github.com/sirupsen/logrus"
 )
 
-const contextTimeout = 10
+const contextTimeout = 60 * time.Second
 
 var (
 	ErrUnknownURLType            = errors.New("unknown remote URL type")
@@ -171,6 +172,90 @@ func parseErrorResponse(body []byte, statusCode int) error {
 	)
 }
 
+// PullRequestListResponse represents the response from Azure DevOps PR list API.
+type PullRequestListResponse struct {
+	Value []struct {
+		PullRequestID int    `json:"pullRequestId"`
+		Status        string `json:"status"`
+		SourceRefName string `json:"sourceRefName"`
+	} `json:"value"`
+	Count int `json:"count"`
+}
+
+// PullRequestExists checks if a pull request already exists for the given source branch.
+func (a *AzureDevOpsAdapter) PullRequestExists(
+	globalConfig *GlobalConfig,
+	projectConfig *ProjectConfig,
+	repo *git.Repository,
+	sourceBranch string,
+) (bool, error) {
+	log.Infof("Checking if pull request exists for branch '%s'", sourceBranch)
+
+	personalAccessToken := globalConfig.AzureDevOpsAccessToken
+	if projectConfig.ProjectAccessToken != "" {
+		personalAccessToken = projectConfig.ProjectAccessToken
+	}
+
+	azureInfo, err := GetAzureDevOpsInfo(repo, personalAccessToken)
+	if err != nil {
+		return false, err
+	}
+
+	// Query for active PRs with the source branch
+	// API: GET https://dev.azure.com/{org}/{project}/_apis/git/repositories/{repo}/pullrequests?searchCriteria.sourceRefName=refs/heads/{branch}&searchCriteria.status=active
+	url := fmt.Sprintf(
+		"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/pullrequests?searchCriteria.sourceRefName=refs/heads/%s&searchCriteria.status=active&api-version=7.1",
+		azureInfo.OrganizationName,
+		azureInfo.ProjectName,
+		azureInfo.RepositoryID,
+		sourceBranch,
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+	defer cancel()
+
+	client := &http.Client{}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set(
+		"Authorization",
+		"Basic "+base64.StdEncoding.EncodeToString([]byte(":"+personalAccessToken)),
+	)
+
+	log.Infof("GET %s", url)
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("failed to check pull request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("failed to check pull request: %d - %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var prList PullRequestListResponse
+	err = json.Unmarshal(bodyBytes, &prList)
+	if err != nil {
+		return false, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if prList.Count > 0 {
+		log.Infof("Found %d active pull request(s) for branch '%s'", prList.Count, sourceBranch)
+		return true, nil
+	}
+
+	log.Infof("No active pull request found for branch '%s'", sourceBranch)
+	return false, nil
+}
+
 // CreatePullRequest creates a new pull request on Azure DevOps.
 func (a *AzureDevOpsAdapter) CreatePullRequest(
 	globalConfig *GlobalConfig,
@@ -222,6 +307,10 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 }
 
 // GetAzureDevOpsInfo extracts organization, project, and repo information from the remote URL.
+// Azure DevOps URL formats:
+// - HTTPS: https://dev.azure.com/{org}/{project}/_git/{repo}
+// - HTTPS (with username): https://{user}@dev.azure.com/{org}/{project}/_git/{repo}
+// - SSH: git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
 func GetAzureDevOpsInfo(
 	repo *git.Repository,
 	personalAccessToken string,
@@ -233,17 +322,31 @@ func GetAzureDevOpsInfo(
 	}
 
 	var organizationName, projectName, repositoryName string
-	parts := strings.Split(remoteURL, "/")
 
 	switch {
 	case strings.HasPrefix(remoteURL, "git@"):
+		// SSH format: git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
+		parts := strings.Split(remoteURL, "/")
+		if len(parts) < 4 {
+			return info, fmt.Errorf("%w: invalid SSH URL format: %s", ErrUnknownURLType, remoteURL)
+		}
 		organizationName = parts[1]
 		projectName = parts[2]
 		repositoryName = parts[3]
 	case strings.HasPrefix(remoteURL, "https://"):
+		// HTTPS format: https://dev.azure.com/{org}/{project}/_git/{repo}
+		// or with username: https://{user}@dev.azure.com/{org}/{project}/_git/{repo}
+		// Strip username if present (e.g., ZestSecurity@dev.azure.com -> dev.azure.com)
+		cleanURL := stripUsernameFromURL(remoteURL)
+		parts := strings.Split(cleanURL, "/")
+		// Expected parts: ["https:", "", "dev.azure.com", "{org}", "{project}", "_git", "{repo}"]
+		if len(parts) < 7 {
+			return info, fmt.Errorf("%w: invalid HTTPS URL format: %s", ErrUnknownURLType, remoteURL)
+		}
 		organizationName = parts[3]
 		projectName = parts[4]
-		repositoryName = parts[5]
+		// parts[5] is "_git", parts[6] is the repository name
+		repositoryName = parts[6]
 	default:
 		return info, fmt.Errorf("%w: %s", ErrUnknownURLType, remoteURL)
 	}
