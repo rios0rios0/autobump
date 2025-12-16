@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- corrected lint issues within the repository
+
 ## [2.15.1] - 2025-12-16
 
 ### Changed

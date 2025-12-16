@@ -14,9 +14,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/protocol/packp/capability"
 	"github.com/go-git/go-git/v5/plumbing/transport"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -210,94 +208,24 @@ func pushChangesHTTPS(
 }
 
 // getAuthMethods returns the authentication method to use for cloning/pushing changes.
+// It delegates to the appropriate adapter based on the service type.
 func getAuthMethods(
 	service ServiceType,
 	username string,
 	globalConfig *GlobalConfig,
 	projectConfig *ProjectConfig,
 ) ([]transport.AuthMethod, error) {
-	var authMethods []transport.AuthMethod
-
-	switch service { //nolint:exhaustive // Unimplemented services are handled by the default case
-	case GITLAB:
-		// TODO: this lines of code MUST be refactored to avoid code duplication
-		// project access token
-		if projectConfig.ProjectAccessToken != "" {
-			log.Infof("Using project access token to authenticate")
-			authMethods = append(authMethods, &http.BasicAuth{
-				Username: "oauth2",
-				Password: projectConfig.ProjectAccessToken,
-			})
-		}
-
-		// GitLab personal access token
-		if globalConfig.GitLabAccessToken != "" {
-			log.Infof("Using GitLab access token to authenticate")
-			authMethods = append(authMethods, &http.BasicAuth{
-				Username: username,
-				Password: globalConfig.GitLabAccessToken,
-			})
-		}
-
-		// CI job token
-		if globalConfig.GitLabCIJobToken != "" {
-			log.Infof("Using GitLab CI job token to authenticate")
-			authMethods = append(authMethods, &http.BasicAuth{
-				Username: "gitlab-ci-token",
-				Password: globalConfig.GitLabCIJobToken,
-			})
-		}
-	case AZUREDEVOPS:
-		// Azure DevOps requires capabilities multi_ack / multi_ack_detailed,
-		// which are not fully implemented in go-git and by default are included in
-		// transport.UnsupportedCapabilities. By replacing (not appending!) the list
-		// with only ThinPack, we allow go-git to use multi_ack for initial clones.
-		// See: https://github.com/go-git/go-git/blob/master/_examples/azure_devops/main.go
-		transport.UnsupportedCapabilities = []capability.Capability{ //nolint:reassign // required for Azure DevOps compatibility
-			capability.ThinPack,
-		}
-
-		// TODO: this lines of code MUST be refactored to avoid code duplication
-		// project access token
-		if projectConfig.ProjectAccessToken != "" {
-			log.Infof("Using project access token to authenticate")
-			authMethods = append(authMethods, &http.BasicAuth{
-				Username: "pat",
-				Password: projectConfig.ProjectAccessToken,
-			})
-		}
-
-		// Azure DevOps personal access token
-		if globalConfig.AzureDevOpsAccessToken != "" {
-			log.Infof("Using Azure DevOps access token to authenticate")
-			authMethods = append(authMethods, &http.BasicAuth{
-				Username: "pat",
-				Password: globalConfig.AzureDevOpsAccessToken,
-			})
-		}
-	case GITHUB:
-		// TODO: this lines of code MUST be refactored to avoid code duplication
-		// project access token
-		if projectConfig.ProjectAccessToken != "" {
-			log.Infof("Using project access token to authenticate")
-			authMethods = append(authMethods, &http.BasicAuth{
-				Username: "x-access-token",
-				Password: projectConfig.ProjectAccessToken,
-			})
-		}
-
-		// GitHub personal access token
-		if globalConfig.GitHubAccessToken != "" {
-			log.Infof("Using GitHub access token to authenticate")
-			authMethods = append(authMethods, &http.BasicAuth{
-				Username: "x-access-token",
-				Password: globalConfig.GitHubAccessToken,
-			})
-		}
-	default:
+	adapter := GetAdapterByServiceType(service)
+	if adapter == nil {
 		log.Errorf("No authentication mechanism implemented for service type '%v'", service)
 		return nil, ErrAuthNotImplemented
 	}
+
+	// Configure transport settings (e.g., Azure DevOps multi_ack workaround)
+	adapter.ConfigureTransport()
+
+	// Get authentication methods from the adapter
+	authMethods := adapter.GetAuthMethods(username, globalConfig, projectConfig)
 
 	if len(authMethods) == 0 {
 		log.Error("No authentication credentials found for any authentication method")
@@ -324,19 +252,19 @@ func getRemoteServiceType(repo *git.Repository) (ServiceType, error) {
 }
 
 // getServiceTypeByURL returns the type of the remote service (e.g. GitHub, GitLab) by URL.
+// It uses the adapter registry to determine the service type.
 func getServiceTypeByURL(remoteURL string) ServiceType {
-	// TODO: this could be better using the Adapter pattern
+	adapter := GetAdapterByURL(remoteURL)
+	if adapter != nil {
+		return adapter.GetServiceType()
+	}
+
+	// Fallback for services without adapters (Bitbucket, CodeCommit)
 	switch {
-	case strings.Contains(remoteURL, "gitlab.com"):
-		return GITLAB
-	case strings.Contains(remoteURL, "github.com"):
-		return GITHUB
 	case strings.Contains(remoteURL, "bitbucket.org"):
 		return BITBUCKET
 	case strings.Contains(remoteURL, "git-codecommit"):
 		return CODECOMMIT
-	case strings.Contains(remoteURL, "dev.azure.com"):
-		return AZUREDEVOPS
 	default:
 		return UNKNOWN
 	}

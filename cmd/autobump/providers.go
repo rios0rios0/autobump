@@ -5,6 +5,7 @@ import (
 )
 
 // PullRequestProvider defines the interface for creating pull/merge requests across different Git hosting providers.
+// This interface is implemented by GitServiceAdapter, allowing adapters to serve as PR providers.
 type PullRequestProvider interface {
 	CreatePullRequest(
 		globalConfig *GlobalConfig,
@@ -16,16 +17,11 @@ type PullRequestProvider interface {
 }
 
 // NewPullRequestProvider creates the appropriate provider based on the service type.
+// It uses the adapter registry to find the correct adapter.
 func NewPullRequestProvider(serviceType ServiceType) PullRequestProvider {
-	switch serviceType {
-	case GITHUB:
-		return &GitHubAdapter{}
-	case GITLAB:
-		return &GitLabAdapter{}
-	case AZUREDEVOPS:
-		return &AzureDevOpsAdapter{}
-	case UNKNOWN, BITBUCKET, CODECOMMIT:
-		return nil
+	adapter := GetAdapterByServiceType(serviceType)
+	if adapter != nil {
+		return adapter
 	}
 	return nil
 }
