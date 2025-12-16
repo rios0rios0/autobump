@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -32,7 +33,7 @@ type RepoContext struct {
 	head            *plumbing.Reference
 }
 
-// detectProjectLanguage detects the language of a project by looking at the files in the project
+// detectProjectLanguage detects the language of a project by looking at the files in the project.
 func detectProjectLanguage(globalConfig *GlobalConfig, cwd string) (string, error) {
 	log.Info("Detecting project language")
 
@@ -58,7 +59,7 @@ func detectProjectLanguage(globalConfig *GlobalConfig, cwd string) (string, erro
 	return "", ErrProjectLanguageNotRecognized
 }
 
-// detectBySpecialPatterns checks the project type using special file patterns
+// detectBySpecialPatterns checks the project type using special file patterns.
 func detectBySpecialPatterns(globalConfig *GlobalConfig, absPath string) string {
 	for language, config := range globalConfig.LanguagesConfig {
 		for _, pattern := range config.SpecialPatterns {
@@ -72,7 +73,7 @@ func detectBySpecialPatterns(globalConfig *GlobalConfig, absPath string) string 
 	return ""
 }
 
-// detectByExtensions checks the project type using file extensions
+// detectByExtensions checks the project type using file extensions.
 func detectByExtensions(globalConfig *GlobalConfig, absPath string) (string, error) {
 	var detected string
 	err := filepath.Walk(absPath, func(_ string, info os.FileInfo, err error) error {
@@ -96,7 +97,7 @@ func detectByExtensions(globalConfig *GlobalConfig, absPath string) (string, err
 	return detected, nil
 }
 
-// hasMatchingExtension checks if the file has one of the specified extensions
+// hasMatchingExtension checks if the file has one of the specified extensions.
 func hasMatchingExtension(filename string, extensions []string) bool {
 	for _, ext := range extensions {
 		if strings.HasSuffix(filename, "."+ext) {
@@ -106,7 +107,7 @@ func hasMatchingExtension(filename string, extensions []string) bool {
 	return false
 }
 
-// getGlobalGitConfig gets a Git option from local and global Git config
+// getGlobalGitConfig gets a Git option from local and global Git config.
 func getOptionFromConfig(cfg, globalCfg *config.Config, section string, option string) string {
 	opt := cfg.Raw.Section(section).Option(option)
 	if opt == "" {
@@ -115,7 +116,7 @@ func getOptionFromConfig(cfg, globalCfg *config.Config, section string, option s
 	return opt
 }
 
-// cloneRepo clones a remote repository into a temporary directory
+// cloneRepo clones a remote repository into a temporary directory.
 func cloneRepo(ctx *RepoContext) (string, error) {
 	// create a temporary directory
 	tmpDir, err := os.MkdirTemp("", "autobump-")
@@ -375,7 +376,7 @@ func commitChangesWithGPG(ctx *RepoContext) (plumbing.Hash, error) {
 		gpgKeyID := getOptionFromConfig(cfg, ctx.globalGitConfig, "user", "signingkey")
 
 		var gpgKeyReader *io.Reader
-		gpgKeyReader, err = getGpgKeyReader(gpgKeyID, ctx.globalConfig.GpgKeyPath)
+		gpgKeyReader, err = getGpgKeyReader(context.Background(), gpgKeyID, ctx.globalConfig.GpgKeyPath)
 		if err != nil {
 			return plumbing.Hash{}, err
 		}
@@ -442,7 +443,7 @@ func checkoutToMainBranch(ctx *RepoContext) error {
 	return nil
 }
 
-// addCurrentVersion adds the current version to the CHANGELOG file
+// addCurrentVersion adds the current version to the CHANGELOG file.
 func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 	lines, err := readLines(changelogPath)
 	if err != nil {
@@ -476,7 +477,7 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 // - updates the version file
 // - commits the changes
 // - pushes the branch to the remote repository
-// - creates a new merge request on GitLab
+// - creates a new merge request on GitLab.
 func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error {
 	// Initialize RepoContext
 	ctx := &RepoContext{
@@ -557,7 +558,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 	return nil
 }
 
-// iterateProjects iterates over the projects and processes them using the processRepo function
+// iterateProjects iterates over the projects and processes them using the processRepo function.
 func iterateProjects(globalConfig *GlobalConfig) error {
 	var err error
 	for _, project := range globalConfig.Projects {

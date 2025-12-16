@@ -51,7 +51,7 @@ var (
 	ErrConfigKeyMissingError    = errors.New("config keys missing")
 )
 
-// readConfig reads the config file and returns a GlobalConfig struct
+// readConfig reads the config file and returns a GlobalConfig struct.
 func readConfig(configPath string) (*GlobalConfig, error) {
 	data, err := readData(configPath)
 	if err != nil {
@@ -80,7 +80,7 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 	return globalConfig, nil
 }
 
-// readData reads data from a file or a URL
+// readData reads data from a file or a URL.
 func readData(configPath string) ([]byte, error) {
 	uri, err := url.Parse(configPath)
 	if err != nil || uri.Scheme == "" || uri.Host == "" {
@@ -96,7 +96,7 @@ func readData(configPath string) ([]byte, error) {
 	return downloadFile(configPath)
 }
 
-// handleTokenFile reads the token from a file if it exists and replaces the token string
+// handleTokenFile reads the token from a file if it exists and replaces the token string.
 func handleTokenFile(name string, token *string) {
 	if *token != "" {
 		if _, err := os.Stat(*token); !os.IsNotExist(err) {
@@ -114,7 +114,7 @@ func handleTokenFile(name string, token *string) {
 
 // decodeConfig decodes the config file and returns a GlobalConfig struct
 // If strict is true, unknown fields will cause an error (for user config)
-// If strict is false, unknown fields will be ignored (for default config)
+// If strict is false, unknown fields will be ignored (for default config).
 func decodeConfig(data []byte, strict bool) (*GlobalConfig, error) {
 	var globalConfig GlobalConfig
 
@@ -128,7 +128,7 @@ func decodeConfig(data []byte, strict bool) (*GlobalConfig, error) {
 	return &globalConfig, nil
 }
 
-// validateGlobalConfig validates the global config and reports missing keys and errors
+// validateGlobalConfig validates the global config and reports missing keys and errors.
 func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 	var missingKeys []string
 
@@ -166,7 +166,7 @@ func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 	return nil
 }
 
-// findConfigOnMissing finds the config file if not manually set
+// findConfigOnMissing finds the config file if not manually set.
 func findConfigOnMissing(configPath string) string {
 	if configPath == "" {
 		log.Info("No config file specified, searching for default locations")
@@ -187,7 +187,7 @@ func findConfigOnMissing(configPath string) string {
 	return configPath
 }
 
-// findConfig finds the config file in a list of default locations using globbing
+// findConfig finds the config file in a list of default locations using globbing.
 func findConfig() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {

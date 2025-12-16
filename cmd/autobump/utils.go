@@ -27,7 +27,7 @@ var (
 
 const downloadTimeout = 30
 
-// readLines reads a whole file into memory
+// readLines reads a whole file into memory.
 func readLines(filePath string) ([]string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -47,7 +47,7 @@ func readLines(filePath string) ([]string, error) {
 	return lines, nil
 }
 
-// writeLines writes the lines to the given file
+// writeLines writes the lines to the given file.
 func writeLines(filePath string, lines []string) error {
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -67,7 +67,7 @@ func writeLines(filePath string, lines []string) error {
 	return nil
 }
 
-// downloadFile downloads a file from the given URL
+// downloadFile downloads a file from the given URL.
 func downloadFile(url string) ([]byte, error) {
 	var data []byte
 
@@ -93,9 +93,10 @@ func downloadFile(url string) ([]byte, error) {
 	return data, nil
 }
 
-func exportGpgKey(gpgKeyID string, gpgKeyExportPath string) error {
+func exportGpgKey(ctx context.Context, gpgKeyID string, gpgKeyExportPath string) error {
 	// TODO: until today Go is not capable to read the key from the keyring (kbx)
-	cmd := exec.Command(
+	cmd := exec.CommandContext(
+		ctx,
 		"gpg",
 		"--export-secret-key",
 		"--output",
@@ -110,7 +111,7 @@ func exportGpgKey(gpgKeyID string, gpgKeyExportPath string) error {
 	return nil
 }
 
-func getGpgKeyReader(gpgKeyID string, gpgKeyPath string) (*io.Reader, error) {
+func getGpgKeyReader(ctx context.Context, gpgKeyID string, gpgKeyPath string) (*io.Reader, error) {
 	// if no key path is provided, try to read the key from the default location
 	if gpgKeyPath == "" {
 		gpgKeyPath = os.ExpandEnv(fmt.Sprintf("$HOME/.gnupg/autobump-%s.asc", gpgKeyID))
@@ -118,7 +119,7 @@ func getGpgKeyReader(gpgKeyID string, gpgKeyPath string) (*io.Reader, error) {
 
 		// if the key does not exist, try to export it from the keyring
 		if _, err := os.Stat(gpgKeyPath); os.IsNotExist(err) {
-			err = exportGpgKey(gpgKeyID, gpgKeyPath)
+			err = exportGpgKey(ctx, gpgKeyID, gpgKeyPath)
 			if err != nil {
 				return nil, err
 			}
@@ -136,7 +137,7 @@ func getGpgKeyReader(gpgKeyID string, gpgKeyPath string) (*io.Reader, error) {
 }
 
 // getGpgKey returns GPG key entity from the given path
-// it prompts for the passphrase to decrypt the key
+// it prompts for the passphrase to decrypt the key.
 func getGpgKey(gpgKeyReader io.Reader) (*openpgp.Entity, error) {
 	var err error
 

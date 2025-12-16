@@ -54,7 +54,7 @@ func getNextVersion(changelogPath string) (*semver.Version, error) {
 	return version, nil
 }
 
-// createChangelogIfNotExists create an empty CHANGELOG file if it doesn't exist
+// createChangelogIfNotExists create an empty CHANGELOG file if it doesn't exist.
 func createChangelogIfNotExists(changelogPath string) (bool, error) {
 	if _, err := os.Stat(changelogPath); os.IsNotExist(err) {
 		log.Warnf("Creating empty CHANGELOG file at '%s'.", changelogPath)
@@ -179,7 +179,7 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 	return &nextVersion, newContent, nil
 }
 
-// fixSectionHeadings fixes the section headings in the unreleased section
+// fixSectionHeadings fixes the section headings in the unreleased section.
 func fixSectionHeadings(unreleasedSection []string) {
 	re := regexp.MustCompile(`(?i)^\s*#+\s*(Added|Changed|Deprecated|Removed|Fixed|Security)`)
 	for i, line := range unreleasedSection {
@@ -190,7 +190,7 @@ func fixSectionHeadings(unreleasedSection []string) {
 	}
 }
 
-// makeNewSections creates new section contents for the beginning of the CHANGELOG file
+// makeNewSections creates new section contents for the beginning of the CHANGELOG file.
 func makeNewSections(
 	sections map[string]*[]string,
 	nextVersion semver.Version,
