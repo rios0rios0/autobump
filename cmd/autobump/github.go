@@ -10,10 +10,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// GitHubAdapter implements PullRequestProvider for GitHub
+const expectedURLParts = 2
+
+// GitHubAdapter implements PullRequestProvider for GitHub.
 type GitHubAdapter struct{}
 
-// CreatePullRequest creates a new pull request on GitHub
+// CreatePullRequest creates a new pull request on GitHub.
 func (g *GitHubAdapter) CreatePullRequest(
 	globalConfig *GlobalConfig,
 	projectConfig *ProjectConfig,
@@ -59,7 +61,7 @@ func (g *GitHubAdapter) CreatePullRequest(
 	return nil
 }
 
-// getGitHubRepoInfo extracts owner and repository name from the remote URL
+// getGitHubRepoInfo extracts owner and repository name from the remote URL.
 func getGitHubRepoInfo(repo *git.Repository) (string, string, error) {
 	remoteURL, err := getRemoteRepoURL(repo)
 	if err != nil {
@@ -74,7 +76,7 @@ func getGitHubRepoInfo(repo *git.Repository) (string, string, error) {
 	case strings.HasPrefix(trimmedURL, "git@github.com:"):
 		// SSH format: git@github.com:owner/repo
 		parts := strings.Split(strings.TrimPrefix(trimmedURL, "git@github.com:"), "/")
-		if len(parts) == 2 {
+		if len(parts) == expectedURLParts {
 			owner = parts[0]
 			repoName = parts[1]
 		} else {
@@ -83,7 +85,7 @@ func getGitHubRepoInfo(repo *git.Repository) (string, string, error) {
 	case strings.HasPrefix(trimmedURL, "https://github.com/"):
 		// HTTPS format: https://github.com/owner/repo
 		parts := strings.Split(strings.TrimPrefix(trimmedURL, "https://github.com/"), "/")
-		if len(parts) >= 2 {
+		if len(parts) >= expectedURLParts {
 			owner = parts[0]
 			repoName = parts[1]
 		} else {

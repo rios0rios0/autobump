@@ -61,7 +61,7 @@ func TestNewPullRequestProvider(t *testing.T) {
 	}
 }
 
-func TestPullRequestProviderImplementsInterface(t *testing.T) {
+func TestPullRequestProviderImplementsInterface(_ *testing.T) {
 	// Test that all adapters implement the PullRequestProvider interface
 	var _ PullRequestProvider = &GitHubAdapter{}
 	var _ PullRequestProvider = &GitLabAdapter{}
