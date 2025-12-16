@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	log "github.com/sirupsen/logrus"
-	"github.com/xanzy/go-gitlab"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 var (
@@ -16,10 +16,10 @@ var (
 	ErrCannotParseRepoURL = errors.New("unable to parse repository URL")
 )
 
-// GitLabAdapter implements PullRequestProvider for GitLab
+// GitLabAdapter implements PullRequestProvider for GitLab.
 type GitLabAdapter struct{}
 
-// CreatePullRequest creates a new merge request on GitLab
+// CreatePullRequest creates a new merge request on GitLab.
 func (g *GitLabAdapter) CreatePullRequest(
 	globalConfig *GlobalConfig,
 	projectConfig *ProjectConfig,
@@ -70,7 +70,7 @@ func (g *GitLabAdapter) CreatePullRequest(
 	return nil
 }
 
-// getRemoteRepoFullProjectName returns the full project name of the remote repository
+// getRemoteRepoFullProjectName returns the full project name of the remote repository.
 func getRemoteRepoFullProjectName(repo *git.Repository) (string, error) {
 	remoteURL, err := getRemoteRepoURL(repo)
 	if err != nil {

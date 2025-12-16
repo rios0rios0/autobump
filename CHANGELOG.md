@@ -18,24 +18,23 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added GitHub support for pull request creation with personal access tokens
-- added tests for various components
+- added a feature to enable pull request creation using personal access tokens with GitHub
+- added unit and integration tests for core components
 
 ### Changed
 
-- updated code to satisfy various golangci-lint linters
-- corrected configuration merging methods
-
-### Removed
-
-- removed redundant release pipeline
+- updated code to satisfy `golangci-lint` linters and improve code style
+- changed the configuration merging method to correctly merge nested fields and avoid unintended overwrites
 
 ### Fixed
 
-- fixed changelog section ordering: Fixed section now appears before Removed
-- fixed a null pointer dereference when opening repositories
-- fixed SAST tool warnings
-- fixed a typo in authentication method selection
+- fixed to ensure changelog section ordering: `Fixed` now appears before `Removed`
+- fixed to prevent nil pointer dereference when opening repositories
+- fixed typo in authentication method selection
+
+### Removed
+
+- remove redundant release pipeline
 
 ## [2.14.0] - 2024-03-01
 
@@ -66,7 +65,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
-- refactored the project to eliminate warnings from golangci-lint
+- refactored the project to remove warnings from golangci-lint
 
 ## [2.11.0] - 2024-01-23
 
@@ -123,7 +122,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added Go support with a nonexistent version file (because Go doesn't have a version file)
 - added support to Azure DevOps and support to have Azure DevOps token in a file
 - added the `.editorconfig` file to handle the file formatting
-- added the `CHANGELOG.md` file to make the releases clearer
+- added the `CHANGELOG.md` file to clarify the releases
 - added the feature to download the default configuration when the language detection is not present
 - added the feature to read the GPG keys from the default keyring
 - added the feature to read the configuration from the default repository URL
@@ -141,7 +140,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added feature to append next version to bump branch name
+- added feature to append the next version to bump branch name
 
 ### Changed
 
@@ -189,7 +188,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added support for reading GitLab tokens from file
+- added support for reading GitLab tokens from a file
 
 ## [1.2.1] - 2023-08-03
 
@@ -231,7 +230,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
-- fixed configuration finder conflicting with argument parser and corrected pipeline commands
+- fixed configuration finder conflicting with the argument parser and corrected pipeline commands
 
 ## [1.0.0] - 2023-06-30
 

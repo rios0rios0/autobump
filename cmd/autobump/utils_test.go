@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// generateTestGpgKey generates a new GPG key entity for testing purposes
+// generateTestGpgKey generates a new GPG key entity for testing purposes.
 func generateTestGpgKey() (*openpgp.Entity, error) {
 	config := &packet.Config{RSABits: 2048}
 	entity, err := openpgp.NewEntity(faker.Name(), faker.Sentence(), faker.Email(), config)
@@ -24,7 +24,7 @@ func generateTestGpgKey() (*openpgp.Entity, error) {
 	return entity, nil
 }
 
-// serializeGpgKeyToReader serializes the given GPG key entity into an io.Reader
+// serializeGpgKeyToReader serializes the given GPG key entity into an io.Reader.
 func serializeGpgKeyToReader(entity *openpgp.Entity) (io.Reader, error) {
 	var buf bytes.Buffer
 	armorWriter, err := armor.Encode(&buf, openpgp.PrivateKeyType, nil)
@@ -40,7 +40,7 @@ func serializeGpgKeyToReader(entity *openpgp.Entity) (io.Reader, error) {
 	return &buf, nil
 }
 
-// Test function for a valid GPG key
+// Test function for a valid GPG key.
 func TestGetGpgKey_ValidKey(t *testing.T) {
 	t.Parallel()
 
@@ -59,7 +59,7 @@ func TestGetGpgKey_ValidKey(t *testing.T) {
 	assert.NotNil(t, key)
 }
 
-// Test function for an invalid reader
+// Test function for an invalid reader.
 func TestGetGpgKey_InvalidReader(t *testing.T) {
 	t.Parallel()
 
