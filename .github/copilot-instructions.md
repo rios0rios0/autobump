@@ -14,6 +14,29 @@ Always reference these instructions first and fallback to search or bash command
 - Static analysis: `go vet ./...`
 - Tidy dependencies: `go mod tidy`
 
+### Linting and Testing with Pipeline Scripts
+This project uses the [rios0rios0/pipelines](https://github.com/rios0rios0/pipelines) repository for linting and testing:
+
+**To run tests:**
+```bash
+# Clone the pipelines repository if not already available
+git clone https://github.com/rios0rios0/pipelines.git /tmp/pipelines
+
+# Run tests using the pipeline script
+/tmp/pipelines/global/scripts/GoLang/test/run.sh
+```
+
+**To run linting:**
+```bash
+# Clone the pipelines repository if not already available
+git clone https://github.com/rios0rios0/pipelines.git /tmp/pipelines
+
+# Run linting using GoLangCI-Lint script
+/tmp/pipelines/global/scripts/GoLang/GoLangCI-Lint/run.sh
+```
+
+Note: The CI/CD pipeline automatically uses these scripts via the reusable workflow `rios0rios0/pipelines/.github/workflows/go-binary.yaml@main`.
+
 ### Running the Application
 - ALWAYS run the bootstrapping steps first.
 - Run via Makefile: `make run` 
@@ -46,7 +69,8 @@ After making changes, ALWAYS run through these validation steps:
 - Always run `go fmt ./...` before committing or CI will fail
 - Always run `go vet ./...` before committing 
 - Always run `go test ./...` to ensure no regressions
-- CI pipeline uses external golangci-lint which will fail if code style issues exist
+- For full linting validation, use the pipeline script: `/tmp/pipelines/global/scripts/GoLang/GoLangCI-Lint/run.sh`
+- CI pipeline uses the rios0rios0/pipelines repository scripts which will fail if code style or quality issues exist
 
 ## Build and Test Timing Expectations
 - **Build**: ~35 seconds first time, <1 second subsequent builds. NEVER CANCEL. Set timeout to 60+ minutes.
@@ -111,6 +135,7 @@ The tool auto-detects and supports:
 5. Run `make build` to ensure clean build
 6. Test binary with `./bin/autobump --help`
 7. Test functional operation with `./bin/autobump` (should fail at auth step)
+8. (Optional) Run full linting with pipeline script for final validation
 
 ### Common Development Commands
 ```bash
@@ -120,8 +145,12 @@ go mod download && make build && go test ./... && ./bin/autobump --help
 # Quick test cycle
 go test ./... && make build
 
-# Format and lint
+# Format and lint (quick)
 go fmt ./... && go vet ./...
+
+# Full lint using pipeline scripts
+git clone https://github.com/rios0rios0/pipelines.git /tmp/pipelines 2>/dev/null || true
+/tmp/pipelines/global/scripts/GoLang/GoLangCI-Lint/run.sh
 
 # Clean rebuild
 rm -rf bin && make build
