@@ -54,10 +54,13 @@ func (g *GitLabAdapter) PullRequestExists(
 
 	// List open merge requests for the source branch
 	state := "opened"
-	mrs, _, err := gitlabClient.MergeRequests.ListProjectMergeRequests(project.ID, &gitlab.ListProjectMergeRequestsOptions{
-		SourceBranch: &sourceBranch,
-		State:        &state,
-	})
+	mrs, _, err := gitlabClient.MergeRequests.ListProjectMergeRequests(
+		project.ID,
+		&gitlab.ListProjectMergeRequestsOptions{
+			SourceBranch: &sourceBranch,
+			State:        &state,
+		},
+	)
 	if err != nil {
 		return false, fmt.Errorf("failed to list merge requests: %w", err)
 	}

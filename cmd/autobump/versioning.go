@@ -39,7 +39,10 @@ func updateVersion(globalConfig *GlobalConfig, projectConfig *ProjectConfig) err
 
 	// If no version files configured for this language, just continue
 	if len(versionFiles) == 0 {
-		log.Warnf("No version files configured for language '%s', only changelog will be updated", projectConfig.Language)
+		log.Warnf(
+			"No version files configured for language '%s', only changelog will be updated",
+			projectConfig.Language,
+		)
 		return nil
 	}
 

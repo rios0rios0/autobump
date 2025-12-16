@@ -47,17 +47,30 @@ type GitServiceAdapter interface {
 	) (bool, error)
 }
 
-// gitServiceRegistry holds all registered Git service adapters.
-var gitServiceRegistry []GitServiceAdapter
+// GitServiceRegistry manages all registered Git service adapters.
+type GitServiceRegistry struct {
+	adapters []GitServiceAdapter
+}
 
-// RegisterGitServiceAdapter registers a new Git service adapter.
-func RegisterGitServiceAdapter(adapter GitServiceAdapter) {
-	gitServiceRegistry = append(gitServiceRegistry, adapter)
+// NewGitServiceRegistry creates a new registry with all available adapters pre-registered.
+func NewGitServiceRegistry() *GitServiceRegistry {
+	return &GitServiceRegistry{
+		adapters: []GitServiceAdapter{
+			&gitLabServiceAdapter{},
+			&azureDevOpsServiceAdapter{},
+			&gitHubServiceAdapter{},
+		},
+	}
+}
+
+// Register adds a new Git service adapter to the registry.
+func (r *GitServiceRegistry) Register(adapter GitServiceAdapter) {
+	r.adapters = append(r.adapters, adapter)
 }
 
 // GetAdapterByURL returns the appropriate adapter for the given URL.
-func GetAdapterByURL(url string) GitServiceAdapter {
-	for _, adapter := range gitServiceRegistry {
+func (r *GitServiceRegistry) GetAdapterByURL(url string) GitServiceAdapter {
+	for _, adapter := range r.adapters {
 		if adapter.MatchesURL(url) {
 			return adapter
 		}
@@ -66,8 +79,8 @@ func GetAdapterByURL(url string) GitServiceAdapter {
 }
 
 // GetAdapterByServiceType returns the adapter for the given service type.
-func GetAdapterByServiceType(serviceType ServiceType) GitServiceAdapter {
-	for _, adapter := range gitServiceRegistry {
+func (r *GitServiceRegistry) GetAdapterByServiceType(serviceType ServiceType) GitServiceAdapter {
+	for _, adapter := range r.adapters {
 		if adapter.GetServiceType() == serviceType {
 			return adapter
 		}
@@ -75,11 +88,26 @@ func GetAdapterByServiceType(serviceType ServiceType) GitServiceAdapter {
 	return nil
 }
 
-// init registers all available adapters.
-func init() {
-	RegisterGitServiceAdapter(&gitLabServiceAdapter{})
-	RegisterGitServiceAdapter(&azureDevOpsServiceAdapter{})
-	RegisterGitServiceAdapter(&gitHubServiceAdapter{})
+// defaultRegistry is the default registry instance used by global functions.
+// It is lazily initialized on first use.
+var defaultRegistry *GitServiceRegistry //nolint:gochecknoglobals // required for backward compatibility
+
+// getDefaultRegistry returns the default registry, initializing it if needed.
+func getDefaultRegistry() *GitServiceRegistry {
+	if defaultRegistry == nil {
+		defaultRegistry = NewGitServiceRegistry()
+	}
+	return defaultRegistry
+}
+
+// GetAdapterByURL returns the appropriate adapter for the given URL using the default registry.
+func GetAdapterByURL(url string) GitServiceAdapter {
+	return getDefaultRegistry().GetAdapterByURL(url)
+}
+
+// GetAdapterByServiceType returns the adapter for the given service type using the default registry.
+func GetAdapterByServiceType(serviceType ServiceType) GitServiceAdapter {
+	return getDefaultRegistry().GetAdapterByServiceType(serviceType)
 }
 
 // =============================================================================
@@ -255,4 +283,3 @@ func (a *gitHubServiceAdapter) GetAuthMethods(
 
 	return authMethods
 }
-
