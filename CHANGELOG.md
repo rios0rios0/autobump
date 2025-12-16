@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.15.0] - 2025-12-16
+
 ### Added
 
 - added a feature to enable pull request creation using personal access tokens with GitHub
