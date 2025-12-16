@@ -123,8 +123,9 @@ func stripUsernameFromURL(rawURL string) string {
 		return rawURL
 	}
 
+	const skipping = "://"
 	// Find the @ symbol that separates username from host
-	schemeEnd := strings.Index(rawURL, "://") + 3
+	schemeEnd := strings.Index(rawURL, skipping) + len(skipping)
 	atIndex := strings.Index(rawURL[schemeEnd:], "@")
 	if atIndex == -1 {
 		return rawURL
@@ -142,12 +143,14 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 		return "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 
+	// Get the adapter for this URL to handle service-specific logic
+	adapter := GetAdapterByURL(ctx.projectConfig.Path)
 	service := getServiceTypeByURL(ctx.projectConfig.Path)
 
-	// For Azure DevOps, strip the username from the URL to avoid conflicts with BasicAuth
+	// Prepare the clone URL (adapters may strip embedded credentials, etc.)
 	cloneURL := ctx.projectConfig.Path
-	if service == AZUREDEVOPS {
-		cloneURL = stripUsernameFromURL(ctx.projectConfig.Path)
+	if adapter != nil {
+		cloneURL = adapter.PrepareCloneURL(ctx.projectConfig.Path)
 	}
 
 	// setup the clone options
@@ -253,15 +256,16 @@ func shouldBumpProject(ctx *RepoContext, changelogPath string) (bool, error) {
 	return true, nil
 }
 
-func ensureProjectLanguage(ctx *RepoContext) error {
+func ensureProjectLanguage(ctx *RepoContext) {
 	if ctx.projectConfig.Language == "" {
 		projectLanguage, err := detectProjectLanguage(ctx.globalConfig, ctx.projectConfig.Path)
 		if err != nil {
-			return err
+			log.Warnf("Could not detect project language: %v, will only update changelog", err)
+			ctx.projectConfig.Language = ""
+			return
 		}
 		ctx.projectConfig.Language = projectLanguage
 	}
-	return nil
 }
 
 func setupRepo(ctx *RepoContext) error {
@@ -399,13 +403,13 @@ func commitChangesWithGPG(ctx *RepoContext) (plumbing.Hash, error) {
 		log.Info("Signing commit with GPG key")
 		gpgKeyID := getOptionFromConfig(cfg, ctx.globalGitConfig, "user", "signingkey")
 
-		var gpgKeyReader *io.Reader
+		var gpgKeyReader io.Reader
 		gpgKeyReader, err = getGpgKeyReader(context.Background(), gpgKeyID, ctx.globalConfig.GpgKeyPath)
 		if err != nil {
 			return plumbing.Hash{}, err
 		}
 
-		signKey, err = getGpgKey(*gpgKeyReader)
+		signKey, err = getGpgKey(gpgKeyReader)
 		if err != nil {
 			return plumbing.Hash{}, err
 		}
@@ -548,11 +552,8 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 		return nil
 	}
 
-	// Ensure the project language is detected
-	err = ensureProjectLanguage(ctx)
-	if err != nil {
-		return err
-	}
+	// Ensure the project language is detected (optional - will only update changelog if unknown)
+	ensureProjectLanguage(ctx)
 
 	// Create and switch to bump branch
 	branchName, err := createBumpBranch(ctx, changelogPath)

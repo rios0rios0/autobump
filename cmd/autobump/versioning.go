@@ -18,7 +18,14 @@ var (
 
 // updateVersion updates the version in the version files.
 // This function fails fast upon the first error.
+// If the language is empty (unknown), it skips version file updates and only updates the changelog.
 func updateVersion(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error {
+	// If language is empty/unknown, skip version file updates
+	if projectConfig.Language == "" {
+		log.Info("Language is unknown, skipping version file updates (only changelog will be updated)")
+		return nil
+	}
+
 	versionFiles, err := getVersionFiles(globalConfig, projectConfig)
 	if err != nil {
 		return err
@@ -71,6 +78,11 @@ func getVersionFiles(
 	globalConfig *GlobalConfig,
 	projectConfig *ProjectConfig,
 ) ([]VersionFile, error) {
+	// If language is empty/unknown, return empty list
+	if projectConfig.Language == "" {
+		return []VersionFile{}, nil
+	}
+
 	if projectConfig.Name == "" {
 		projectConfig.Name = filepath.Base(projectConfig.Path)
 	}

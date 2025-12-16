@@ -111,7 +111,7 @@ func exportGpgKey(ctx context.Context, gpgKeyID string, gpgKeyExportPath string)
 	return nil
 }
 
-func getGpgKeyReader(ctx context.Context, gpgKeyID string, gpgKeyPath string) (*io.Reader, error) {
+func getGpgKeyReader(ctx context.Context, gpgKeyID string, gpgKeyPath string) (io.Reader, error) {
 	// if no key path is provided, try to read the key from the default location
 	if gpgKeyPath == "" {
 		gpgKeyPath = os.ExpandEnv(fmt.Sprintf("$HOME/.gnupg/autobump-%s.asc", gpgKeyID))
@@ -126,14 +126,14 @@ func getGpgKeyReader(ctx context.Context, gpgKeyID string, gpgKeyPath string) (*
 		}
 	}
 
-	gpgKeyFile, err := os.Open(gpgKeyPath)
+	// Read the entire file content into memory to avoid file handle issues
+	// This is necessary because the caller may use the reader after this function returns
+	gpgKeyData, err := os.ReadFile(gpgKeyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open private key file: %w", err)
+		return nil, fmt.Errorf("failed to read private key file: %w", err)
 	}
-	defer gpgKeyFile.Close()
 
-	reader := io.Reader(gpgKeyFile)
-	return &reader, nil
+	return strings.NewReader(string(gpgKeyData)), nil
 }
 
 // getGpgKey returns GPG key entity from the given path
