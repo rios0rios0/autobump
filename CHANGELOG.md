@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.16.0] - 2025-12-16
+
 ### Added
 
 - added `PullRequestExists` method to Azure DevOps, GitLab, and GitHub adapters
@@ -24,7 +26,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - changed branch existence check to include remote branches (not just local)
-- changed changelog processing to bump directly to 1.0.0 when no previous version exists (instead of calculating)
+- changed changelog processing to bump directly to `1.0.0` when no previous version exists (instead of calculating)
 - changed version file handling to warn instead of error when no version files are found for detected language
 - corrected lint issues within the repository
 
