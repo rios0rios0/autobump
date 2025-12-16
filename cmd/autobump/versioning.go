@@ -18,10 +18,29 @@ var (
 
 // updateVersion updates the version in the version files.
 // This function fails fast upon the first error.
+// If the language is empty (unknown), it skips version file updates and only updates the changelog.
+// If no version files are found for a detected language, it logs a warning and continues.
 func updateVersion(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error {
+	// If language is empty/unknown, skip version file updates
+	if projectConfig.Language == "" {
+		log.Info("Language is unknown, skipping version file updates (only changelog will be updated)")
+		return nil
+	}
+
 	versionFiles, err := getVersionFiles(globalConfig, projectConfig)
 	if err != nil {
+		// If language config not found, just warn and continue with changelog only
+		if errors.Is(err, ErrLanguageNotFoundInConfig) {
+			log.Warnf("Language '%s' not found in config, skipping version file updates", projectConfig.Language)
+			return nil
+		}
 		return err
+	}
+
+	// If no version files configured for this language, just continue
+	if len(versionFiles) == 0 {
+		log.Warnf("No version files configured for language '%s', only changelog will be updated", projectConfig.Language)
+		return nil
 	}
 
 	oneVersionFileExists := false
@@ -58,8 +77,9 @@ func updateVersion(globalConfig *GlobalConfig, projectConfig *ProjectConfig) err
 		}
 	}
 
+	// If no version files exist, just warn and continue (don't fail)
 	if !oneVersionFileExists {
-		return fmt.Errorf("%w: %s", ErrNoVersionFileFound, projectConfig.Language)
+		log.Warnf("No version files found for language '%s', only changelog will be updated", projectConfig.Language)
 	}
 
 	return nil
@@ -71,6 +91,11 @@ func getVersionFiles(
 	globalConfig *GlobalConfig,
 	projectConfig *ProjectConfig,
 ) ([]VersionFile, error) {
+	// If language is empty/unknown, return empty list
+	if projectConfig.Language == "" {
+		return []VersionFile{}, nil
+	}
+
 	if projectConfig.Name == "" {
 		projectConfig.Name = filepath.Base(projectConfig.Path)
 	}
