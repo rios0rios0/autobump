@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test changelog with Fixed section to reproduce the issue
+// Test changelog with Fixed section to reproduce the issue.
 const changelogWithFixed = `# Changelog
 
 All notable changes to this project will be documented in this file.
@@ -68,10 +68,10 @@ func TestProcessChangelogWithFixedSection(t *testing.T) {
 	// Check the order: Fixed should come before Removed according to user requirements
 	fixedIndex := strings.Index(newChangelogString, "### Fixed")
 	removedIndex := strings.Index(newChangelogString, "### Removed")
-	assert.True(t, fixedIndex < removedIndex, "Fixed section should come before Removed section")
+	assert.Less(t, fixedIndex, removedIndex, "Fixed section should come before Removed section")
 }
 
-// Test with malformed headers to see if that causes the issue
+// Test with malformed headers to see if that causes the issue.
 const changelogWithMalformedHeaders = `# Changelog
 
 All notable changes to this project will be documented in this file.
@@ -124,7 +124,7 @@ func TestProcessChangelogWithMalformedHeaders(t *testing.T) {
 	assert.Contains(t, newChangelogString, "fixed SAST tool warnings")
 }
 
-// Test with all sections to ensure complete ordering is correct
+// Test with all sections to ensure complete ordering is correct.
 const changelogWithAllSections = `# Changelog
 
 All notable changes to this project will be documented in this file.
@@ -196,9 +196,9 @@ func TestProcessChangelogWithAllSections(t *testing.T) {
 	removedIndex := strings.Index(newChangelogString, "### Removed")
 	securityIndex := strings.Index(newChangelogString, "### Security")
 
-	assert.True(t, addedIndex < changedIndex, "Added should come before Changed")
-	assert.True(t, changedIndex < deprecatedIndex, "Changed should come before Deprecated")
-	assert.True(t, deprecatedIndex < fixedIndex, "Deprecated should come before Fixed")
-	assert.True(t, fixedIndex < removedIndex, "Fixed should come before Removed")
-	assert.True(t, removedIndex < securityIndex, "Removed should come before Security")
+	assert.Less(t, addedIndex, changedIndex, "Added should come before Changed")
+	assert.Less(t, changedIndex, deprecatedIndex, "Changed should come before Deprecated")
+	assert.Less(t, deprecatedIndex, fixedIndex, "Deprecated should come before Fixed")
+	assert.Less(t, fixedIndex, removedIndex, "Fixed should come before Removed")
+	assert.Less(t, removedIndex, securityIndex, "Removed should come before Security")
 }

@@ -4,7 +4,7 @@ import (
 	"github.com/go-git/go-git/v5"
 )
 
-// PullRequestProvider defines the interface for creating pull/merge requests across different Git hosting providers
+// PullRequestProvider defines the interface for creating pull/merge requests across different Git hosting providers.
 type PullRequestProvider interface {
 	CreatePullRequest(
 		globalConfig *GlobalConfig,
@@ -15,7 +15,7 @@ type PullRequestProvider interface {
 	) error
 }
 
-// NewPullRequestProvider creates the appropriate provider based on the service type
+// NewPullRequestProvider creates the appropriate provider based on the service type.
 func NewPullRequestProvider(serviceType ServiceType) PullRequestProvider {
 	switch serviceType {
 	case GITHUB:
@@ -24,7 +24,8 @@ func NewPullRequestProvider(serviceType ServiceType) PullRequestProvider {
 		return &GitLabAdapter{}
 	case AZUREDEVOPS:
 		return &AzureDevOpsAdapter{}
-	default:
+	case UNKNOWN, BITBUCKET, CODECOMMIT:
 		return nil
 	}
+	return nil
 }

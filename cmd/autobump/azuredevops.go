@@ -22,7 +22,7 @@ var (
 	ErrFailedToCreatePullRequest = errors.New("failed to create pull request")
 )
 
-// AzureDevOpsInfo struct to hold organization, project, and repo info
+// AzureDevOpsInfo struct to hold organization, project, and repo info.
 type AzureDevOpsInfo struct {
 	OrganizationName string
 	ProjectName      string
@@ -30,16 +30,16 @@ type AzureDevOpsInfo struct {
 	DefaultBranch    string
 }
 
-// RepoInfo struct to hold repository info from Azure DevOps API
+// RepoInfo struct to hold repository info from Azure DevOps API.
 type RepoInfo struct {
 	ID            string `json:"id"`
 	DefaultBranch string `json:"defaultBranch"`
 }
 
-// AzureDevOpsAdapter implements PullRequestProvider for Azure DevOps
+// AzureDevOpsAdapter implements PullRequestProvider for Azure DevOps.
 type AzureDevOpsAdapter struct{}
 
-// determineFallbackBranch determines the target branch by checking if main or master exist
+// determineFallbackBranch determines the target branch by checking if main or master exist.
 func determineFallbackBranch(repo *git.Repository) (string, error) {
 	// Try main first
 	mainExists, mainErr := checkBranchExists(repo, "main")
@@ -62,92 +62,63 @@ func determineFallbackBranch(repo *git.Repository) (string, error) {
 	}
 
 	// Neither main nor master exist or both checks failed
-	return "", fmt.Errorf("neither 'main' nor 'master' branch exists in repository")
+	return "", errors.New("neither 'main' nor 'master' branch exists in repository")
 }
 
-// CreatePullRequest creates a new pull request on Azure DevOps
-func (a *AzureDevOpsAdapter) CreatePullRequest(
-	globalConfig *GlobalConfig,
-	projectConfig *ProjectConfig,
-	repo *git.Repository,
-	sourceBranch string,
-	newVersion string,
-) error {
-	log.Info("Creating Azure DevOps pull request")
-
-	var personalAccessToken string
-	if projectConfig.ProjectAccessToken != "" {
-		personalAccessToken = projectConfig.ProjectAccessToken
-	} else {
-		personalAccessToken = globalConfig.AzureDevOpsAccessToken
+// determineTargetBranch determines the target branch for a pull request.
+// It uses the default branch from Azure DevOps API, falls back to repository HEAD,
+// or tries main/master as a last resort.
+func determineTargetBranch(repo *git.Repository, defaultBranch string) (string, error) {
+	// If we have a default branch from the API, use it (strip refs/heads/ prefix if present)
+	if defaultBranch != "" {
+		return strings.TrimPrefix(defaultBranch, "refs/heads/"), nil
 	}
 
-	azureInfo, err := GetAzureDevOpsInfo(repo, personalAccessToken)
+	// Try to get default branch from repository HEAD
+	head, err := repo.Head()
 	if err != nil {
-		return err
+		// Failed to get HEAD, try main/master fallback
+		return determineFallbackBranch(repo)
 	}
 
-	// Determine target branch - use default branch from repository, fallback to main/master
-	targetBranch := azureInfo.DefaultBranch
-	if targetBranch == "" {
-		// Try to get default branch from repository HEAD
-		head, err := repo.Head()
-		if err == nil {
-			// Extract branch name from ref (e.g., "refs/heads/main" -> "main")
-			refName := head.Name().String()
-			if strings.HasPrefix(refName, "refs/heads/") {
-				targetBranch = strings.TrimPrefix(refName, "refs/heads/")
-			} else {
-				// HEAD doesn't point to a branch, try main/master fallback
-				targetBranch, err = determineFallbackBranch(repo)
-				if err != nil {
-					return fmt.Errorf("failed to determine target branch: %w", err)
-				}
-			}
-		} else {
-			// Failed to get HEAD, try main/master fallback
-			targetBranch, err = determineFallbackBranch(repo)
-			if err != nil {
-				return fmt.Errorf("failed to determine target branch: %w", err)
-			}
-		}
-	} else {
-		// DefaultBranch from API is in format "refs/heads/main", extract just the branch name
-		if strings.HasPrefix(targetBranch, "refs/heads/") {
-			targetBranch = strings.TrimPrefix(targetBranch, "refs/heads/")
-		}
+	// Extract branch name from ref (e.g., "refs/heads/main" -> "main")
+	refName := head.Name().String()
+	if strings.HasPrefix(refName, "refs/heads/") {
+		return strings.TrimPrefix(refName, "refs/heads/"), nil
 	}
 
-	// Ensure targetRefName is in correct format
+	// HEAD doesn't point to a branch, try main/master fallback
+	return determineFallbackBranch(repo)
+}
+
+// buildPullRequestPayload constructs the payload for creating a pull request.
+func buildPullRequestPayload(sourceBranch, targetBranch, newVersion string) map[string]interface{} {
 	targetRefName := targetBranch
 	if !strings.HasPrefix(targetRefName, "refs/heads/") {
 		targetRefName = "refs/heads/" + targetRefName
 	}
 
-	// TODO: refactor to use this library: https://github.com/microsoft/azure-devops-go-api
-	url := fmt.Sprintf(
-		"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/pullrequests?api-version=7.1",
-		azureInfo.OrganizationName,
-		azureInfo.ProjectName,
-		azureInfo.RepositoryID,
-	)
 	prTitle := "chore(bump): bumped version to " + newVersion
-	prDescription := fmt.Sprintf("Automated version bump to %s\n\nThis PR was automatically created by AutoBump.", newVersion)
-	payload := map[string]interface{}{
+	prDescription := fmt.Sprintf(
+		"Automated version bump to %s\n\nThis PR was automatically created by AutoBump.",
+		newVersion,
+	)
+
+	return map[string]interface{}{
 		"sourceRefName": "refs/heads/" + sourceBranch,
 		"targetRefName": targetRefName,
 		"title":         prTitle,
 		"description":   prDescription,
 	}
+}
 
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
-	defer cancel()
-
+// sendPullRequestRequest sends the HTTP request to create a pull request and handles the response.
+func sendPullRequestRequest(
+	ctx context.Context,
+	url string,
+	payloadBytes []byte,
+	personalAccessToken string,
+) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -173,31 +144,84 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		// Try to parse error response for better error message
-		var errorResponse map[string]interface{}
-		if json.Unmarshal(body, &errorResponse) == nil {
-			if message, ok := errorResponse["message"].(string); ok {
-				return fmt.Errorf(
-					"%w: %d - %s",
-					ErrFailedToCreatePullRequest,
-					resp.StatusCode,
-					message,
-				)
-			}
+		return parseErrorResponse(body, resp.StatusCode)
+	}
+
+	return nil
+}
+
+// parseErrorResponse extracts error message from Azure DevOps API response.
+func parseErrorResponse(body []byte, statusCode int) error {
+	var errorResponse map[string]interface{}
+	if json.Unmarshal(body, &errorResponse) == nil {
+		if message, ok := errorResponse["message"].(string); ok {
+			return fmt.Errorf(
+				"%w: %d - %s",
+				ErrFailedToCreatePullRequest,
+				statusCode,
+				message,
+			)
 		}
-		return fmt.Errorf(
-			"%w: %d - %s",
-			ErrFailedToCreatePullRequest,
-			resp.StatusCode,
-			string(body),
-		)
+	}
+	return fmt.Errorf(
+		"%w: %d - %s",
+		ErrFailedToCreatePullRequest,
+		statusCode,
+		string(body),
+	)
+}
+
+// CreatePullRequest creates a new pull request on Azure DevOps.
+func (a *AzureDevOpsAdapter) CreatePullRequest(
+	globalConfig *GlobalConfig,
+	projectConfig *ProjectConfig,
+	repo *git.Repository,
+	sourceBranch string,
+	newVersion string,
+) error {
+	log.Info("Creating Azure DevOps pull request")
+
+	personalAccessToken := globalConfig.AzureDevOpsAccessToken
+	if projectConfig.ProjectAccessToken != "" {
+		personalAccessToken = projectConfig.ProjectAccessToken
+	}
+
+	azureInfo, err := GetAzureDevOpsInfo(repo, personalAccessToken)
+	if err != nil {
+		return err
+	}
+
+	targetBranch, err := determineTargetBranch(repo, azureInfo.DefaultBranch)
+	if err != nil {
+		return fmt.Errorf("failed to determine target branch: %w", err)
+	}
+
+	// TODO: refactor to use this library: https://github.com/microsoft/azure-devops-go-api
+	url := fmt.Sprintf(
+		"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/pullrequests?api-version=7.1",
+		azureInfo.OrganizationName,
+		azureInfo.ProjectName,
+		azureInfo.RepositoryID,
+	)
+
+	payload := buildPullRequestPayload(sourceBranch, targetBranch, newVersion)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+	defer cancel()
+
+	if err = sendPullRequestRequest(ctx, url, payloadBytes, personalAccessToken); err != nil {
+		return err
 	}
 
 	log.Info("Successfully created Azure DevOps pull request")
 	return nil
 }
 
-// GetAzureDevOpsInfo extracts organization, project, and repo information from the remote URL
+// GetAzureDevOpsInfo extracts organization, project, and repo information from the remote URL.
 func GetAzureDevOpsInfo(
 	repo *git.Repository,
 	personalAccessToken string,
@@ -273,7 +297,7 @@ func GetAzureDevOpsInfo(
 	}
 
 	if repoInfo.ID == "" {
-		return info, fmt.Errorf("repository ID not found in response")
+		return info, errors.New("repository ID not found in response")
 	}
 
 	return AzureDevOpsInfo{

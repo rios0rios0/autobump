@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetGitHubRepoInfo(t *testing.T) {
@@ -77,7 +78,7 @@ func TestGetGitHubRepoInfo(t *testing.T) {
 			if tt.shouldError {
 				assert.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.expected.owner, owner)
 				assert.Equal(t, tt.expected.repo, repo)
 			}
@@ -131,7 +132,7 @@ func TestGitHubAuthMethods(t *testing.T) {
 
 	authMethods, err := getAuthMethods(GITHUB, "testuser", globalConfig, projectConfig)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Len(t, authMethods, 2) // Both project and global tokens should be included
 
 	// Verify the auth methods are BasicAuth with correct username
@@ -142,7 +143,7 @@ func TestGitHubAuthMethods(t *testing.T) {
 	}
 }
 
-// Helper function to test URL parsing logic
+// Helper function to test URL parsing logic.
 func parseGitHubURL(remoteURL string) (string, string, error) {
 	// This is the same logic as in getGitHubRepoInfo but extracted for testing
 	// Remove .git if it exists
@@ -156,7 +157,7 @@ func parseGitHubURL(remoteURL string) (string, string, error) {
 	case strings.HasPrefix(trimmedURL, "git@github.com:"):
 		// SSH format: git@github.com:owner/repo
 		parts := strings.Split(strings.TrimPrefix(trimmedURL, "git@github.com:"), "/")
-		if len(parts) == 2 {
+		if len(parts) == expectedURLParts {
 			owner = parts[0]
 			repoName = parts[1]
 		} else {
@@ -165,7 +166,7 @@ func parseGitHubURL(remoteURL string) (string, string, error) {
 	case strings.HasPrefix(trimmedURL, "https://github.com/"):
 		// HTTPS format: https://github.com/owner/repo
 		parts := strings.Split(strings.TrimPrefix(trimmedURL, "https://github.com/"), "/")
-		if len(parts) >= 2 {
+		if len(parts) >= expectedURLParts {
 			owner = parts[0]
 			repoName = parts[1]
 		} else {

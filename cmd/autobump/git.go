@@ -48,8 +48,8 @@ var (
 	ErrNoTagsFound        = errors.New("no tags found in Git history")
 )
 
-// getGlobalGitConfig reads the global git configuration file and returns a config.Config object
-func getGlobalGitConfig() (cfg *config.Config, err error) {
+// getGlobalGitConfig reads the global git configuration file and returns a config.Config object.
+func getGlobalGitConfig() (*config.Config, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("could not get user home directory: %w", err)
@@ -61,14 +61,12 @@ func getGlobalGitConfig() (cfg *config.Config, err error) {
 		return nil, fmt.Errorf("could not read global git config: %w", err)
 	}
 
-	cfg = config.NewConfig()
+	cfg := config.NewConfig()
 
 	// Recover from panics in go-git's Config.Unmarshal (known bug with certain git configs)
 	defer func() {
 		if r := recover(); r != nil {
 			log.Warnf("go-git panicked while parsing git config (known bug), using minimal config: %v", r)
-			cfg = config.NewConfig()
-			err = nil
 		}
 	}()
 
@@ -79,7 +77,7 @@ func getGlobalGitConfig() (cfg *config.Config, err error) {
 	return cfg, nil
 }
 
-// openRepo opens a git repository at the given path
+// openRepo opens a git repository at the given path.
 func openRepo(projectPath string) (*git.Repository, error) {
 	log.Infof("Opening repository at %s", projectPath)
 	repo, err := git.PlainOpen(projectPath)
@@ -89,7 +87,7 @@ func openRepo(projectPath string) (*git.Repository, error) {
 	return repo, nil
 }
 
-// createAndSwitchBranch checks if a given Git branch exists
+// createAndSwitchBranch checks if a given Git branch exists.
 func checkBranchExists(repo *git.Repository, branchName string) (bool, error) {
 	refs, err := repo.References()
 	if err != nil {
@@ -109,7 +107,7 @@ func checkBranchExists(repo *git.Repository, branchName string) (bool, error) {
 	return branchExists, nil
 }
 
-// createAndSwitchBranch creates a new branch and switches to it
+// createAndSwitchBranch creates a new branch and switches to it.
 func createAndSwitchBranch(
 	repo *git.Repository,
 	workTree *git.Worktree,
@@ -126,7 +124,7 @@ func createAndSwitchBranch(
 	return checkoutBranch(workTree, branchName)
 }
 
-// checkoutBranch switches to the given branch
+// checkoutBranch switches to the given branch.
 func checkoutBranch(w *git.Worktree, branchName string) error {
 	log.Infof("Switching to branch '%s'", branchName)
 	err := w.Checkout(&git.CheckoutOptions{
@@ -138,7 +136,7 @@ func checkoutBranch(w *git.Worktree, branchName string) error {
 	return nil
 }
 
-// commitChanges commits the changes in the given worktree
+// commitChanges commits the changes in the given worktree.
 func commitChanges(
 	workTree *git.Worktree,
 	commitMessage string,
@@ -159,7 +157,7 @@ func commitChanges(
 	return commit, nil
 }
 
-// pushChangesSSH pushes the changes to the remote repository over SSH
+// pushChangesSSH pushes the changes to the remote repository over SSH.
 func pushChangesSSH(repo *git.Repository, refSpec config.RefSpec) error {
 	log.Info("Pushing local changes to remote repository through SSH")
 	err := repo.Push(&git.PushOptions{
@@ -171,7 +169,7 @@ func pushChangesSSH(repo *git.Repository, refSpec config.RefSpec) error {
 	return nil
 }
 
-// pushChangesHTTPS pushes the changes to the remote repository over HTTPS
+// pushChangesHTTPS pushes the changes to the remote repository over HTTPS.
 func pushChangesHTTPS(
 	repo *git.Repository,
 	repoCfg *config.Config,
@@ -211,7 +209,7 @@ func pushChangesHTTPS(
 	return nil
 }
 
-// getAuthMethods returns the authentication method to use for cloning/pushing changes
+// getAuthMethods returns the authentication method to use for cloning/pushing changes.
 func getAuthMethods(
 	service ServiceType,
 	username string,
@@ -251,9 +249,10 @@ func getAuthMethods(
 		}
 	case AZUREDEVOPS:
 		log.Infof("Using Azure DevOps access token to authenticate")
-		transport.UnsupportedCapabilities = []capability.Capability{
+		transport.UnsupportedCapabilities = append( //nolint:reassign // required to disable ThinPack for Azure DevOps
+			transport.UnsupportedCapabilities,
 			capability.ThinPack,
-		}
+		)
 		authMethods = append(authMethods, &http.BasicAuth{
 			Username: username,
 			Password: globalConfig.AzureDevOpsAccessToken,
@@ -290,7 +289,7 @@ func getAuthMethods(
 	return authMethods, nil
 }
 
-// getRemoteServiceType returns the type of the remote service (e.g. GitHub, GitLab)
+// getRemoteServiceType returns the type of the remote service (e.g. GitHub, GitLab).
 func getRemoteServiceType(repo *git.Repository) (ServiceType, error) {
 	cfg, err := repo.Config()
 	if err != nil {
@@ -306,7 +305,7 @@ func getRemoteServiceType(repo *git.Repository) (ServiceType, error) {
 	return getServiceTypeByURL(firstRemote), nil
 }
 
-// getServiceTypeByURL returns the type of the remote service (e.g. GitHub, GitLab) by URL
+// getServiceTypeByURL returns the type of the remote service (e.g. GitHub, GitLab) by URL.
 func getServiceTypeByURL(remoteURL string) ServiceType {
 	// TODO: this could be better using the Adapter pattern
 	switch {
@@ -325,7 +324,7 @@ func getServiceTypeByURL(remoteURL string) ServiceType {
 	}
 }
 
-// getRemoteRepoURL returns the URL of the remote repository
+// getRemoteRepoURL returns the URL of the remote repository.
 func getRemoteRepoURL(repo *git.Repository) (string, error) {
 	remote, err := repo.Remote("origin")
 	if err != nil {
@@ -339,7 +338,7 @@ func getRemoteRepoURL(repo *git.Repository) (string, error) {
 	return "", ErrNoRemoteURL
 }
 
-// getAmountCommits returns the number of commits in the repository
+// getAmountCommits returns the number of commits in the repository.
 func getAmountCommits(repo *git.Repository) (int, error) {
 	commits, err := repo.Log(&git.LogOptions{})
 	if err != nil {
@@ -358,7 +357,7 @@ func getAmountCommits(repo *git.Repository) (int, error) {
 	return amountCommits, nil
 }
 
-// getLatestTag find the latest tag in the Git history
+// getLatestTag find the latest tag in the Git history.
 func getLatestTag(repo *git.Repository) (*LatestTag, error) {
 	tags, err := repo.Tags()
 	if err != nil {

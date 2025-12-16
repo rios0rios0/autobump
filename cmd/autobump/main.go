@@ -72,7 +72,7 @@ func initBatchCmd(config *Config) *cobra.Command {
 	}
 }
 
-// findReadAndValidateConfig finds, reads and validates the config file
+// findReadAndValidateConfig finds, reads and validates the config file.
 func findReadAndValidateConfig(configPath string) (*GlobalConfig, error) {
 	// find the config file if not manually set
 	configPath = findConfigOnMissing(configPath)
