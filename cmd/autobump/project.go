@@ -293,13 +293,13 @@ func setupRepo(ctx *RepoContext) error {
 	return nil
 }
 
-// BranchStatus represents the status of the bump branch
+// BranchStatus represents the status of the bump branch.
 type BranchStatus int
 
 const (
-	BranchCreated        BranchStatus = iota // Branch was newly created
-	BranchExistsWithPR                       // Branch exists and PR exists - skip entirely
-	BranchExistsNoPR                         // Branch exists but no PR - need to create PR
+	BranchCreated      BranchStatus = iota // Branch was newly created
+	BranchExistsWithPR                     // Branch exists and PR exists - skip entirely
+	BranchExistsNoPR                       // Branch exists but no PR - need to create PR
 )
 
 func createBumpBranch(ctx *RepoContext, changelogPath string) (string, BranchStatus, error) {
@@ -576,24 +576,7 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 
 	// Handle branch already exists case
 	if branchStatus == BranchExistsNoPR {
-		// Branch exists, check if PR exists
-		prExists, prErr := checkPullRequestExists(ctx, branchName)
-		if prErr != nil {
-			log.Warnf("Failed to check if PR exists: %v, skipping project", prErr)
-			return nil
-		}
-		if prExists {
-			log.Infof("Pull request already exists for branch '%s', skipping project", branchName)
-			return nil
-		}
-		// PR doesn't exist, create it
-		log.Infof("Branch exists but no PR found, creating pull request for branch '%s'", branchName)
-		err = createAndCheckoutPullRequest(ctx, branchName)
-		if err != nil {
-			return err
-		}
-		log.Infof("Successfully created PR for existing branch in project '%s'", ctx.projectConfig.Name)
-		return nil
+		return handleExistingBranchWithoutPR(ctx, branchName)
 	}
 
 	// Normal flow: branch was newly created
@@ -616,6 +599,28 @@ func processRepo(globalConfig *GlobalConfig, projectConfig *ProjectConfig) error
 	}
 
 	log.Infof("Successfully processed project '%s'", ctx.projectConfig.Name)
+	return nil
+}
+
+// handleExistingBranchWithoutPR handles the case where a bump branch exists but no PR was found.
+// It checks if a PR exists and creates one if needed.
+func handleExistingBranchWithoutPR(ctx *RepoContext, branchName string) error {
+	// Branch exists, check if PR exists
+	prExists, prErr := checkPullRequestExists(ctx, branchName)
+	if prErr != nil {
+		log.Warnf("Failed to check if PR exists: %v, skipping project", prErr)
+		return nil
+	}
+	if prExists {
+		log.Infof("Pull request already exists for branch '%s', skipping project", branchName)
+		return nil
+	}
+	// PR doesn't exist, create it
+	log.Infof("Branch exists but no PR found, creating pull request for branch '%s'", branchName)
+	if err := createAndCheckoutPullRequest(ctx, branchName); err != nil {
+		return err
+	}
+	log.Infof("Successfully created PR for existing branch in project '%s'", ctx.projectConfig.Name)
 	return nil
 }
 

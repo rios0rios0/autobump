@@ -16,7 +16,19 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const contextTimeout = 60 * time.Second
+const (
+	contextTimeout = 60 * time.Second
+
+	// minSSHURLParts is the minimum number of parts expected when splitting an SSH URL by "/".
+	// SSH format: git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
+	// Split result: ["git@ssh.dev.azure.com:v3", "{org}", "{project}", "{repo}"].
+	minSSHURLParts = 4
+
+	// minHTTPSURLParts is the minimum number of parts expected when splitting an HTTPS URL by "/".
+	// HTTPS format: https://dev.azure.com/{org}/{project}/_git/{repo}
+	// Split result: ["https:", "", "dev.azure.com", "{org}", "{project}", "_git", "{repo}"].
+	minHTTPSURLParts = 7
+)
 
 var (
 	ErrUnknownURLType            = errors.New("unknown remote URL type")
@@ -310,7 +322,7 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 // Azure DevOps URL formats:
 // - HTTPS: https://dev.azure.com/{org}/{project}/_git/{repo}
 // - HTTPS (with username): https://{user}@dev.azure.com/{org}/{project}/_git/{repo}
-// - SSH: git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
+// - SSH: git@ssh.dev.azure.com:v3/{org}/{project}/{repo}.
 func GetAzureDevOpsInfo(
 	repo *git.Repository,
 	personalAccessToken string,
@@ -327,7 +339,7 @@ func GetAzureDevOpsInfo(
 	case strings.HasPrefix(remoteURL, "git@"):
 		// SSH format: git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
 		parts := strings.Split(remoteURL, "/")
-		if len(parts) < 4 {
+		if len(parts) < minSSHURLParts {
 			return info, fmt.Errorf("%w: invalid SSH URL format: %s", ErrUnknownURLType, remoteURL)
 		}
 		organizationName = parts[1]
@@ -340,7 +352,7 @@ func GetAzureDevOpsInfo(
 		cleanURL := stripUsernameFromURL(remoteURL)
 		parts := strings.Split(cleanURL, "/")
 		// Expected parts: ["https:", "", "dev.azure.com", "{org}", "{project}", "_git", "{repo}"]
-		if len(parts) < 7 {
+		if len(parts) < minHTTPSURLParts {
 			return info, fmt.Errorf("%w: invalid HTTPS URL format: %s", ErrUnknownURLType, remoteURL)
 		}
 		organizationName = parts[3]
