@@ -116,6 +116,24 @@ func getOptionFromConfig(cfg, globalCfg *config.Config, section string, option s
 	return opt
 }
 
+// stripUsernameFromURL removes the username from a URL if present.
+// For example: https://user@dev.azure.com/org/project -> https://dev.azure.com/org/project
+func stripUsernameFromURL(rawURL string) string {
+	if !strings.HasPrefix(rawURL, "https://") && !strings.HasPrefix(rawURL, "http://") {
+		return rawURL
+	}
+
+	// Find the @ symbol that separates username from host
+	schemeEnd := strings.Index(rawURL, "://") + 3
+	atIndex := strings.Index(rawURL[schemeEnd:], "@")
+	if atIndex == -1 {
+		return rawURL
+	}
+
+	// Reconstruct URL without the username
+	return rawURL[:schemeEnd] + rawURL[schemeEnd+atIndex+1:]
+}
+
 // cloneRepo clones a remote repository into a temporary directory.
 func cloneRepo(ctx *RepoContext) (string, error) {
 	// create a temporary directory
@@ -124,14 +142,20 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 		return "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 
-	// setup the clone options
-	log.Infof("Cloning %s into %s", ctx.projectConfig.Path, tmpDir)
-	cloneOptions := &git.CloneOptions{
-		URL:   ctx.projectConfig.Path,
-		Depth: 1,
+	service := getServiceTypeByURL(ctx.projectConfig.Path)
+
+	// For Azure DevOps, strip the username from the URL to avoid conflicts with BasicAuth
+	cloneURL := ctx.projectConfig.Path
+	if service == AZUREDEVOPS {
+		cloneURL = stripUsernameFromURL(ctx.projectConfig.Path)
 	}
 
-	service := getServiceTypeByURL(ctx.projectConfig.Path)
+	// setup the clone options
+	log.Infof("Cloning %s into %s", cloneURL, tmpDir)
+	cloneOptions := &git.CloneOptions{
+		URL:   cloneURL,
+		Depth: 1,
+	}
 
 	// get authentication methods
 	var authMethods []transport.AuthMethod
