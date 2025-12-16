@@ -37,6 +37,14 @@ type GitServiceAdapter interface {
 		sourceBranch string,
 		newVersion string,
 	) error
+
+	// PullRequestExists checks if a pull request already exists for the given source branch.
+	PullRequestExists(
+		globalConfig *GlobalConfig,
+		projectConfig *ProjectConfig,
+		repo *git.Repository,
+		sourceBranch string,
+	) (bool, error)
 }
 
 // gitServiceRegistry holds all registered Git service adapters.

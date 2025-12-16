@@ -19,6 +19,58 @@ var (
 // GitLabAdapter implements PullRequestProvider for GitLab.
 type GitLabAdapter struct{}
 
+// PullRequestExists checks if a merge request already exists for the given source branch.
+func (g *GitLabAdapter) PullRequestExists(
+	globalConfig *GlobalConfig,
+	projectConfig *ProjectConfig,
+	repo *git.Repository,
+	sourceBranch string,
+) (bool, error) {
+	log.Infof("Checking if merge request exists for branch '%s'", sourceBranch)
+
+	var accessToken string
+	if projectConfig.ProjectAccessToken != "" {
+		accessToken = projectConfig.ProjectAccessToken
+	} else {
+		accessToken = globalConfig.GitLabAccessToken
+	}
+
+	gitlabClient, err := gitlab.NewClient(accessToken)
+	if err != nil {
+		return false, fmt.Errorf("failed to create GitLab client: %w", err)
+	}
+
+	// Get the project owner and name
+	projectName, err := getRemoteRepoFullProjectName(repo)
+	if err != nil {
+		return false, err
+	}
+
+	// Get the project ID using the GitLab API
+	project, _, err := gitlabClient.Projects.GetProject(projectName, &gitlab.GetProjectOptions{})
+	if err != nil {
+		return false, fmt.Errorf("failed to get project ID: %w", err)
+	}
+
+	// List open merge requests for the source branch
+	state := "opened"
+	mrs, _, err := gitlabClient.MergeRequests.ListProjectMergeRequests(project.ID, &gitlab.ListProjectMergeRequestsOptions{
+		SourceBranch: &sourceBranch,
+		State:        &state,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to list merge requests: %w", err)
+	}
+
+	if len(mrs) > 0 {
+		log.Infof("Found %d open merge request(s) for branch '%s'", len(mrs), sourceBranch)
+		return true, nil
+	}
+
+	log.Infof("No open merge request found for branch '%s'", sourceBranch)
+	return false, nil
+}
+
 // CreatePullRequest creates a new merge request on GitLab.
 func (g *GitLabAdapter) CreatePullRequest(
 	globalConfig *GlobalConfig,

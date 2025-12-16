@@ -16,9 +16,24 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `PullRequestExists` method to Azure DevOps, GitLab, and GitHub adapters
+- added a feature to check if PR exists when the branch already exists and create PR if missing
+
 ### Changed
 
+- changed branch existence check to include remote branches (not just local)
+- changed changelog processing to bump directly to 1.0.0 when no previous version exists (instead of calculating)
+- changed version file handling to warn instead of error when no version files are found for detected language
 - corrected lint issues within the repository
+
+### Fixed
+
+- fixed Azure DevOps URL parsing to correctly extract repository name from `/_git/{repo}` path
+- fixed GPG key file handling that caused the "file already closed" error by reading the entire file into memory
+- fixed context timeout in Azure DevOps API calls (was using nanoseconds instead of seconds)
+- fixed shallow clone issue by removing `Depth: 1` option that caused "object not found" push errors
 
 ## [2.15.1] - 2025-12-16
 
