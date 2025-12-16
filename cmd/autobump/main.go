@@ -94,7 +94,7 @@ func findReadAndValidateConfig(configPath string) (*GlobalConfig, error) {
 		}
 
 		var defaultConfig *GlobalConfig
-		defaultConfig, err = decodeConfig(data)
+		defaultConfig, err = decodeConfig(data, false)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode default config: %w", err)
 		}
