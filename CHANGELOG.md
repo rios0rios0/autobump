@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.15.1] - 2025-12-16
+
 ### Changed
 
 - corrected Azure DevOps cloning strategy to avoid errors while using tokens
