@@ -53,38 +53,6 @@ gitlab_access_token: "glpat-TOKEN"
 gitlab_access_token: ".secure_files/gitlab_access_token.key"
 ```
 
-### Environment Variable Support
-
-AutoBump can also read access tokens from environment variables, which is particularly useful in CI/CD environments like GitHub Actions and Azure Pipelines:
-
-- **GitHub**: Reads from `GITHUB_TOKEN` (primary) or `GH_TOKEN` (fallback)
-- **Azure DevOps**: Reads from `SYSTEM_ACCESSTOKEN`
-- **GitLab**: Reads from `CI_JOB_TOKEN`
-
-**Precedence order:**
-1. Config file values (highest priority)
-2. Environment variables
-3. For GitHub: `GITHUB_TOKEN` takes priority over `GH_TOKEN`
-
-This means you can run AutoBump in GitHub Actions without any configuration:
-
-```yaml
-# GitHub Actions workflow example
-- name: Run AutoBump
-  run: autobump batch
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-Or in Azure Pipelines:
-
-```yaml
-# Azure Pipelines example
-- script: autobump batch
-  env:
-    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-```
-
 ### Optional GPG Key Signing
 
 You can optionally configure GPG key signing for commits:

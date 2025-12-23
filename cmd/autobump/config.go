@@ -75,26 +75,7 @@ func readConfig(configPath string) (*GlobalConfig, error) {
 	handleTokenFile("Azure DevOps", &globalConfig.AzureDevOpsAccessToken)
 	handleTokenFile("GitHub", &globalConfig.GitHubAccessToken)
 
-	// Read CI/CD environment variables for tokens
 	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
-
-	// Read GitHub token from environment variable if not set in config
-	// This supports GitHub Actions workflows which provide GITHUB_TOKEN or GH_TOKEN
-	if globalConfig.GitHubAccessToken == "" {
-		if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-			globalConfig.GitHubAccessToken = token
-		} else if ghToken := os.Getenv("GH_TOKEN"); ghToken != "" {
-			globalConfig.GitHubAccessToken = ghToken
-		}
-	}
-
-	// Read Azure DevOps token from environment variable if not set in config
-	// This supports Azure Pipelines which provide SYSTEM_ACCESSTOKEN
-	if globalConfig.AzureDevOpsAccessToken == "" {
-		if token := os.Getenv("SYSTEM_ACCESSTOKEN"); token != "" {
-			globalConfig.AzureDevOpsAccessToken = token
-		}
-	}
 
 	return globalConfig, nil
 }
