@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.17.0] - 2026-02-07
+
 ### Added
 
 - added testing for Azure DevOps package and functions
