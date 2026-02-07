@@ -20,6 +20,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added testing for Azure DevOps package and functions
 
+### Changed
+
+- upgraded Go version to `1.25.6` and all dependencies
+
 ### Removed
 
 - removed the file version YAML configuration from GoLang since it doesn't have it
