@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed GitLeaks false positives on the documentation files
+
 ## [2.17.0] - 2026-02-07
 
 ### Added
