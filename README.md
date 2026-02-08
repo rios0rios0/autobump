@@ -14,9 +14,39 @@ AutoBump supports automatic language detection and version updates for:
 
 ## Installation
 
-### Binary Releases
+### Quick Install (Recommended)
 
-AutoBump has binary releases in the [releases section](https://github.com/rios0rios0/autobump/releases).
+Install `autobump` with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh | sh
+```
+
+Or using wget:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh | sh
+```
+
+#### Installation Options
+
+```bash
+# Install specific version
+curl -fsSL https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh | sh -s -- --version v1.0.0
+
+# Install to custom directory
+curl -fsSL https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh | sh -s -- --install-dir /usr/local/bin
+
+# Show what would be installed without doing it
+curl -fsSL https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh | sh -s -- --dry-run
+
+# Force reinstallation
+curl -fsSL https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh | sh -s -- --force
+```
+
+### Download Pre-built Binaries
+
+Download pre-built binaries from the [releases page](https://github.com/rios0rios0/autobump/releases).
 
 ### Build from Source
 
