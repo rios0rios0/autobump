@@ -1,3 +1,5 @@
+SCRIPTS_DIR = $(HOME)/Development/github.com/rios0rios0/pipelines
+
 build:
 	rm -rf bin
 	go build -o bin/autobump ./cmd/autobump
@@ -17,3 +19,11 @@ run:
 
 install:
 	sudo cp -v bin/autobump /usr/local/bin/autobump
+
+.PHONY: lint
+lint:
+	${SCRIPTS_DIR}/global/scripts/golangci-lint/run.sh --fix .
+
+.PHONY: test
+test:
+	${SCRIPTS_DIR}/global/scripts/golang/test/run.sh .
