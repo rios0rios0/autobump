@@ -1,4 +1,4 @@
-package main
+package azuredevops
 
 import (
 	"bytes"
@@ -13,7 +13,15 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/protocol/packp/capability"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	gohttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/rios0rios0/autobump/config"
+	"github.com/rios0rios0/autobump/domain"
+	gitutil "github.com/rios0rios0/autobump/infrastructure/git"
+	"github.com/rios0rios0/autobump/internal/support"
 )
 
 const (
@@ -41,8 +49,8 @@ var (
 	ErrFailedToCreatePullRequest = errors.New("failed to create pull request")
 )
 
-// AzureDevOpsInfo struct to hold organization, project, and repo info.
-type AzureDevOpsInfo struct {
+// Info struct to hold organization, project, and repo info.
+type Info struct {
 	OrganizationName string
 	ProjectName      string
 	RepositoryID     string
@@ -55,29 +63,95 @@ type RepoInfo struct {
 	DefaultBranch string `json:"defaultBranch"`
 }
 
-// AzureDevOpsAdapter implements PullRequestProvider for Azure DevOps.
-type AzureDevOpsAdapter struct{}
+// PullRequestListResponse represents the response from Azure DevOps PR list API.
+type PullRequestListResponse struct {
+	Value []struct {
+		PullRequestID int    `json:"pullRequestId"`
+		Status        string `json:"status"`
+		SourceRefName string `json:"sourceRefName"`
+	} `json:"value"`
+	Count int `json:"count"`
+}
+
+// Adapter implements GitServiceAdapter for Azure DevOps.
+type Adapter struct{}
+
+// NewAdapter creates a new Azure DevOps adapter.
+func NewAdapter() *Adapter {
+	return &Adapter{}
+}
+
+func (a *Adapter) GetServiceType() domain.ServiceType {
+	return domain.AZUREDEVOPS
+}
+
+func (a *Adapter) MatchesURL(url string) bool {
+	return strings.Contains(url, "dev.azure.com")
+}
+
+func (a *Adapter) PrepareCloneURL(url string) string {
+	// Strip embedded username from Azure DevOps URLs to avoid conflicts with BasicAuth
+	// Example: https://user@dev.azure.com/org/project -> https://dev.azure.com/org/project
+	return support.StripUsernameFromURL(url)
+}
+
+func (a *Adapter) ConfigureTransport() {
+	// Azure DevOps requires capabilities multi_ack / multi_ack_detailed,
+	// which are not fully implemented in go-git and by default are included in
+	// transport.UnsupportedCapabilities. By replacing (not appending!) the list
+	// with only ThinPack, we allow go-git to use multi_ack for initial clones.
+	// See: https://github.com/go-git/go-git/blob/master/_examples/azure_devops/main.go
+	transport.UnsupportedCapabilities = []capability.Capability{ //nolint:reassign // required for Azure DevOps
+		capability.ThinPack,
+	}
+}
+
+func (a *Adapter) GetAuthMethods(
+	_ string, // username not used for Azure DevOps
+	globalConfig *config.GlobalConfig,
+	projectConfig *config.ProjectConfig,
+) []transport.AuthMethod {
+	var authMethods []transport.AuthMethod
+
+	// Project access token (highest priority)
+	if projectConfig.ProjectAccessToken != "" {
+		log.Infof("Using project access token to authenticate")
+		authMethods = append(authMethods, &gohttp.BasicAuth{
+			Username: "pat",
+			Password: projectConfig.ProjectAccessToken,
+		})
+	}
+
+	// Azure DevOps personal access token
+	if globalConfig.AzureDevOpsAccessToken != "" {
+		log.Infof("Using Azure DevOps access token to authenticate")
+		authMethods = append(authMethods, &gohttp.BasicAuth{
+			Username: "pat",
+			Password: globalConfig.AzureDevOpsAccessToken,
+		})
+	}
+
+	return authMethods
+}
 
 // determineFallbackBranch determines the target branch by checking if main or master exist.
 func determineFallbackBranch(repo *git.Repository) (string, error) {
 	// Try main first
-	mainExists, mainErr := checkBranchExists(repo, defaultBranchMain)
-	if mainErr == nil && mainExists {
+	mainExists, err := gitutil.CheckBranchExists(repo, defaultBranchMain)
+	if err != nil {
+		return "", fmt.Errorf("failed to check if '%s' branch exists: %w", defaultBranchMain, err)
+	}
+	if mainExists {
 		return defaultBranchMain, nil
 	}
 
 	// Try master as fallback
-	masterExists, masterErr := checkBranchExists(repo, defaultBranchMaster)
-	if masterErr == nil && masterExists {
+	masterExists, err := gitutil.CheckBranchExists(repo, defaultBranchMaster)
+	if err != nil {
+		return "", fmt.Errorf("failed to check if '%s' branch exists: %w", defaultBranchMaster, err)
+	}
+	if masterExists {
 		return defaultBranchMaster, nil
-	}
-
-	// Log any errors encountered
-	if mainErr != nil {
-		log.Warnf("Failed to check if '%s' branch exists: %v", defaultBranchMain, mainErr)
-	}
-	if masterErr != nil {
-		log.Warnf("Failed to check if '%s' branch exists: %v", defaultBranchMaster, masterErr)
 	}
 
 	// Neither main nor master exist or both checks failed
@@ -110,8 +184,8 @@ func determineTargetBranch(repo *git.Repository, defaultBranch string) (string, 
 	return determineFallbackBranch(repo)
 }
 
-// buildPullRequestPayload constructs the payload for creating a pull request.
-func buildPullRequestPayload(sourceBranch, targetBranch, newVersion string) map[string]interface{} {
+// BuildPullRequestPayload constructs the payload for creating a pull request.
+func BuildPullRequestPayload(sourceBranch, targetBranch, newVersion string) map[string]interface{} {
 	targetRefName := targetBranch
 	if !strings.HasPrefix(targetRefName, "refs/heads/") {
 		targetRefName = "refs/heads/" + targetRefName
@@ -190,20 +264,10 @@ func parseErrorResponse(body []byte, statusCode int) error {
 	)
 }
 
-// PullRequestListResponse represents the response from Azure DevOps PR list API.
-type PullRequestListResponse struct {
-	Value []struct {
-		PullRequestID int    `json:"pullRequestId"`
-		Status        string `json:"status"`
-		SourceRefName string `json:"sourceRefName"`
-	} `json:"value"`
-	Count int `json:"count"`
-}
-
 // PullRequestExists checks if a pull request already exists for the given source branch.
-func (a *AzureDevOpsAdapter) PullRequestExists(
-	globalConfig *GlobalConfig,
-	projectConfig *ProjectConfig,
+func (a *Adapter) PullRequestExists(
+	globalConfig *config.GlobalConfig,
+	projectConfig *config.ProjectConfig,
 	repo *git.Repository,
 	sourceBranch string,
 ) (bool, error) {
@@ -214,13 +278,12 @@ func (a *AzureDevOpsAdapter) PullRequestExists(
 		personalAccessToken = projectConfig.ProjectAccessToken
 	}
 
-	azureInfo, err := GetAzureDevOpsInfo(repo, personalAccessToken)
+	azureInfo, err := GetInfo(repo, personalAccessToken)
 	if err != nil {
 		return false, err
 	}
 
 	// Query for active PRs with the source branch
-	// API: GET https://dev.azure.com/{org}/{project}/_apis/git/repositories/{repo}/pullrequests?searchCriteria.sourceRefName=refs/heads/{branch}&searchCriteria.status=active
 	url := fmt.Sprintf(
 		"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/pullrequests?searchCriteria.sourceRefName=refs/heads/%s&searchCriteria.status=active&api-version=7.1",
 		azureInfo.OrganizationName,
@@ -275,9 +338,9 @@ func (a *AzureDevOpsAdapter) PullRequestExists(
 }
 
 // CreatePullRequest creates a new pull request on Azure DevOps.
-func (a *AzureDevOpsAdapter) CreatePullRequest(
-	globalConfig *GlobalConfig,
-	projectConfig *ProjectConfig,
+func (a *Adapter) CreatePullRequest(
+	globalConfig *config.GlobalConfig,
+	projectConfig *config.ProjectConfig,
 	repo *git.Repository,
 	sourceBranch string,
 	newVersion string,
@@ -289,7 +352,7 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 		personalAccessToken = projectConfig.ProjectAccessToken
 	}
 
-	azureInfo, err := GetAzureDevOpsInfo(repo, personalAccessToken)
+	azureInfo, err := GetInfo(repo, personalAccessToken)
 	if err != nil {
 		return err
 	}
@@ -307,7 +370,7 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 		azureInfo.RepositoryID,
 	)
 
-	payload := buildPullRequestPayload(sourceBranch, targetBranch, newVersion)
+	payload := BuildPullRequestPayload(sourceBranch, targetBranch, newVersion)
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
@@ -324,17 +387,13 @@ func (a *AzureDevOpsAdapter) CreatePullRequest(
 	return nil
 }
 
-// GetAzureDevOpsInfo extracts organization, project, and repo information from the remote URL.
-// Azure DevOps URL formats:
-// - HTTPS: https://dev.azure.com/{org}/{project}/_git/{repo}
-// - HTTPS (with username): https://{user}@dev.azure.com/{org}/{project}/_git/{repo}
-// - SSH: git@ssh.dev.azure.com:v3/{org}/{project}/{repo}.
-func GetAzureDevOpsInfo(
+// GetInfo extracts organization, project, and repo information from the remote URL.
+func GetInfo(
 	repo *git.Repository,
 	personalAccessToken string,
-) (AzureDevOpsInfo, error) {
-	var info AzureDevOpsInfo
-	remoteURL, err := getRemoteRepoURL(repo)
+) (Info, error) {
+	var info Info
+	remoteURL, err := gitutil.GetRemoteRepoURL(repo)
 	if err != nil {
 		return info, err
 	}
@@ -354,16 +413,13 @@ func GetAzureDevOpsInfo(
 	case strings.HasPrefix(remoteURL, "https://"):
 		// HTTPS format: https://dev.azure.com/{org}/{project}/_git/{repo}
 		// or with username: https://{user}@dev.azure.com/{org}/{project}/_git/{repo}
-		// Strip username if present (e.g., ZestSecurity@dev.azure.com -> dev.azure.com)
-		cleanURL := stripUsernameFromURL(remoteURL)
+		cleanURL := support.StripUsernameFromURL(remoteURL)
 		parts := strings.Split(cleanURL, "/")
-		// Expected parts: ["https:", "", "dev.azure.com", "{org}", "{project}", "_git", "{repo}"]
 		if len(parts) < minHTTPSURLParts {
 			return info, fmt.Errorf("%w: invalid HTTPS URL format: %s", ErrUnknownURLType, remoteURL)
 		}
 		organizationName = parts[3]
 		projectName = parts[4]
-		// parts[5] is "_git", parts[6] is the repository name
 		repositoryName = parts[6]
 	default:
 		return info, fmt.Errorf("%w: %s", ErrUnknownURLType, remoteURL)
@@ -421,7 +477,7 @@ func GetAzureDevOpsInfo(
 		return info, errors.New("repository ID not found in response")
 	}
 
-	return AzureDevOpsInfo{
+	return Info{
 		OrganizationName: organizationName,
 		ProjectName:      projectName,
 		RepositoryID:     repoInfo.ID,

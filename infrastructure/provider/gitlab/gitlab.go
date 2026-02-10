@@ -1,4 +1,4 @@
-package main
+package gitlab
 
 import (
 	"errors"
@@ -6,8 +6,14 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	log "github.com/sirupsen/logrus"
-	gitlab "gitlab.com/gitlab-org/api/client-go"
+	gogitlab "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/rios0rios0/autobump/config"
+	"github.com/rios0rios0/autobump/domain"
+	gitutil "github.com/rios0rios0/autobump/infrastructure/git"
 )
 
 var (
@@ -16,13 +22,71 @@ var (
 	ErrCannotParseRepoURL = errors.New("unable to parse repository URL")
 )
 
-// GitLabAdapter implements PullRequestProvider for GitLab.
-type GitLabAdapter struct{}
+// Adapter implements GitServiceAdapter for GitLab.
+type Adapter struct{}
+
+// NewAdapter creates a new GitLab adapter.
+func NewAdapter() *Adapter {
+	return &Adapter{}
+}
+
+func (a *Adapter) GetServiceType() domain.ServiceType {
+	return domain.GITLAB
+}
+
+func (a *Adapter) MatchesURL(url string) bool {
+	return strings.Contains(url, "gitlab.com")
+}
+
+func (a *Adapter) PrepareCloneURL(url string) string {
+	return url // GitLab doesn't need URL modification
+}
+
+func (a *Adapter) ConfigureTransport() {
+	// GitLab doesn't need special transport configuration
+}
+
+func (a *Adapter) GetAuthMethods(
+	username string,
+	globalConfig *config.GlobalConfig,
+	projectConfig *config.ProjectConfig,
+) []transport.AuthMethod {
+	var authMethods []transport.AuthMethod
+
+	// Project access token (highest priority)
+	if projectConfig.ProjectAccessToken != "" {
+		log.Infof("Using project access token to authenticate")
+		authMethods = append(authMethods, &http.BasicAuth{
+			Username: "oauth2",
+			Password: projectConfig.ProjectAccessToken,
+		})
+	}
+
+	// GitLab personal access token
+	if globalConfig.GitLabAccessToken != "" {
+		log.Infof("Using GitLab access token to authenticate")
+		authMethods = append(authMethods, &http.BasicAuth{
+			Username: username,
+			Password: globalConfig.GitLabAccessToken,
+		})
+	}
+
+	// CI job token
+	if globalConfig.GitLabCIJobToken != "" {
+		log.Infof("Using GitLab CI job token to authenticate")
+		authMethods = append(authMethods, &http.BasicAuth{
+			Username: "gitlab-ci-token",
+			Password: globalConfig.GitLabCIJobToken,
+		})
+	}
+
+	return authMethods
+}
 
 // PullRequestExists checks if a merge request already exists for the given source branch.
-func (g *GitLabAdapter) PullRequestExists(
-	globalConfig *GlobalConfig,
-	projectConfig *ProjectConfig,
+func (a *Adapter) PullRequestExists(
+	globalConfig *config.GlobalConfig,
+	projectConfig *config.ProjectConfig,
 	repo *git.Repository,
 	sourceBranch string,
 ) (bool, error) {
@@ -35,7 +99,7 @@ func (g *GitLabAdapter) PullRequestExists(
 		accessToken = globalConfig.GitLabAccessToken
 	}
 
-	gitlabClient, err := gitlab.NewClient(accessToken)
+	gitlabClient, err := gogitlab.NewClient(accessToken)
 	if err != nil {
 		return false, fmt.Errorf("failed to create GitLab client: %w", err)
 	}
@@ -47,7 +111,7 @@ func (g *GitLabAdapter) PullRequestExists(
 	}
 
 	// Get the project ID using the GitLab API
-	project, _, err := gitlabClient.Projects.GetProject(projectName, &gitlab.GetProjectOptions{})
+	project, _, err := gitlabClient.Projects.GetProject(projectName, &gogitlab.GetProjectOptions{})
 	if err != nil {
 		return false, fmt.Errorf("failed to get project ID: %w", err)
 	}
@@ -56,7 +120,7 @@ func (g *GitLabAdapter) PullRequestExists(
 	state := "opened"
 	mrs, _, err := gitlabClient.MergeRequests.ListProjectMergeRequests(
 		project.ID,
-		&gitlab.ListProjectMergeRequestsOptions{
+		&gogitlab.ListProjectMergeRequestsOptions{
 			SourceBranch: &sourceBranch,
 			State:        &state,
 		},
@@ -75,9 +139,9 @@ func (g *GitLabAdapter) PullRequestExists(
 }
 
 // CreatePullRequest creates a new merge request on GitLab.
-func (g *GitLabAdapter) CreatePullRequest(
-	globalConfig *GlobalConfig,
-	projectConfig *ProjectConfig,
+func (a *Adapter) CreatePullRequest(
+	globalConfig *config.GlobalConfig,
+	projectConfig *config.ProjectConfig,
 	repo *git.Repository,
 	sourceBranch string,
 	newVersion string,
@@ -91,7 +155,7 @@ func (g *GitLabAdapter) CreatePullRequest(
 		accessToken = globalConfig.GitLabAccessToken
 	}
 
-	gitlabClient, err := gitlab.NewClient(accessToken)
+	gitlabClient, err := gogitlab.NewClient(accessToken)
 	if err != nil {
 		return fmt.Errorf("failed to create GitLab client: %w", err)
 	}
@@ -103,7 +167,7 @@ func (g *GitLabAdapter) CreatePullRequest(
 	}
 
 	// Get the project ID using the GitLab API
-	project, _, err := gitlabClient.Projects.GetProject(projectName, &gitlab.GetProjectOptions{})
+	project, _, err := gitlabClient.Projects.GetProject(projectName, &gogitlab.GetProjectOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get project ID: %w", err)
 	}
@@ -111,11 +175,11 @@ func (g *GitLabAdapter) CreatePullRequest(
 
 	mrTitle := "chore(bump): bumped version to " + newVersion
 
-	mergeRequestOptions := &gitlab.CreateMergeRequestOptions{
-		SourceBranch:       gitlab.Ptr(sourceBranch),
-		TargetBranch:       gitlab.Ptr("main"),
+	mergeRequestOptions := &gogitlab.CreateMergeRequestOptions{
+		SourceBranch:       gogitlab.Ptr(sourceBranch),
+		TargetBranch:       gogitlab.Ptr("main"),
 		Title:              &mrTitle,
-		RemoveSourceBranch: gitlab.Ptr(true),
+		RemoveSourceBranch: gogitlab.Ptr(true),
 	}
 
 	_, _, err = gitlabClient.MergeRequests.CreateMergeRequest(projectID, mergeRequestOptions)
@@ -127,7 +191,7 @@ func (g *GitLabAdapter) CreatePullRequest(
 
 // getRemoteRepoFullProjectName returns the full project name of the remote repository.
 func getRemoteRepoFullProjectName(repo *git.Repository) (string, error) {
-	remoteURL, err := getRemoteRepoURL(repo)
+	remoteURL, err := gitutil.GetRemoteRepoURL(repo)
 	if err != nil {
 		return "", err
 	}

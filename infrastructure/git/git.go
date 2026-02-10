@@ -1,4 +1,4 @@
-package main
+package git
 
 import (
 	"errors"
@@ -16,27 +16,15 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	log "github.com/sirupsen/logrus"
-)
 
-type ServiceType int
-
-type LatestTag struct {
-	Tag  *semver.Version
-	Date time.Time
-}
-
-const (
-	UNKNOWN ServiceType = iota
-	GITHUB
-	GITLAB
-	AZUREDEVOPS
-	BITBUCKET
-	CODECOMMIT
+	appconfig "github.com/rios0rios0/autobump/config"
+	"github.com/rios0rios0/autobump/domain"
+	"github.com/rios0rios0/autobump/infrastructure/provider"
 )
 
 const (
-	defaultGitTag               = "0.1.0"
-	maxAcceptableInitialCommits = 5
+	DefaultGitTag               = "0.1.0"
+	MaxAcceptableInitialCommits = 5
 )
 
 var (
@@ -46,8 +34,8 @@ var (
 	ErrNoTagsFound        = errors.New("no tags found in Git history")
 )
 
-// getGlobalGitConfig reads the global git configuration file and returns a config.Config object.
-func getGlobalGitConfig() (*config.Config, error) {
+// GetGlobalGitConfig reads the global git configuration file and returns a config.Config object.
+func GetGlobalGitConfig() (*config.Config, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("could not get user home directory: %w", err)
@@ -75,8 +63,17 @@ func getGlobalGitConfig() (*config.Config, error) {
 	return cfg, nil
 }
 
-// openRepo opens a git repository at the given path.
-func openRepo(projectPath string) (*git.Repository, error) {
+// GetOptionFromConfig gets a Git option from local and global Git config.
+func GetOptionFromConfig(cfg, globalCfg *config.Config, section string, option string) string {
+	opt := cfg.Raw.Section(section).Option(option)
+	if opt == "" {
+		opt = globalCfg.Raw.Section(section).Option(option)
+	}
+	return opt
+}
+
+// OpenRepo opens a git repository at the given path.
+func OpenRepo(projectPath string) (*git.Repository, error) {
 	log.Infof("Opening repository at %s", projectPath)
 	repo, err := git.PlainOpen(projectPath)
 	if err != nil {
@@ -85,8 +82,8 @@ func openRepo(projectPath string) (*git.Repository, error) {
 	return repo, nil
 }
 
-// checkBranchExists checks if a given Git branch exists (local or remote).
-func checkBranchExists(repo *git.Repository, branchName string) (bool, error) {
+// CheckBranchExists checks if a given Git branch exists (local or remote).
+func CheckBranchExists(repo *git.Repository, branchName string) (bool, error) {
 	refs, err := repo.References()
 	if err != nil {
 		return false, fmt.Errorf("could not get repo references: %w", err)
@@ -114,8 +111,8 @@ func checkBranchExists(repo *git.Repository, branchName string) (bool, error) {
 	return branchExists, nil
 }
 
-// createAndSwitchBranch creates a new branch and switches to it.
-func createAndSwitchBranch(
+// CreateAndSwitchBranch creates a new branch and switches to it.
+func CreateAndSwitchBranch(
 	repo *git.Repository,
 	workTree *git.Worktree,
 	branchName string,
@@ -128,11 +125,11 @@ func createAndSwitchBranch(
 		return fmt.Errorf("could not create branch: %w", err)
 	}
 
-	return checkoutBranch(workTree, branchName)
+	return CheckoutBranch(workTree, branchName)
 }
 
-// checkoutBranch switches to the given branch.
-func checkoutBranch(w *git.Worktree, branchName string) error {
+// CheckoutBranch switches to the given branch.
+func CheckoutBranch(w *git.Worktree, branchName string) error {
 	log.Infof("Switching to branch '%s'", branchName)
 	err := w.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.ReferenceName("refs/heads/" + branchName),
@@ -143,8 +140,8 @@ func checkoutBranch(w *git.Worktree, branchName string) error {
 	return nil
 }
 
-// commitChanges commits the changes in the given worktree.
-func commitChanges(
+// CommitChanges commits the changes in the given worktree.
+func CommitChanges(
 	workTree *git.Worktree,
 	commitMessage string,
 	signKey *openpgp.Entity,
@@ -164,8 +161,8 @@ func commitChanges(
 	return commit, nil
 }
 
-// pushChangesSSH pushes the changes to the remote repository over SSH.
-func pushChangesSSH(repo *git.Repository, refSpec config.RefSpec) error {
+// PushChangesSSH pushes the changes to the remote repository over SSH.
+func PushChangesSSH(repo *git.Repository, refSpec config.RefSpec) error {
 	log.Info("Pushing local changes to remote repository through SSH")
 	err := repo.Push(&git.PushOptions{
 		RefSpecs: []config.RefSpec{refSpec},
@@ -176,13 +173,13 @@ func pushChangesSSH(repo *git.Repository, refSpec config.RefSpec) error {
 	return nil
 }
 
-// pushChangesHTTPS pushes the changes to the remote repository over HTTPS.
-func pushChangesHTTPS(
+// PushChangesHTTPS pushes the changes to the remote repository over HTTPS.
+func PushChangesHTTPS(
 	repo *git.Repository,
 	repoCfg *config.Config,
 	refSpec config.RefSpec,
-	globalConfig *GlobalConfig,
-	projectConfig *ProjectConfig,
+	globalConfig *appconfig.GlobalConfig,
+	projectConfig *appconfig.ProjectConfig,
 ) error {
 	log.Info("Pushing local changes to remote repository through HTTPS")
 	pushOptions := &git.PushOptions{
@@ -190,11 +187,11 @@ func pushChangesHTTPS(
 		RemoteName: "origin",
 	}
 
-	service, err := getRemoteServiceType(repo)
+	service, err := GetRemoteServiceType(repo)
 	if err != nil {
 		return err
 	}
-	authMethods, err := getAuthMethods(service, repoCfg.User.Name, globalConfig, projectConfig)
+	authMethods, err := GetAuthMethods(service, repoCfg.User.Name, globalConfig, projectConfig)
 	if err != nil {
 		return err
 	}
@@ -216,15 +213,15 @@ func pushChangesHTTPS(
 	return nil
 }
 
-// getAuthMethods returns the authentication method to use for cloning/pushing changes.
+// GetAuthMethods returns the authentication method to use for cloning/pushing changes.
 // It delegates to the appropriate adapter based on the service type.
-func getAuthMethods(
-	service ServiceType,
+func GetAuthMethods(
+	service domain.ServiceType,
 	username string,
-	globalConfig *GlobalConfig,
-	projectConfig *ProjectConfig,
+	globalConfig *appconfig.GlobalConfig,
+	projectConfig *appconfig.ProjectConfig,
 ) ([]transport.AuthMethod, error) {
-	adapter := GetAdapterByServiceType(service)
+	adapter := provider.GetAdapterByServiceType(service)
 	if adapter == nil {
 		log.Errorf("No authentication mechanism implemented for service type '%v'", service)
 		return nil, ErrAuthNotImplemented
@@ -244,11 +241,11 @@ func getAuthMethods(
 	return authMethods, nil
 }
 
-// getRemoteServiceType returns the type of the remote service (e.g. GitHub, GitLab).
-func getRemoteServiceType(repo *git.Repository) (ServiceType, error) {
+// GetRemoteServiceType returns the type of the remote service (e.g. GitHub, GitLab).
+func GetRemoteServiceType(repo *git.Repository) (domain.ServiceType, error) {
 	cfg, err := repo.Config()
 	if err != nil {
-		return UNKNOWN, fmt.Errorf("could not get repository config: %w", err)
+		return domain.UNKNOWN, fmt.Errorf("could not get repository config: %w", err)
 	}
 
 	var firstRemote string
@@ -257,13 +254,13 @@ func getRemoteServiceType(repo *git.Repository) (ServiceType, error) {
 		break
 	}
 
-	return getServiceTypeByURL(firstRemote), nil
+	return GetServiceTypeByURL(firstRemote), nil
 }
 
-// getServiceTypeByURL returns the type of the remote service (e.g. GitHub, GitLab) by URL.
+// GetServiceTypeByURL returns the type of the remote service (e.g. GitHub, GitLab) by URL.
 // It uses the adapter registry to determine the service type.
-func getServiceTypeByURL(remoteURL string) ServiceType {
-	adapter := GetAdapterByURL(remoteURL)
+func GetServiceTypeByURL(remoteURL string) domain.ServiceType {
+	adapter := provider.GetAdapterByURL(remoteURL)
 	if adapter != nil {
 		return adapter.GetServiceType()
 	}
@@ -271,16 +268,16 @@ func getServiceTypeByURL(remoteURL string) ServiceType {
 	// Fallback for services without adapters (Bitbucket, CodeCommit)
 	switch {
 	case strings.Contains(remoteURL, "bitbucket.org"):
-		return BITBUCKET
+		return domain.BITBUCKET
 	case strings.Contains(remoteURL, "git-codecommit"):
-		return CODECOMMIT
+		return domain.CODECOMMIT
 	default:
-		return UNKNOWN
+		return domain.UNKNOWN
 	}
 }
 
-// getRemoteRepoURL returns the URL of the remote repository.
-func getRemoteRepoURL(repo *git.Repository) (string, error) {
+// GetRemoteRepoURL returns the URL of the remote repository.
+func GetRemoteRepoURL(repo *git.Repository) (string, error) {
 	remote, err := repo.Remote("origin")
 	if err != nil {
 		return "", fmt.Errorf("could not get remote: %w", err)
@@ -293,8 +290,8 @@ func getRemoteRepoURL(repo *git.Repository) (string, error) {
 	return "", ErrNoRemoteURL
 }
 
-// getAmountCommits returns the number of commits in the repository.
-func getAmountCommits(repo *git.Repository) (int, error) {
+// GetAmountCommits returns the number of commits in the repository.
+func GetAmountCommits(repo *git.Repository) (int, error) {
 	commits, err := repo.Log(&git.LogOptions{})
 	if err != nil {
 		return 0, fmt.Errorf("could not get commits: %w", err)
@@ -312,8 +309,8 @@ func getAmountCommits(repo *git.Repository) (int, error) {
 	return amountCommits, nil
 }
 
-// getLatestTag find the latest tag in the Git history.
-func getLatestTag(repo *git.Repository) (*LatestTag, error) {
+// GetLatestTag find the latest tag in the Git history.
+func GetLatestTag(repo *git.Repository) (*domain.LatestTag, error) {
 	tags, err := repo.Tags()
 	if err != nil {
 		log.Fatal(err)
@@ -325,14 +322,14 @@ func getLatestTag(repo *git.Repository) (*LatestTag, error) {
 		return nil
 	})
 
-	numCommits, _ := getAmountCommits(repo)
+	numCommits, _ := GetAmountCommits(repo)
 	if latestTag == nil {
 		// if the project is already started with no tags in the history
 		// TODO: review this section
-		if numCommits >= maxAcceptableInitialCommits {
-			log.Warnf("No tags found in Git history, falling back to '%s'", defaultGitTag)
-			version, _ := semver.NewVersion(defaultGitTag)
-			return &LatestTag{
+		if numCommits >= MaxAcceptableInitialCommits {
+			log.Warnf("No tags found in Git history, falling back to '%s'", DefaultGitTag)
+			version, _ := semver.NewVersion(DefaultGitTag)
+			return &domain.LatestTag{
 				Tag:  version,
 				Date: time.Now(),
 			}, nil
@@ -351,7 +348,7 @@ func getLatestTag(repo *git.Repository) (*LatestTag, error) {
 	}
 
 	version, _ := semver.NewVersion(latestTag.Name().Short())
-	return &LatestTag{
+	return &domain.LatestTag{
 		Tag:  version,
 		Date: latestTagDate,
 	}, nil
