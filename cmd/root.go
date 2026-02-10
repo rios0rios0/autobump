@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -110,6 +111,46 @@ func findReadAndValidateConfig(configPath string) (*config.GlobalConfig, error) 
 	return globalConfig, nil
 }
 
+func initDiscoverCmd(cfg *cliConfig) *cobra.Command {
+	return &cobra.Command{
+		Use:   "discover",
+		Short: "Discover repos from configured providers and bump them automatically",
+		Long: `Discover repositories by querying Git hosting provider APIs
+(GitHub, GitLab, Azure DevOps) using configured tokens and organizations,
+then run the bump process on each discovered repository.
+
+Requires a 'providers' section in the configuration file.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			globalConfig, err := findReadAndValidateConfig(cfg.configPath)
+			if err != nil {
+				return fmt.Errorf("failed to read config: %w", err)
+			}
+
+			if len(globalConfig.Providers) == 0 {
+				return errors.New("no providers configured; add a 'providers' section to the config file")
+			}
+
+			if validateErr := config.ValidateProviders(globalConfig.Providers); validateErr != nil {
+				return validateErr
+			}
+
+			discovererRegistry := buildDiscovererRegistry()
+			return application.DiscoverAndProcess(
+				context.Background(), globalConfig, discovererRegistry,
+			)
+		},
+	}
+}
+
+// buildDiscovererRegistry creates and returns the discoverer registry with all provider factories.
+func buildDiscovererRegistry() *provider.DiscovererRegistry {
+	reg := provider.NewDiscovererRegistry()
+	reg.Register("github", github.NewDiscoverer)
+	reg.Register("gitlab", gitlab.NewDiscoverer)
+	reg.Register("azuredevops", azuredevops.NewDiscoverer)
+	return reg
+}
+
 // buildProviderRegistry creates and returns the provider registry with all adapters.
 func buildProviderRegistry() *provider.GitServiceRegistry {
 	return provider.NewGitServiceRegistry(
@@ -127,11 +168,13 @@ func Execute() error {
 	cfg := &cliConfig{}
 	rootCmd := initRootCmd(cfg)
 	batchCmd := initBatchCmd(cfg)
+	discoverCmd := initDiscoverCmd(cfg)
 
 	rootCmd.Flags().StringVarP(&cfg.configPath, "config", "c", "", "config file path")
 	rootCmd.Flags().StringVarP(&cfg.language, "language", "l", "", "project language")
 	batchCmd.Flags().StringVarP(&cfg.configPath, "config", "c", "", "config file path")
+	discoverCmd.Flags().StringVarP(&cfg.configPath, "config", "c", "", "config file path")
 
-	rootCmd.AddCommand(batchCmd)
+	rootCmd.AddCommand(batchCmd, discoverCmd)
 	return rootCmd.Execute()
 }
