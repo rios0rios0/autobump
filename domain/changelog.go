@@ -1,9 +1,8 @@
-package main
+package domain
 
 import (
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -13,79 +12,22 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const defaultChangelogURL = "https://raw.githubusercontent.com/rios0rios0/" +
+// DefaultChangelogURL is the URL of the default CHANGELOG template.
+const DefaultChangelogURL = "https://raw.githubusercontent.com/rios0rios0/" +
 	"autobump/main/configs/CHANGELOG.template.md"
+
+// InitialReleaseVersion is the version used when no version is found in the changelog.
+// When a changelog only has [Unreleased] section, we bump directly to 1.0.0.
+const InitialReleaseVersion = "1.0.0"
 
 var (
 	ErrNoVersionFoundInChangelog  = errors.New("no version found in the changelog")
 	ErrNoChangesFoundInUnreleased = errors.New("no changes found in the unreleased section")
 )
 
-func updateChangelogFile(changelogPath string) (*semver.Version, error) {
-	lines, err := readLines(changelogPath)
-	if err != nil {
-		return nil, err
-	}
-
-	version, newContent, err := processChangelog(lines)
-	if err != nil {
-		return nil, err
-	}
-
-	err = writeLines(changelogPath, newContent)
-	if err != nil {
-		return nil, err
-	}
-
-	return version, nil
-}
-
-func getNextVersion(changelogPath string) (*semver.Version, error) {
-	lines, err := readLines(changelogPath)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if this is a new changelog (no version found)
-	_, err = findLatestVersion(lines)
-	if errors.Is(err, ErrNoVersionFoundInChangelog) {
-		// For new changelogs, return 1.0.0 directly
-		version, _ := semver.NewVersion(initialReleaseVersion)
-		return version, nil
-	}
-
-	version, _, err := processChangelog(lines)
-	if err != nil {
-		return nil, err
-	}
-
-	return version, nil
-}
-
-// createChangelogIfNotExists create an empty CHANGELOG file if it doesn't exist.
-func createChangelogIfNotExists(changelogPath string) (bool, error) {
-	if _, err := os.Stat(changelogPath); os.IsNotExist(err) {
-		log.Warnf("Creating empty CHANGELOG file at '%s'.", changelogPath)
-		var fileContent []byte
-		fileContent, err = downloadFile(defaultChangelogURL)
-		if err != nil {
-			log.Errorf("It wasn't possible to download the CHANGELOG model file: %v", err)
-		}
-
-		err = os.WriteFile(changelogPath, fileContent, 0o644) //nolint:gosec // the CHANGLOG file is not sensitive
-		if err != nil {
-			log.Errorf("Error creating CHANGELOG file: %v", err)
-			return false, fmt.Errorf("error creating CHANGELOG file: %w", err)
-		}
-
-		return false, nil
-	}
-
-	return true, nil
-}
-
-func isChangelogUnreleasedEmpty(lines []string) (bool, error) {
-	latestVersion, err := findLatestVersion(lines)
+// IsChangelogUnreleasedEmpty checks whether the unreleased section of the changelog is empty.
+func IsChangelogUnreleasedEmpty(lines []string) (bool, error) {
+	latestVersion, err := FindLatestVersion(lines)
 	// If no version found, check if unreleased section has content
 	noVersionFound := errors.Is(err, ErrNoVersionFoundInChangelog)
 	if err != nil && !noVersionFound {
@@ -113,11 +55,8 @@ func isChangelogUnreleasedEmpty(lines []string) (bool, error) {
 	return true, nil
 }
 
-// initialReleaseVersion is the version used when no version is found in the changelog.
-// When a changelog only has [Unreleased] section, we bump directly to 1.0.0.
-const initialReleaseVersion = "1.0.0"
-
-func findLatestVersion(lines []string) (*semver.Version, error) {
+// FindLatestVersion finds the latest version in the changelog lines.
+func FindLatestVersion(lines []string) (*semver.Version, error) {
 	// Regular expression to match version lines
 	versionRegex := regexp.MustCompile(`^\s*##\s*\[([^\]]+)\]`)
 
@@ -148,14 +87,15 @@ func findLatestVersion(lines []string) (*semver.Version, error) {
 	return latestVersion, nil
 }
 
-func processChangelog(lines []string) (*semver.Version, []string, error) {
+// ProcessChangelog processes the changelog lines and returns the next version and the new content.
+func ProcessChangelog(lines []string) (*semver.Version, []string, error) {
 	// Variables to hold the new content
 	var newContent []string
 	var unreleasedSection []string
 	unreleased := false
 
 	// Find the latest version in the changelog
-	latestVersion, err := findLatestVersion(lines)
+	latestVersion, err := FindLatestVersion(lines)
 	isNewChangelog := errors.Is(err, ErrNoVersionFoundInChangelog)
 	if err != nil && !isNewChangelog {
 		log.Errorf("Error finding latest version: %v", err)
@@ -164,8 +104,8 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 
 	// For new changelogs (only [Unreleased] section), bump directly to 1.0.0
 	if isNewChangelog {
-		log.Infof("No previous version found, will release as %s", initialReleaseVersion)
-		return processNewChangelog(lines)
+		log.Infof("No previous version found, will release as %s", InitialReleaseVersion)
+		return ProcessNewChangelog(lines)
 	}
 
 	log.Infof("Previous version: %s", latestVersion)
@@ -180,7 +120,7 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 				// Process the unreleased section
 				var updatedSection []string
 				var updatedVersion *semver.Version
-				updatedSection, updatedVersion, err = updateSection(unreleasedSection, nextVersion)
+				updatedSection, updatedVersion, err = UpdateSection(unreleasedSection, nextVersion)
 				if err != nil {
 					log.Errorf("Error updating section: %v", err)
 					return nil, nil, err
@@ -203,9 +143,9 @@ func processChangelog(lines []string) (*semver.Version, []string, error) {
 	return &nextVersion, newContent, nil
 }
 
-// processNewChangelog handles changelogs that only have [Unreleased] section.
+// ProcessNewChangelog handles changelogs that only have [Unreleased] section.
 // It bumps directly to 1.0.0 without calculating based on changes.
-func processNewChangelog(lines []string) (*semver.Version, []string, error) {
+func ProcessNewChangelog(lines []string) (*semver.Version, []string, error) {
 	var newContent []string
 	var unreleasedSection []string
 	unreleased := false
@@ -223,23 +163,23 @@ func processNewChangelog(lines []string) (*semver.Version, []string, error) {
 	}
 
 	// Create the initial release version
-	initialVersion, _ := semver.NewVersion(initialReleaseVersion)
+	initialVersion, _ := semver.NewVersion(InitialReleaseVersion)
 
 	if len(unreleasedSection) > 0 {
 		// Fix section headings
-		fixSectionHeadings(unreleasedSection)
+		FixSectionHeadings(unreleasedSection)
 
 		// Create new section for 1.0.0 release
-		newSection := makeNewSectionsFromUnreleased(unreleasedSection, *initialVersion)
+		newSection := MakeNewSectionsFromUnreleased(unreleasedSection, *initialVersion)
 		newContent = append(newContent, newSection...)
 	}
 
-	log.Infof("Next calculated version: %s", initialReleaseVersion)
+	log.Infof("Next calculated version: %s", InitialReleaseVersion)
 	return initialVersion, newContent, nil
 }
 
-// makeNewSectionsFromUnreleased creates new section contents for initial release.
-func makeNewSectionsFromUnreleased(unreleasedSection []string, version semver.Version) []string {
+// MakeNewSectionsFromUnreleased creates new section contents for initial release.
+func MakeNewSectionsFromUnreleased(unreleasedSection []string, version semver.Version) []string {
 	var newSection []string
 
 	// Create a new unreleased section
@@ -263,8 +203,8 @@ func makeNewSectionsFromUnreleased(unreleasedSection []string, version semver.Ve
 	return newSection
 }
 
-// fixSectionHeadings fixes the section headings in the unreleased section.
-func fixSectionHeadings(unreleasedSection []string) {
+// FixSectionHeadings fixes the section headings in the unreleased section.
+func FixSectionHeadings(unreleasedSection []string) {
 	re := regexp.MustCompile(`(?i)^\s*#+\s*(Added|Changed|Deprecated|Removed|Fixed|Security)`)
 	for i, line := range unreleasedSection {
 		if re.MatchString(line) {
@@ -274,8 +214,8 @@ func fixSectionHeadings(unreleasedSection []string) {
 	}
 }
 
-// makeNewSections creates new section contents for the beginning of the CHANGELOG file.
-func makeNewSections(
+// MakeNewSections creates new section contents for the beginning of the CHANGELOG file.
+func MakeNewSections(
 	sections map[string]*[]string,
 	nextVersion semver.Version,
 ) []string {
@@ -308,7 +248,8 @@ func makeNewSections(
 	return newSection
 }
 
-func parseUnreleasedIntoSections(
+// ParseUnreleasedIntoSections parses the unreleased section into change type sections.
+func ParseUnreleasedIntoSections(
 	unreleasedSection []string,
 	sections map[string]*[]string,
 	currentSection *[]string,
@@ -342,12 +283,13 @@ func parseUnreleasedIntoSections(
 	}
 }
 
-func updateSection(
+// UpdateSection updates the unreleased section and calculates the next version.
+func UpdateSection(
 	unreleasedSection []string,
 	nextVersion semver.Version,
 ) ([]string, *semver.Version, error) {
 	// Fix the section headings
-	fixSectionHeadings(unreleasedSection)
+	FixSectionHeadings(unreleasedSection)
 
 	sections := map[string]*[]string{
 		"Added":      {},
@@ -361,7 +303,7 @@ func updateSection(
 	var currentSection *[]string
 	majorChanges, minorChanges, patchChanges := 0, 0, 0
 
-	parseUnreleasedIntoSections(
+	ParseUnreleasedIntoSections(
 		unreleasedSection,
 		sections,
 		currentSection,
@@ -389,6 +331,6 @@ func updateSection(
 		sort.Strings(*section)
 	}
 
-	newSection := makeNewSections(sections, nextVersion)
+	newSection := MakeNewSections(sections, nextVersion)
 	return newSection, &nextVersion, nil
 }

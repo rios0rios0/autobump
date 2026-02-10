@@ -2,20 +2,20 @@ SCRIPTS_DIR = $(HOME)/Development/github.com/rios0rios0/pipelines
 
 build:
 	rm -rf bin
-	go build -o bin/autobump ./cmd/autobump
+	go build -o bin/autobump .
 	strip -s bin/autobump
 
 debug:
 	rm -rf bin
-	go build -gcflags "-N -l" -o bin/autobump ./cmd/autobump
+	go build -gcflags "-N -l" -o bin/autobump .
 
 build-musl:
 	CGO_ENABLED=1 CC=musl-gcc go build \
-		--ldflags 'linkmode external -extldflags="-static"' -o bin/autobump ./cmd/autobump
+		--ldflags 'linkmode external -extldflags="-static"' -o bin/autobump .
 	strip -s bin/autobump
 
 run:
-	go run ./cmd/autobump
+	go run .
 
 install:
 	sudo cp -v bin/autobump /usr/local/bin/autobump

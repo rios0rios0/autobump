@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"errors"
@@ -11,8 +11,11 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+
+	"github.com/rios0rios0/autobump/internal/support"
 )
 
+// GlobalConfig represents the top-level configuration.
 type GlobalConfig struct {
 	Projects               []ProjectConfig           `yaml:"projects"`
 	LanguagesConfig        map[string]LanguageConfig `yaml:"languages"`
@@ -23,17 +26,20 @@ type GlobalConfig struct {
 	GitLabCIJobToken       string                    `yaml:"gitlab_ci_job_token"`
 }
 
+// LanguageConfig holds per-language detection and versioning rules.
 type LanguageConfig struct {
 	Extensions      []string      `yaml:"extensions"`
 	SpecialPatterns []string      `yaml:"special_patterns"`
 	VersionFiles    []VersionFile `yaml:"version_files"`
 }
 
+// VersionFile describes a file that contains version information.
 type VersionFile struct {
 	Path     string   `yaml:"path"`
 	Patterns []string `yaml:"patterns"`
 }
 
+// ProjectConfig holds per-project configuration.
 type ProjectConfig struct {
 	Path               string `yaml:"path"`
 	Name               string `yaml:"name"`
@@ -42,7 +48,8 @@ type ProjectConfig struct {
 	NewVersion         string `yaml:"new_version"`
 }
 
-const defaultConfigURL = "https://raw.githubusercontent.com/rios0rios0/autobump/" +
+// DefaultConfigURL is the URL of the default configuration file.
+const DefaultConfigURL = "https://raw.githubusercontent.com/rios0rios0/autobump/" +
 	"main/configs/autobump.yaml"
 
 var (
@@ -51,14 +58,14 @@ var (
 	ErrConfigKeyMissingError    = errors.New("config keys missing")
 )
 
-// readConfig reads the config file and returns a GlobalConfig struct.
-func readConfig(configPath string) (*GlobalConfig, error) {
+// ReadConfig reads the config file and returns a GlobalConfig struct.
+func ReadConfig(configPath string) (*GlobalConfig, error) {
 	data, err := readData(configPath)
 	if err != nil {
 		return nil, err
 	}
 
-	globalConfig, err := decodeConfig(data, true)
+	globalConfig, err := DecodeConfig(data, true)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +100,7 @@ func readData(configPath string) ([]byte, error) {
 		return data, nil
 	}
 	// It's a URL, so read the data from the URL
-	return downloadFile(configPath)
+	return support.DownloadFile(configPath)
 }
 
 // handleTokenFile reads the token from a file if it exists and replaces the token string.
@@ -112,10 +119,10 @@ func handleTokenFile(name string, token *string) {
 	}
 }
 
-// decodeConfig decodes the config file and returns a GlobalConfig struct
+// DecodeConfig decodes the config file and returns a GlobalConfig struct
 // If strict is true, unknown fields will cause an error (for user config)
 // If strict is false, unknown fields will be ignored (for default config).
-func decodeConfig(data []byte, strict bool) (*GlobalConfig, error) {
+func DecodeConfig(data []byte, strict bool) (*GlobalConfig, error) {
 	var globalConfig GlobalConfig
 
 	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
@@ -128,8 +135,8 @@ func decodeConfig(data []byte, strict bool) (*GlobalConfig, error) {
 	return &globalConfig, nil
 }
 
-// validateGlobalConfig validates the global config and reports missing keys and errors.
-func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
+// ValidateGlobalConfig validates the global config and reports missing keys and errors.
+func ValidateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 	var missingKeys []string
 
 	if batch && len(globalConfig.Projects) == 0 {
@@ -166,19 +173,19 @@ func validateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 	return nil
 }
 
-// findConfigOnMissing finds the config file if not manually set.
-func findConfigOnMissing(configPath string) string {
+// FindConfigOnMissing finds the config file if not manually set.
+func FindConfigOnMissing(configPath string) string {
 	if configPath == "" {
 		log.Info("No config file specified, searching for default locations")
 
 		var err error
-		configPath, err = findConfig()
+		configPath, err = FindConfig()
 		if err != nil {
 			log.Warn(
 				"Config file not found in default locations, " +
 					"using the repository configuration as the last resort",
 			)
-			configPath = defaultConfigURL
+			configPath = DefaultConfigURL
 		}
 
 		log.Infof("Using config file: \"%v\"", configPath)
@@ -187,8 +194,8 @@ func findConfigOnMissing(configPath string) string {
 	return configPath
 }
 
-// findConfig finds the config file in a list of default locations using globbing.
-func findConfig() (string, error) {
+// FindConfig finds the config file in a list of default locations using globbing.
+func FindConfig() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get user home directory: %w", err)
