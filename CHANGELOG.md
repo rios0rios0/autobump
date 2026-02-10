@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.17.3] - 2026-02-10
+
 ### Changed
 
 - corrected the issue without having the `main.go` file in the root
