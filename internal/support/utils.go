@@ -1,4 +1,4 @@
-package main
+package support
 
 import (
 	"bufio"
@@ -25,10 +25,10 @@ var (
 	)
 )
 
-const downloadTimeout = 30
+const DownloadTimeout = 30
 
-// readLines reads a whole file into memory.
-func readLines(filePath string) ([]string, error) {
+// ReadLines reads a whole file into memory.
+func ReadLines(filePath string) ([]string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
@@ -47,8 +47,8 @@ func readLines(filePath string) ([]string, error) {
 	return lines, nil
 }
 
-// writeLines writes the lines to the given file.
-func writeLines(filePath string, lines []string) error {
+// WriteLines writes the lines to the given file.
+func WriteLines(filePath string, lines []string) error {
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
@@ -67,11 +67,11 @@ func writeLines(filePath string, lines []string) error {
 	return nil
 }
 
-// downloadFile downloads a file from the given URL.
-func downloadFile(url string) ([]byte, error) {
+// DownloadFile downloads a file from the given URL.
+func DownloadFile(url string) ([]byte, error) {
 	var data []byte
 
-	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DownloadTimeout*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -93,7 +93,8 @@ func downloadFile(url string) ([]byte, error) {
 	return data, nil
 }
 
-func exportGpgKey(ctx context.Context, gpgKeyID string, gpgKeyExportPath string) error {
+// ExportGpgKey exports a GPG key from the keyring to a file.
+func ExportGpgKey(ctx context.Context, gpgKeyID string, gpgKeyExportPath string) error {
 	// TODO: until today Go is not capable to read the key from the keyring (kbx)
 	cmd := exec.CommandContext(
 		ctx,
@@ -111,7 +112,8 @@ func exportGpgKey(ctx context.Context, gpgKeyID string, gpgKeyExportPath string)
 	return nil
 }
 
-func getGpgKeyReader(ctx context.Context, gpgKeyID string, gpgKeyPath string) (io.Reader, error) {
+// GetGpgKeyReader returns a reader for the GPG key.
+func GetGpgKeyReader(ctx context.Context, gpgKeyID string, gpgKeyPath string) (io.Reader, error) {
 	// if no key path is provided, try to read the key from the default location
 	if gpgKeyPath == "" {
 		gpgKeyPath = os.ExpandEnv(fmt.Sprintf("$HOME/.gnupg/autobump-%s.asc", gpgKeyID))
@@ -119,7 +121,7 @@ func getGpgKeyReader(ctx context.Context, gpgKeyID string, gpgKeyPath string) (i
 
 		// if the key does not exist, try to export it from the keyring
 		if _, err := os.Stat(gpgKeyPath); os.IsNotExist(err) {
-			err = exportGpgKey(ctx, gpgKeyID, gpgKeyPath)
+			err = ExportGpgKey(ctx, gpgKeyID, gpgKeyPath)
 			if err != nil {
 				return nil, err
 			}
@@ -136,9 +138,9 @@ func getGpgKeyReader(ctx context.Context, gpgKeyID string, gpgKeyPath string) (i
 	return strings.NewReader(string(gpgKeyData)), nil
 }
 
-// getGpgKey returns GPG key entity from the given path
+// GetGpgKey returns GPG key entity from the given path
 // it prompts for the passphrase to decrypt the key.
-func getGpgKey(gpgKeyReader io.Reader) (*openpgp.Entity, error) {
+func GetGpgKey(gpgKeyReader io.Reader) (*openpgp.Entity, error) {
 	var err error
 
 	entityList, err := openpgp.ReadArmoredKeyRing(gpgKeyReader)
@@ -175,4 +177,23 @@ func getGpgKey(gpgKeyReader io.Reader) (*openpgp.Entity, error) {
 
 	log.Info("Successfully decrypted GPG key")
 	return entity, nil
+}
+
+// StripUsernameFromURL removes the username from a URL if present.
+// For example: https://user@dev.azure.com/org/project -> https://dev.azure.com/org/project
+func StripUsernameFromURL(rawURL string) string {
+	if !strings.HasPrefix(rawURL, "https://") && !strings.HasPrefix(rawURL, "http://") {
+		return rawURL
+	}
+
+	const skipping = "://"
+	// Find the @ symbol that separates username from host
+	schemeEnd := strings.Index(rawURL, skipping) + len(skipping)
+	atIndex := strings.Index(rawURL[schemeEnd:], "@")
+	if atIndex == -1 {
+		return rawURL
+	}
+
+	// Reconstruct URL without the username
+	return rawURL[:schemeEnd] + rawURL[schemeEnd+atIndex+1:]
 }
