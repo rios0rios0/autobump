@@ -1,4 +1,5 @@
 bin
+build
 
 # this space is for project generated files, DO NOT add personal or IDE files here
 # try to use ~/.gitignore of your user for your workspace generated files

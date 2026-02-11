@@ -1,4 +1,6 @@
-SCRIPTS_DIR = $(HOME)/Development/github.com/rios0rios0/pipelines
+SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
+-include $(SCRIPTS_DIR)/makefiles/common.mk
+-include $(SCRIPTS_DIR)/makefiles/golang.mk
 
 build:
 	rm -rf bin
@@ -19,11 +21,3 @@ run:
 
 install:
 	sudo cp -v bin/autobump /usr/local/bin/autobump
-
-.PHONY: lint
-lint:
-	${SCRIPTS_DIR}/global/scripts/golangci-lint/run.sh --fix .
-
-.PHONY: test
-test:
-	${SCRIPTS_DIR}/global/scripts/golang/test/run.sh .
