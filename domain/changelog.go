@@ -169,9 +169,44 @@ func ProcessNewChangelog(lines []string) (*semver.Version, []string, error) {
 		// Fix section headings
 		FixSectionHeadings(unreleasedSection)
 
-		// Create new section for 1.0.0 release
-		newSection := MakeNewSectionsFromUnreleased(unreleasedSection, *initialVersion)
-		newContent = append(newContent, newSection...)
+		// Parse into sections, deduplicate, and rebuild
+		sections := map[string]*[]string{
+			"Added":      {},
+			"Changed":    {},
+			"Deprecated": {},
+			"Removed":    {},
+			"Fixed":      {},
+			"Security":   {},
+		}
+		var currentSection *[]string
+		majorChanges, minorChanges, patchChanges := 0, 0, 0
+		ParseUnreleasedIntoSections(
+			unreleasedSection, sections, currentSection,
+			&majorChanges, &minorChanges, &patchChanges,
+		)
+
+		// Deduplicate entries in each section
+		for _, section := range sections {
+			*section = DeduplicateEntries(*section)
+		}
+
+		// Check if any sections have content after dedup
+		hasContent := false
+		for _, section := range sections {
+			if len(*section) > 0 {
+				hasContent = true
+				break
+			}
+		}
+
+		if hasContent {
+			newSection := MakeNewSections(sections, *initialVersion)
+			newContent = append(newContent, newSection...)
+		} else {
+			// Fallback: use original unreleased content
+			newSection := MakeNewSectionsFromUnreleased(unreleasedSection, *initialVersion)
+			newContent = append(newContent, newSection...)
+		}
 	}
 
 	log.Infof("Next calculated version: %s", InitialReleaseVersion)
@@ -212,6 +247,223 @@ func FixSectionHeadings(unreleasedSection []string) {
 			unreleasedSection[i] = correctedLine
 		}
 	}
+}
+
+// deduplicationOverlapThreshold is the minimum overlap ratio to consider two entries as duplicates.
+const deduplicationOverlapThreshold = 0.6
+
+// stopWords are common words stripped during tokenization for similarity comparison.
+//
+//nolint:gochecknoglobals // constant-like lookup table
+var stopWords = map[string]bool{
+	"the": true, "to": true, "and": true, "all": true, "their": true,
+	"its": true, "a": true, "an": true, "of": true, "in": true,
+	"for": true, "with": true, "from": true, "by": true, "on": true,
+	"is": true, "was": true, "are": true, "were": true, "be": true,
+	"been": true, "being": true, "has": true, "have": true, "had": true,
+	"that": true, "this": true, "it": true, "as": true,
+}
+
+// backtickPattern matches backtick-wrapped content.
+var backtickPattern = regexp.MustCompile("`[^`]*`")
+
+// versionPattern matches semver-like version numbers (e.g., 1.26.0, v2.3.1).
+var versionPattern = regexp.MustCompile(`v?\d+\.\d+(?:\.\d+)?`)
+
+// normalizeEntry strips a changelog entry down to its semantic core for comparison.
+// It removes the leading "- ", backtick-wrapped content, version numbers, and lowercases.
+func normalizeEntry(entry string) string {
+	s := strings.TrimSpace(entry)
+	s = strings.TrimPrefix(s, "- ")
+	s = backtickPattern.ReplaceAllString(s, "")
+	s = versionPattern.ReplaceAllString(s, "")
+	s = strings.ToLower(s)
+	// collapse whitespace
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// tokenize splits a normalized entry into significant words, removing stop words.
+func tokenize(normalized string) []string {
+	words := strings.Fields(normalized)
+	var tokens []string
+	for _, w := range words {
+		if !stopWords[w] && len(w) > 1 {
+			tokens = append(tokens, w)
+		}
+	}
+	return tokens
+}
+
+// extractMaxVersion finds the highest semver version mentioned in an entry's raw text.
+// Returns nil if no version is found.
+func extractMaxVersion(entry string) *semver.Version {
+	matches := versionPattern.FindAllString(entry, -1)
+	var maxVer *semver.Version
+	for _, m := range matches {
+		v, err := semver.NewVersion(m)
+		if err != nil {
+			continue
+		}
+		if maxVer == nil || v.GreaterThan(maxVer) {
+			maxVer = v
+		}
+	}
+	return maxVer
+}
+
+// overlapRatio computes the token overlap ratio between two token slices.
+// It returns len(intersection) / min(len(a), len(b)).
+// Returns 0 if either slice is empty.
+func overlapRatio(a, b []string) float64 {
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
+
+	set := make(map[string]bool, len(a))
+	for _, t := range a {
+		set[t] = true
+	}
+
+	intersection := 0
+	for _, t := range b {
+		if set[t] {
+			intersection++
+		}
+	}
+
+	minLen := len(a)
+	if len(b) < minLen {
+		minLen = len(b)
+	}
+
+	return float64(intersection) / float64(minLen)
+}
+
+// DeduplicateEntries removes duplicate and semantically overlapping changelog entries.
+// Phase 1 removes exact duplicates (keeping first occurrence).
+// Phase 2 detects entries about the same topic using token overlap and keeps
+// the most specific one (highest version mentioned, or longest).
+func DeduplicateEntries(entries []string) []string {
+	if len(entries) <= 1 {
+		return entries
+	}
+
+	// Phase 1: exact dedup (preserve order, keep first)
+	seen := make(map[string]bool, len(entries))
+	var unique []string
+	for _, e := range entries {
+		normalized := strings.TrimSpace(e)
+		if seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		unique = append(unique, e)
+	}
+
+	if len(unique) <= 1 {
+		return unique
+	}
+
+	// Phase 2: semantic overlap dedup
+	// Pre-compute tokens for each entry
+	type entryInfo struct {
+		raw    string
+		tokens []string
+		ver    *semver.Version
+	}
+
+	infos := make([]entryInfo, len(unique))
+	for i, e := range unique {
+		infos[i] = entryInfo{
+			raw:    e,
+			tokens: tokenize(normalizeEntry(e)),
+			ver:    extractMaxVersion(e),
+		}
+	}
+
+	// Mark entries to remove (index -> true)
+	removed := make(map[int]bool)
+
+	for i := range infos {
+		if removed[i] {
+			continue
+		}
+		for j := i + 1; j < len(infos); j++ {
+			if removed[j] {
+				continue
+			}
+
+			ratio := overlapRatio(infos[i].tokens, infos[j].tokens)
+			if ratio < deduplicationOverlapThreshold {
+				continue
+			}
+
+			// Entries overlap -- determine which to keep
+			loser := pickLoser(infos[i], infos[j], i, j)
+			removed[loser] = true
+		}
+	}
+
+	var result []string
+	for i, info := range infos {
+		if !removed[i] {
+			result = append(result, info.raw)
+		}
+	}
+	return result
+}
+
+// pickLoser decides which of two overlapping entries to remove.
+// Returns the index of the entry that should be discarded.
+func pickLoser(a, b struct {
+	raw    string
+	tokens []string
+	ver    *semver.Version
+}, idxA, idxB int,
+) int {
+	// Prefer entry with higher version
+	switch {
+	case a.ver != nil && b.ver != nil:
+		if a.ver.GreaterThan(b.ver) {
+			return idxB
+		}
+		if b.ver.GreaterThan(a.ver) {
+			return idxA
+		}
+	case a.ver != nil:
+		return idxB // a has a version, b doesn't
+	case b.ver != nil:
+		return idxA // b has a version, a doesn't
+	}
+
+	// Prefer longer (more specific) entry
+	if len(a.raw) != len(b.raw) {
+		if len(a.raw) > len(b.raw) {
+			return idxB
+		}
+		return idxA
+	}
+
+	// Same length, keep first encountered
+	return idxB
+}
+
+// recountChanges re-counts major/minor/patch changes from deduplicated sections.
+func recountChanges(sections map[string]*[]string) (int, int, int) {
+	major, minor, patch := 0, 0, 0
+	for key, section := range sections {
+		for _, line := range *section {
+			switch {
+			case strings.HasPrefix(line, "- **BREAKING CHANGE:**"):
+				major++
+			case key == "Added":
+				minor++
+			default:
+				patch++
+			}
+		}
+	}
+	return major, minor, patch
 }
 
 // MakeNewSections creates new section contents for the beginning of the CHANGELOG file.
@@ -311,6 +563,12 @@ func UpdateSection(
 		&minorChanges,
 		&patchChanges,
 	)
+
+	// Deduplicate entries in each section and recount changes
+	for _, section := range sections {
+		*section = DeduplicateEntries(*section)
+	}
+	majorChanges, minorChanges, patchChanges = recountChanges(sections)
 
 	// If no changes were found, return an error
 	if majorChanges == 0 && minorChanges == 0 && patchChanges == 0 {

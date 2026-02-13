@@ -77,7 +77,7 @@ You can provide the token directly in the configuration file or specify a path t
 
 ```yaml
 # Direct token (not recommended for security)
-gitlab_access_token: "glpat-TOKEN"
+gitlab_access_token: "???"
 
 # Or path to token file (recommended)
 gitlab_access_token: ".secure_files/gitlab_access_token.key"
@@ -140,7 +140,7 @@ projects:
   
   # Project with specific access token (overrides global token)
   - path: "https://gitlab.com/user/repo4.git"
-    project_access_token: "glpat-PROJECT-SPECIFIC-TOKEN"
+    project_access_token: "???"
 ```
 
 Then run AutoBump in batch mode:
@@ -151,14 +151,55 @@ autobump batch
 
 AutoBump will iterate through each project and perform the same actions as in single project mode.
 
+### 3. Discover Mode
+
+Instead of manually listing projects, AutoBump can automatically discover all repositories from your Git hosting providers (GitHub, GitLab, Azure DevOps) and bump them.
+
+Add a `providers` section to your configuration file:
+
+```yaml
+providers:
+  # GitHub - discovers all repos in the specified organizations
+  - type: "github"
+    token: "ghp_TOKEN"
+    organizations:
+      - "my-github-org"
+
+  # GitLab - discovers all projects in the specified groups (including subgroups)
+  - type: "gitlab"
+    token: "${GITLAB_TOKEN}"  # reads from environment variable
+    organizations:
+      - "my-gitlab-group"
+
+  # Azure DevOps - discovers all repos in the specified organizations
+  - type: "azuredevops"
+    token: "/path/to/token/file"  # reads token from file
+    organizations:
+      - "my-azure-org"
+```
+
+The `token` field supports three formats:
+- **Inline**: `"ghp_TOKEN"` -- the token value directly
+- **Environment variable**: `"${ENV_VAR}"` -- reads the token from an environment variable
+- **File path**: `"/path/to/file"` -- reads the token from a file on disk
+
+Then run AutoBump in discover mode:
+
+```bash
+autobump discover
+```
+
+AutoBump will query each provider's API to find all repositories in the configured organizations, then run the bump process on each discovered repository.
+
 ## How It Works
 
-1. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
-2. **Version Detection**: Reads the current version from CHANGELOG.md
-3. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
-4. **CHANGELOG Update**: Moves unreleased changes to the new version section with the current date
-5. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
-6. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
+1. **Repository Discovery** *(discover mode only)*: Queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations
+2. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
+3. **Version Detection**: Reads the current version from CHANGELOG.md
+4. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
+5. **CHANGELOG Update**: Moves unreleased changes to the new version section with the current date, deduplicating semantically overlapping entries
+6. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
+7. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
 
 ## Development
 

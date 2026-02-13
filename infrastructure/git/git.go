@@ -342,10 +342,10 @@ func GetLatestTag(repo *git.Repository) (*domain.LatestTag, error) {
 
 	// get the date time of the tag
 	commit, err := repo.CommitObject(latestTag.Hash())
-	latestTagDate := commit.Committer.When
 	if err != nil {
 		log.Fatal(err)
 	}
+	latestTagDate := commit.Committer.When
 
 	version, _ := semver.NewVersion(latestTag.Name().Short())
 	return &domain.LatestTag{
