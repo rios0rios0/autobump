@@ -13,6 +13,7 @@ on:
 
 permissions:
   checks: 'write' # code_check-style_golangci_lint
+  security-events: 'write' # security-sast_codeql
   contents: 'write' # delivery-release
 
 jobs:
