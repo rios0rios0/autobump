@@ -16,16 +16,18 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.18.0] - 2026-02-12
+
 ### Added
 
 - added Azure DevOps discoverer that lists all projects then all repositories per project via REST API
-- added changelog entry deduplication that removes exact duplicates and merges semantically overlapping entries using token-based similarity
-- added comprehensive unit tests for changelog processing and deduplication logic following BDD standards
 - added GitHub discoverer with `ListByOrg` pagination and `ListByUser` fallback
 - added GitLab discoverer with `ListGroupProjects` pagination (including subgroups) and user projects fallback
 - added `RepositoryDiscoverer` domain interface and factory-based `DiscovererRegistry` for provider-agnostic repository discovery
 - added `discover` CLI command that automatically queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations, removing the need to manually list projects in the YAML file
 - added `providers` configuration section with support for `type`, `token` (inline, `${ENV_VAR}`, or file path), and `organizations` fields
+- added changelog entry deduplication that removes exact duplicates and merges semantically overlapping entries using token-based similarity
+- added comprehensive unit tests for changelog processing and deduplication logic following BDD standards
 
 ### Changed
 
