@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -15,8 +16,12 @@ import (
 	"github.com/rios0rios0/autobump/internal/support"
 )
 
+// envVarPattern matches ${VAR_NAME} placeholders in token strings.
+var envVarPattern = regexp.MustCompile(`\$\{([^}]+)}`)
+
 // GlobalConfig represents the top-level configuration.
 type GlobalConfig struct {
+	Providers              []ProviderConfig          `yaml:"providers"`
 	Projects               []ProjectConfig           `yaml:"projects"`
 	LanguagesConfig        map[string]LanguageConfig `yaml:"languages"`
 	GpgKeyPath             string                    `yaml:"gpg_key_path"`
@@ -24,6 +29,13 @@ type GlobalConfig struct {
 	AzureDevOpsAccessToken string                    `yaml:"azure_devops_access_token"`
 	GitHubAccessToken      string                    `yaml:"github_access_token"`
 	GitLabCIJobToken       string                    `yaml:"gitlab_ci_job_token"`
+}
+
+// ProviderConfig describes a single Git hosting provider for auto-discovery.
+type ProviderConfig struct {
+	Type          string   `yaml:"type"`          // "github", "gitlab", "azuredevops"
+	Token         string   `yaml:"token"`         // inline, ${ENV_VAR}, or file path
+	Organizations []string `yaml:"organizations"` // org names or URLs to scan
 }
 
 // LanguageConfig holds per-language detection and versioning rules.
@@ -82,6 +94,11 @@ func ReadConfig(configPath string) (*GlobalConfig, error) {
 	handleTokenFile("Azure DevOps", &globalConfig.AzureDevOpsAccessToken)
 	handleTokenFile("GitHub", &globalConfig.GitHubAccessToken)
 
+	// Resolve provider tokens (env vars and file paths)
+	for i := range globalConfig.Providers {
+		globalConfig.Providers[i].Token = resolveToken(globalConfig.Providers[i].Token)
+	}
+
 	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
 
 	return globalConfig, nil
@@ -117,6 +134,62 @@ func handleTokenFile(name string, token *string) {
 			}
 		}
 	}
+}
+
+// resolveToken expands ${ENV_VAR} references in the token string and,
+// if the result is a path to an existing file, reads the token from it.
+func resolveToken(raw string) string {
+	if raw == "" {
+		return raw
+	}
+
+	// Expand ${ENV_VAR} references
+	resolved := envVarPattern.ReplaceAllStringFunc(raw, func(match string) string {
+		varName := envVarPattern.FindStringSubmatch(match)[1]
+		if val := os.Getenv(varName); val != "" {
+			return val
+		}
+		log.Warnf("Environment variable %q is not set", varName)
+		return ""
+	})
+
+	// If the resolved value is a path to an existing file, read the token from it
+	if _, err := os.Stat(resolved); err == nil {
+		data, readErr := os.ReadFile(resolved)
+		if readErr != nil {
+			log.Warnf("Failed to read token file %q: %v", resolved, readErr)
+			return resolved
+		}
+		log.Infof("Read token from file %q", resolved)
+		return strings.TrimSpace(string(data))
+	}
+
+	return resolved
+}
+
+// ValidateProviders validates provider configuration entries.
+func ValidateProviders(providers []ProviderConfig) error {
+	for i, p := range providers {
+		if p.Type == "" {
+			return fmt.Errorf(
+				"%w: providers[%d].type is required",
+				ErrConfigKeyMissingError, i,
+			)
+		}
+		if p.Token == "" {
+			return fmt.Errorf(
+				"%w: providers[%d].token is required (set inline, via ${ENV_VAR}, or as file path)",
+				ErrConfigKeyMissingError, i,
+			)
+		}
+		if len(p.Organizations) == 0 {
+			return fmt.Errorf(
+				"%w: providers[%d].organizations must have at least one entry",
+				ErrConfigKeyMissingError, i,
+			)
+		}
+	}
+	return nil
 }
 
 // DecodeConfig decodes the config file and returns a GlobalConfig struct

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -36,4 +37,22 @@ const (
 // Language is the interface for language-specific project operations.
 type Language interface {
 	GetProjectName() (string, error)
+}
+
+// Repository represents a Git repository discovered from a hosting provider.
+type Repository struct {
+	ID            string
+	Name          string
+	Organization  string
+	Project       string // Azure DevOps only; empty for GitHub/GitLab
+	DefaultBranch string
+	CloneURL      string
+}
+
+// RepositoryDiscoverer can list repositories from a Git hosting provider.
+type RepositoryDiscoverer interface {
+	// Name returns the provider identifier (e.g. "github").
+	Name() string
+	// DiscoverRepositories lists all repositories in an organization or group.
+	DiscoverRepositories(ctx context.Context, org string) ([]Repository, error)
 }

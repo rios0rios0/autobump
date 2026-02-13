@@ -16,6 +16,34 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added Azure DevOps discoverer that lists all projects then all repositories per project via REST API
+- added changelog entry deduplication that removes exact duplicates and merges semantically overlapping entries using token-based similarity
+- added comprehensive unit tests for changelog processing and deduplication logic following BDD standards
+- added GitHub discoverer with `ListByOrg` pagination and `ListByUser` fallback
+- added GitLab discoverer with `ListGroupProjects` pagination (including subgroups) and user projects fallback
+- added `RepositoryDiscoverer` domain interface and factory-based `DiscovererRegistry` for provider-agnostic repository discovery
+- added `discover` CLI command that automatically queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations, removing the need to manually list projects in the YAML file
+- added `providers` configuration section with support for `type`, `token` (inline, `${ENV_VAR}`, or file path), and `organizations` fields
+
+### Changed
+
+- moved CLI commands to use `RunE` instead of `Run` with `log.Fatalf`, centralizing exit behavior in `main`
+- refactored `ProcessNewChangelog` to deduplicate entries before generating the initial release section
+- refactored the entire project from a flat `cmd/autobump/` monolith into a layered architecture (`domain`, `config`, `application`, `infrastructure`, `cmd`, `internal/support`), fixing the GoReleaser "missing main function" error
+- replaced `panic` in provider registry with lazy initialization of an empty registry
+- replaced `regexp.MustCompile` with `regexp.Compile` for user-configurable version file patterns to fail gracefully instead of panicking
+
+### Fixed
+
+- fixed `CHANGELOG.md` template download to return an error instead of silently writing an empty file
+- fixed potential nil pointer dereference in `CommitObject` error path when retrieving the latest tag date
+
+### Removed
+
+- removed redundant `branchExists` helper in Azure DevOps adapter, using `gitutil.CheckBranchExists` instead
+
 ## [2.17.3] - 2026-02-10
 
 ### Changed

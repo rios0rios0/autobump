@@ -638,6 +638,68 @@ func IterateProjects(globalConfig *config.GlobalConfig) error {
 	return err
 }
 
+// DiscoverAndProcess discovers repositories from configured providers and processes each one.
+func DiscoverAndProcess(
+	ctx context.Context,
+	globalConfig *config.GlobalConfig,
+	discovererRegistry *provider.DiscovererRegistry,
+) error {
+	totalRepos := 0
+	totalErrors := 0
+
+	for _, provCfg := range globalConfig.Providers {
+		discoverer, err := discovererRegistry.Get(provCfg.Type, provCfg.Token)
+		if err != nil {
+			log.Errorf("Failed to initialize provider %q: %v", provCfg.Type, err)
+			totalErrors++
+			continue
+		}
+
+		log.Infof("Processing provider: %s", discoverer.Name())
+
+		for _, org := range provCfg.Organizations {
+			log.Infof("Discovering repositories in %q...", org)
+
+			repos, discoverErr := discoverer.DiscoverRepositories(ctx, org)
+			if discoverErr != nil {
+				log.Errorf("Failed to discover repos in %q: %v", org, discoverErr)
+				totalErrors++
+				continue
+			}
+
+			log.Infof("Found %d repositories in %q", len(repos), org)
+
+			for _, repo := range repos {
+				totalRepos++
+				projectConfig := repoToProjectConfig(repo, provCfg)
+				if processErr := ProcessRepo(globalConfig, projectConfig); processErr != nil {
+					log.Errorf(
+						"Error processing %s/%s: %v",
+						repo.Organization, repo.Name, processErr,
+					)
+					totalErrors++
+				}
+			}
+		}
+	}
+
+	log.Infof("Discovery complete: %d repos processed, %d errors", totalRepos, totalErrors)
+	return nil
+}
+
+// repoToProjectConfig converts a discovered Repository into a ProjectConfig
+// that can be fed into the existing ProcessRepo pipeline.
+func repoToProjectConfig(
+	repo domain.Repository,
+	provCfg config.ProviderConfig,
+) *config.ProjectConfig {
+	return &config.ProjectConfig{
+		Path:               repo.CloneURL,
+		Name:               repo.Name,
+		ProjectAccessToken: provCfg.Token,
+	}
+}
+
 // ---- Changelog I/O wrappers ----
 
 // updateChangelogFile reads the changelog, processes it, and writes it back.
