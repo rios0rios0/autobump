@@ -19,9 +19,9 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
+	infraRepos "github.com/rios0rios0/autobump/internal/infrastructure/repositories"
 	gitutil "github.com/rios0rios0/autobump/internal/infrastructure/repositories/git"
 	"github.com/rios0rios0/autobump/internal/infrastructure/repositories/python"
-	infraRepos "github.com/rios0rios0/autobump/internal/infrastructure/repositories"
 	"github.com/rios0rios0/autobump/internal/support"
 )
 
