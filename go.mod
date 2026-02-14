@@ -11,7 +11,7 @@ require (
 	github.com/rios0rios0/testkit v0.0.0-20250922212826-148e40b2fe14
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
-	gitlab.com/gitlab-org/api/client-go v1.31.0
+	gitlab.com/gitlab-org/api/client-go v1.34.0
 	go.uber.org/dig v1.19.0
 	golang.org/x/term v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
