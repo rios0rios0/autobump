@@ -111,6 +111,8 @@ func githubRepoToDomain(r *gogithub.Repository, org string) entities.Repository 
 		Name:          r.GetName(),
 		Organization:  org,
 		DefaultBranch: "refs/heads/" + defaultBranch,
-		CloneURL:      r.GetCloneURL(),
+		RemoteURL:     r.GetCloneURL(),
+		SSHURL:        r.GetSSHURL(),
+		ProviderName:  providerName,
 	}
 }

@@ -5,7 +5,11 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
+	forgeRepos "github.com/rios0rios0/gitforge/domain/repositories"
 )
+
+// ProviderRepository is an alias for gitforge's FileAccessProvider interface.
+type ProviderRepository = forgeRepos.FileAccessProvider
 
 // GitServiceAdapter defines the interface for Git hosting service adapters.
 // Each adapter handles authentication, URL processing, and pull request creation

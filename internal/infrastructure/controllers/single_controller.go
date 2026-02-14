@@ -30,20 +30,20 @@ func (it *SingleController) GetBind() entities.ControllerBind {
 }
 
 // Execute runs the single-repo bump process.
-func (it *SingleController) Execute(cmd *cobra.Command, _ []string) {
+func (it *SingleController) Execute(cmd *cobra.Command, _ []string) error {
 	configPath, _ := cmd.Flags().GetString("config")
 	language, _ := cmd.Flags().GetString("language")
 
 	globalConfig, err := findReadAndValidateConfig(configPath)
 	if err != nil {
 		log.Errorf("failed to read config: %v", err)
-		return
+		return err
 	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
 		log.Errorf("failed to get the current working directory: %v", err)
-		return
+		return err
 	}
 
 	projectConfig := &entities.ProjectConfig{
@@ -55,14 +55,17 @@ func (it *SingleController) Execute(cmd *cobra.Command, _ []string) {
 		detectedLanguage, detectErr := commands.DetectProjectLanguage(globalConfig, cwd)
 		if detectErr != nil {
 			log.Errorf("failed to detect project language: %v", detectErr)
-			return
+			return detectErr
 		}
 		projectConfig.Language = detectedLanguage
 	}
 
 	if processErr := commands.ProcessRepo(globalConfig, projectConfig); processErr != nil {
 		log.Errorf("failed to process repo: %v", processErr)
+		return processErr
 	}
+
+	return nil
 }
 
 // findReadAndValidateConfig finds, reads and validates the config file.

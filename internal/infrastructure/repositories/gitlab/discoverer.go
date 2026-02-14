@@ -128,6 +128,8 @@ func gitlabProjectToDomain(proj *gogitlab.Project, org string) entities.Reposito
 		Name:          proj.Path,
 		Organization:  org,
 		DefaultBranch: "refs/heads/" + defaultBranch,
-		CloneURL:      proj.HTTPURLToRepo,
+		RemoteURL:     proj.HTTPURLToRepo,
+		SSHURL:        proj.SSHURLToRepo,
+		ProviderName:  providerName,
 	}
 }

@@ -693,7 +693,7 @@ func repoToProjectConfig(
 	provCfg entities.ProviderConfig,
 ) *entities.ProjectConfig {
 	return &entities.ProjectConfig{
-		Path:               repo.CloneURL,
+		Path:               repo.RemoteURL,
 		Name:               repo.Name,
 		ProjectAccessToken: provCfg.Token,
 	}

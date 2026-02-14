@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -39,30 +40,33 @@ Requires a 'providers' section in the configuration file.`,
 }
 
 // Execute runs the discover mode.
-func (it *DiscoverController) Execute(cmd *cobra.Command, _ []string) {
+func (it *DiscoverController) Execute(cmd *cobra.Command, _ []string) error {
 	configPath, _ := cmd.Flags().GetString("config")
 
 	globalConfig, err := findReadAndValidateConfig(configPath)
 	if err != nil {
 		log.Errorf("failed to read config: %v", err)
-		return
+		return err
 	}
 
 	if len(globalConfig.Providers) == 0 {
 		log.Error("no providers configured; add a 'providers' section to the config file")
-		return
+		return errors.New("no providers configured")
 	}
 
 	if validateErr := entities.ValidateProviders(globalConfig.Providers); validateErr != nil {
 		log.Errorf("provider validation failed: %v", validateErr)
-		return
+		return validateErr
 	}
 
 	if discoverErr := commands.DiscoverAndProcess(
 		context.Background(), globalConfig, it.discovererRegistry,
 	); discoverErr != nil {
 		log.Errorf("discover failed: %v", discoverErr)
+		return discoverErr
 	}
+
+	return nil
 }
 
 // AddFlags is a no-op for the discover controller (uses inherited flags from root).

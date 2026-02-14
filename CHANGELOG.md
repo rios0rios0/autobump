@@ -18,6 +18,14 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
+- extracted shared entities, providers, git operations, signing, changelog processing, configuration, and utilities into `github.com/rios0rios0/gitforge` shared library
+- replaced local `Repository`, `ServiceType`, `BranchStatus`, `LatestTag`, `ProviderConfig`, `ControllerBind` types with aliases from `gitforge`
+- replaced local changelog processing functions with delegates to `gitforge`
+- replaced local git operations in `internal/infrastructure/repositories/git/` with delegates to `gitforge/infrastructure/git`
+- replaced local GPG signing utilities in `internal/support/` with delegates to `gitforge/infrastructure/signing`
+- replaced local `ReadLines`, `WriteLines`, `DownloadFile`, `StripUsernameFromURL` with delegates to `gitforge/support`
+- updated `Controller.Execute()` to return `error` matching the shared `gitforge` interface
+- changed `Repository.CloneURL` field to `Repository.RemoteURL` for consistency with `gitforge`
 - changed the Go module dependencies to their latest versions
 
 ## [2.19.0] - 2026-02-14

@@ -150,7 +150,9 @@ func (d *Discoverer) getRepositories(
 			Organization:  orgName,
 			Project:       projectName,
 			DefaultBranch: r.DefaultBranch,
-			CloneURL:      r.RemoteURL,
+			RemoteURL:     r.RemoteURL,
+			SSHURL:        r.SSHURL,
+			ProviderName:  discovererProviderName,
 		})
 	}
 
