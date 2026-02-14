@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -68,6 +67,3 @@ func (it *DiscoverController) Execute(cmd *cobra.Command, _ []string) {
 
 // AddFlags is a no-op for the discover controller (uses inherited flags from root).
 func (it *DiscoverController) AddFlags(_ *cobra.Command) {}
-
-// Ensure DiscoverController doesn't use errors
-var _ = errors.New

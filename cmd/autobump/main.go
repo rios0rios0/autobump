@@ -8,8 +8,8 @@ import (
 
 	"github.com/rios0rios0/autobump/internal"
 	"github.com/rios0rios0/autobump/internal/infrastructure/controllers"
-	gitutil "github.com/rios0rios0/autobump/internal/infrastructure/repositories/git"
 	infraRepos "github.com/rios0rios0/autobump/internal/infrastructure/repositories"
+	gitutil "github.com/rios0rios0/autobump/internal/infrastructure/repositories/git"
 )
 
 func buildRootCommand(singleController *controllers.SingleController) *cobra.Command {
