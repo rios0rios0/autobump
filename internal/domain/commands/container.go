@@ -4,7 +4,8 @@ import (
 	"go.uber.org/dig"
 )
 
-// RegisterProviders registers all command providers with the DIG container.
-func RegisterProviders(container *dig.Container) error {
-	return nil // Commands are called directly by controllers using service functions
+// RegisterProviders is intentionally a no-op: commands are invoked directly by controllers,
+// so command providers are not registered with the DIG container.
+func RegisterProviders(_ *dig.Container) error {
+	return nil
 }
