@@ -34,7 +34,7 @@ func (it *BatchController) Execute(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	if err := commands.IterateProjects(globalConfig); err != nil {
-		log.Errorf("batch processing failed: %v", err)
+	if iterateErr := commands.IterateProjects(globalConfig); iterateErr != nil {
+		log.Errorf("batch processing failed: %v", iterateErr)
 	}
 }

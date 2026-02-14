@@ -60,8 +60,8 @@ func (it *SingleController) Execute(cmd *cobra.Command, _ []string) {
 		projectConfig.Language = detectedLanguage
 	}
 
-	if err := commands.ProcessRepo(globalConfig, projectConfig); err != nil {
-		log.Errorf("failed to process repo: %v", err)
+	if processErr := commands.ProcessRepo(globalConfig, projectConfig); processErr != nil {
+		log.Errorf("failed to process repo: %v", processErr)
 	}
 }
 
