@@ -16,26 +16,28 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
-### Changed
-
-- refactored entire project to follow DDD/Clean Architecture patterns matching the terra project structure
-- moved all code under `internal/` package for proper Go encapsulation
-- restructured domain layer into `entities/`, `commands/`, and `repositories/` packages
-- restructured infrastructure layer into `controllers/` and `repositories/` packages
-- replaced manual registry-based dependency injection with `go.uber.org/dig` container
-- introduced `Controller` interface with `GetBind()` and `Execute()` following terra's pattern
-- introduced `AppInternal` to aggregate all controllers via DIG injection
-- moved entry point from `main.go` to `cmd/autobump/main.go` with separate `dig.go` for DI bootstrap
-- moved config types (`GlobalConfig`, `ProjectConfig`, etc.) into `internal/domain/entities/`
-- extracted `ProcessRepo`, `IterateProjects`, and `DiscoverAndProcess` into `internal/domain/commands/`
-- created `SingleController`, `BatchController`, and `DiscoverController` as cobra CLI adapters
+## [2.19.0] - 2026-02-14
 
 ### Added
 
-- added `go.uber.org/dig` dependency for dependency injection
-- added `github.com/rios0rios0/testkit` dependency for test builders
-- added entity builders (`RepositoryBuilder`) following testkit `BaseBuilder` pattern in `test/domain/entitybuilders/`
 - added `AdapterFinder` interface in git utilities to break import cycles between infrastructure packages
+- added entity builders (`RepositoryBuilder`) following testkit `BaseBuilder` pattern in `test/domain/entitybuilders/`
+- added `github.com/rios0rios0/testkit` dependency for test builders
+- added `go.uber.org/dig` dependency for dependency injection
+
+### Changed
+
+- created `SingleController`, `BatchController`, and `DiscoverController` as cobra CLI adapters
+- extracted `ProcessRepo`, `IterateProjects`, and `DiscoverAndProcess` into `internal/domain/commands/`
+- introduced `AppInternal` to aggregate all controllers via DIG injection
+- introduced `Controller` interface with `GetBind()` and `Execute()` following separation of concerns principles
+- moved all code under `internal/` package for proper Go encapsulation
+- moved config types (`GlobalConfig`, `ProjectConfig`, etc.) into `internal/domain/entities/`
+- moved entry point from `main.go` to `cmd/autobump/main.go` with separate `dig.go` for DI bootstrap
+- refactored entire project to follow DDD/Clean Architecture patterns
+- replaced manual registry-based dependency injection with `go.uber.org/dig` container
+- restructured domain layer into `entities/`, `commands/`, and `repositories/` packages
+- restructured infrastructure layer into `controllers/` and `repositories/` packages
 
 ## [2.18.0] - 2026-02-12
 
