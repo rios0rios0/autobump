@@ -16,6 +16,27 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- refactored entire project to follow DDD/Clean Architecture patterns matching the terra project structure
+- moved all code under `internal/` package for proper Go encapsulation
+- restructured domain layer into `entities/`, `commands/`, and `repositories/` packages
+- restructured infrastructure layer into `controllers/` and `repositories/` packages
+- replaced manual registry-based dependency injection with `go.uber.org/dig` container
+- introduced `Controller` interface with `GetBind()` and `Execute()` following terra's pattern
+- introduced `AppInternal` to aggregate all controllers via DIG injection
+- moved entry point from `main.go` to `cmd/autobump/main.go` with separate `dig.go` for DI bootstrap
+- moved config types (`GlobalConfig`, `ProjectConfig`, etc.) into `internal/domain/entities/`
+- extracted `ProcessRepo`, `IterateProjects`, and `DiscoverAndProcess` into `internal/domain/commands/`
+- created `SingleController`, `BatchController`, and `DiscoverController` as cobra CLI adapters
+
+### Added
+
+- added `go.uber.org/dig` dependency for dependency injection
+- added `github.com/rios0rios0/testkit` dependency for test builders
+- added entity builders (`RepositoryBuilder`) following testkit `BaseBuilder` pattern in `test/domain/entitybuilders/`
+- added `AdapterFinder` interface in git utilities to break import cycles between infrastructure packages
+
 ## [2.18.0] - 2026-02-12
 
 ### Added
