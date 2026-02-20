@@ -2,6 +2,8 @@ SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 -include $(SCRIPTS_DIR)/makefiles/common.mk
 -include $(SCRIPTS_DIR)/makefiles/golang.mk
 
+.PHONY: debug build build-musl install run
+
 build:
 	rm -rf bin
 	go build -o bin/autobump .
@@ -20,4 +22,4 @@ run:
 	go run .
 
 install:
-	sudo cp -v bin/autobump /usr/local/bin/autobump
+	cp -v bin/autobump ~/.local/bin/autobump
