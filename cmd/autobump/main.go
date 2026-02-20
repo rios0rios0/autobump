@@ -7,9 +7,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/rios0rios0/autobump/internal"
+	"github.com/rios0rios0/autobump/internal/domain/commands"
 	"github.com/rios0rios0/autobump/internal/infrastructure/controllers"
-	infraRepos "github.com/rios0rios0/autobump/internal/infrastructure/repositories"
-	gitutil "github.com/rios0rios0/autobump/internal/infrastructure/repositories/git"
+	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 )
 
 func buildRootCommand(singleController *controllers.SingleController) *cobra.Command {
@@ -49,10 +49,11 @@ func addSubcommands(rootCmd *cobra.Command, appContext *internal.AppInternal) {
 }
 
 func main() {
-	// Initialize the provider registry via DIG and set as default
+	// Initialize the provider registry via DIG and create GitOperations with it
 	providerRegistry := injectProviderRegistry()
-	infraRepos.SetDefaultRegistry(providerRegistry)
-	gitutil.SetAdapterFinder(providerRegistry)
+	gitOps := gitInfra.NewGitOperations(providerRegistry)
+	commands.SetGitOperations(gitOps)
+	commands.SetProviderRegistry(providerRegistry)
 
 	// Inject the single controller and create root command
 	singleController := injectSingleController()

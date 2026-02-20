@@ -41,15 +41,15 @@ func injectSingleController() *controllers.SingleController {
 	return controller
 }
 
-func injectProviderRegistry() *infraRepos.GitServiceRegistry {
+func injectProviderRegistry() *infraRepos.ProviderRegistry {
 	container := dig.New()
 
 	if err := internal.RegisterProviders(container); err != nil {
 		panic(err)
 	}
 
-	var registry *infraRepos.GitServiceRegistry
-	if err := container.Invoke(func(r *infraRepos.GitServiceRegistry) {
+	var registry *infraRepos.ProviderRegistry
+	if err := container.Invoke(func(r *infraRepos.ProviderRegistry) {
 		registry = r
 	}); err != nil {
 		panic(err)

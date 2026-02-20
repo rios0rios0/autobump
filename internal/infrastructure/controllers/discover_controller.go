@@ -13,15 +13,15 @@ import (
 
 // DiscoverController handles the "discover" subcommand.
 type DiscoverController struct {
-	discovererRegistry *infraRepos.DiscovererRegistry
+	providerRegistry *infraRepos.ProviderRegistry
 }
 
 // NewDiscoverController creates a new DiscoverController.
 func NewDiscoverController(
-	discovererRegistry *infraRepos.DiscovererRegistry,
+	providerRegistry *infraRepos.ProviderRegistry,
 ) *DiscoverController {
 	return &DiscoverController{
-		discovererRegistry: discovererRegistry,
+		providerRegistry: providerRegistry,
 	}
 }
 
@@ -59,7 +59,7 @@ func (it *DiscoverController) Execute(cmd *cobra.Command, _ []string) {
 	}
 
 	if discoverErr := commands.DiscoverAndProcess(
-		context.Background(), globalConfig, it.discovererRegistry,
+		context.Background(), globalConfig, it.providerRegistry,
 	); discoverErr != nil {
 		log.Errorf("discover failed: %v", discoverErr)
 	}
