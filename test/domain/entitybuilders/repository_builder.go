@@ -15,7 +15,7 @@ type RepositoryBuilder struct {
 	organization  string
 	project       string
 	defaultBranch string
-	cloneURL      string
+	remoteURL      string
 }
 
 // NewRepositoryBuilder creates a new repository builder with sensible defaults.
@@ -27,7 +27,7 @@ func NewRepositoryBuilder() *RepositoryBuilder {
 		organization:  "test-org",
 		project:       "",
 		defaultBranch: "main",
-		cloneURL:      "https://github.com/test-org/test-repo.git",
+		remoteURL:      "https://github.com/test-org/test-repo.git",
 	}
 }
 
@@ -63,7 +63,7 @@ func (b *RepositoryBuilder) WithDefaultBranch(branch string) *RepositoryBuilder 
 
 // WithCloneURL sets the clone URL.
 func (b *RepositoryBuilder) WithCloneURL(url string) *RepositoryBuilder {
-	b.cloneURL = url
+	b.remoteURL = url
 	return b
 }
 
@@ -80,7 +80,7 @@ func (b *RepositoryBuilder) BuildRepository() entities.Repository {
 		Organization:  b.organization,
 		Project:       b.project,
 		DefaultBranch: b.defaultBranch,
-		CloneURL:      b.cloneURL,
+		RemoteURL:     b.remoteURL,
 	}
 }
 
@@ -92,7 +92,7 @@ func (b *RepositoryBuilder) Reset() testkit.Builder {
 	b.organization = "test-org"
 	b.project = ""
 	b.defaultBranch = "main"
-	b.cloneURL = "https://github.com/test-org/test-repo.git"
+	b.remoteURL = "https://github.com/test-org/test-repo.git"
 	return b
 }
 
@@ -105,6 +105,6 @@ func (b *RepositoryBuilder) Clone() testkit.Builder {
 		organization:  b.organization,
 		project:       b.project,
 		defaultBranch: b.defaultBranch,
-		cloneURL:      b.cloneURL,
+		remoteURL:      b.remoteURL,
 	}
 }

@@ -1,37 +1,33 @@
 package entities
 
 import (
-	"context"
-	"time"
-
-	"github.com/Masterminds/semver/v3"
+	gitforgeEntities "github.com/rios0rios0/gitforge/domain/entities"
 )
 
-// ServiceType represents the type of Git hosting service.
-type ServiceType int
+// ServiceType is re-exported from gitforge.
+type ServiceType = gitforgeEntities.ServiceType
 
-const (
-	UNKNOWN ServiceType = iota
-	GITHUB
-	GITLAB
-	AZUREDEVOPS
-	BITBUCKET
-	CODECOMMIT
+//nolint:gochecknoglobals // re-exported constants from gitforge
+var (
+	UNKNOWN     = gitforgeEntities.UNKNOWN
+	GITHUB      = gitforgeEntities.GITHUB
+	GITLAB      = gitforgeEntities.GITLAB
+	AZUREDEVOPS = gitforgeEntities.AZUREDEVOPS
+	BITBUCKET   = gitforgeEntities.BITBUCKET
+	CODECOMMIT  = gitforgeEntities.CODECOMMIT
 )
 
-// LatestTag holds information about the latest Git tag.
-type LatestTag struct {
-	Tag  *semver.Version
-	Date time.Time
-}
+// LatestTag is re-exported from gitforge.
+type LatestTag = gitforgeEntities.LatestTag
 
-// BranchStatus represents the status of the bump branch.
-type BranchStatus int
+// BranchStatus is re-exported from gitforge.
+type BranchStatus = gitforgeEntities.BranchStatus
 
-const (
-	BranchCreated      BranchStatus = iota // Branch was newly created
-	BranchExistsWithPR                     // Branch exists and PR exists - skip entirely
-	BranchExistsNoPR                       // Branch exists but no PR - need to create PR
+//nolint:gochecknoglobals // re-exported constants from gitforge
+var (
+	BranchCreated      = gitforgeEntities.BranchCreated
+	BranchExistsWithPR = gitforgeEntities.BranchExistsWithPR
+	BranchExistsNoPR   = gitforgeEntities.BranchExistsNoPR
 )
 
 // Language is the interface for language-specific project operations.
@@ -39,20 +35,8 @@ type Language interface {
 	GetProjectName() (string, error)
 }
 
-// Repository represents a Git repository discovered from a hosting provider.
-type Repository struct {
-	ID            string
-	Name          string
-	Organization  string
-	Project       string // Azure DevOps only; empty for GitHub/GitLab
-	DefaultBranch string
-	CloneURL      string
-}
+// Repository is re-exported from gitforge.
+type Repository = gitforgeEntities.Repository
 
-// RepositoryDiscoverer can list repositories from a Git hosting provider.
-type RepositoryDiscoverer interface {
-	// Name returns the provider identifier (e.g. "github").
-	Name() string
-	// DiscoverRepositories lists all repositories in an organization or group.
-	DiscoverRepositories(ctx context.Context, org string) ([]Repository, error)
-}
+// RepositoryDiscoverer is re-exported from gitforge.
+type RepositoryDiscoverer = gitforgeEntities.RepositoryDiscoverer
