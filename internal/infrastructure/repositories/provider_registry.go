@@ -1,80 +1,41 @@
 package repositories
 
 import (
-	"github.com/rios0rios0/autobump/internal/domain/entities"
-	domainRepos "github.com/rios0rios0/autobump/internal/domain/repositories"
+	globalEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
+	registryInfra "github.com/rios0rios0/gitforge/pkg/registry/infrastructure"
 )
 
-// GitServiceRegistry manages all registered Git service adapters.
-type GitServiceRegistry struct {
-	adapters []domainRepos.GitServiceAdapter
+// ProviderRegistry wraps gitforge's ProviderRegistry and implements the
+// git.AdapterFinder interface so it can be passed to gitInfra.NewGitOperations.
+type ProviderRegistry struct {
+	*registryInfra.ProviderRegistry
 }
 
-// NewGitServiceRegistry creates a new registry with the given adapters.
-func NewGitServiceRegistry(adapters ...domainRepos.GitServiceAdapter) *GitServiceRegistry {
-	return &GitServiceRegistry{
-		adapters: adapters,
+// NewProviderRegistry creates a new provider registry backed by gitforge.
+func NewProviderRegistry() *ProviderRegistry {
+	return &ProviderRegistry{
+		ProviderRegistry: registryInfra.NewProviderRegistry(),
 	}
 }
 
-// Register adds a new Git service adapter to the registry.
-func (r *GitServiceRegistry) Register(adapter domainRepos.GitServiceAdapter) {
-	r.adapters = append(r.adapters, adapter)
-}
-
-// GetAdapterByURL returns the appropriate adapter for the given URL.
-func (r *GitServiceRegistry) GetAdapterByURL(url string) domainRepos.GitServiceAdapter {
-	for _, adapter := range r.adapters {
-		if adapter.MatchesURL(url) {
-			return adapter
-		}
+// GetAdapterByURL returns the adapter matching the given URL, cast to LocalGitAuthProvider.
+// This satisfies the git.AdapterFinder interface.
+func (r *ProviderRegistry) GetAdapterByURL(url string) globalEntities.LocalGitAuthProvider {
+	adapter := r.ProviderRegistry.GetAdapterByURL(url)
+	if adapter == nil {
+		return nil
 	}
-	return nil
+	lgap, ok := adapter.(globalEntities.LocalGitAuthProvider)
+	if !ok {
+		return nil
+	}
+	return lgap
 }
 
 // GetAdapterByServiceType returns the adapter for the given service type.
-func (r *GitServiceRegistry) GetAdapterByServiceType(
-	serviceType entities.ServiceType,
-) domainRepos.GitServiceAdapter {
-	for _, adapter := range r.adapters {
-		if adapter.GetServiceType() == serviceType {
-			return adapter
-		}
-	}
-	return nil
-}
-
-// defaultRegistry is the default registry instance used by global functions.
-var defaultRegistry *GitServiceRegistry //nolint:gochecknoglobals // required for backward compatibility
-
-// SetDefaultRegistry sets the default registry for global functions.
-func SetDefaultRegistry(reg *GitServiceRegistry) {
-	defaultRegistry = reg
-}
-
-// getDefaultRegistry returns the default registry, lazily initializing an empty one if needed.
-func getDefaultRegistry() *GitServiceRegistry {
-	if defaultRegistry == nil {
-		defaultRegistry = NewGitServiceRegistry()
-	}
-	return defaultRegistry
-}
-
-// GetAdapterByURL returns the appropriate adapter for the given URL using the default registry.
-func GetAdapterByURL(url string) domainRepos.GitServiceAdapter {
-	return getDefaultRegistry().GetAdapterByURL(url)
-}
-
-// GetAdapterByServiceType returns the adapter for the given service type using the default registry.
-func GetAdapterByServiceType(serviceType entities.ServiceType) domainRepos.GitServiceAdapter {
-	return getDefaultRegistry().GetAdapterByServiceType(serviceType)
-}
-
-// NewPullRequestProvider creates the appropriate provider based on the service type.
-func NewPullRequestProvider(serviceType entities.ServiceType) domainRepos.PullRequestProvider {
-	adapter := GetAdapterByServiceType(serviceType)
-	if adapter != nil {
-		return adapter
-	}
-	return nil
+// This delegates to gitforge's registry which already returns LocalGitAuthProvider.
+func (r *ProviderRegistry) GetAdapterByServiceType(
+	serviceType globalEntities.ServiceType,
+) globalEntities.LocalGitAuthProvider {
+	return r.ProviderRegistry.GetAdapterByServiceType(serviceType)
 }
