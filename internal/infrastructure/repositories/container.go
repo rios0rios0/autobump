@@ -1,35 +1,43 @@
 package repositories
 
 import (
-	"github.com/rios0rios0/autobump/internal/infrastructure/repositories/azuredevops"
-	"github.com/rios0rios0/autobump/internal/infrastructure/repositories/github"
-	"github.com/rios0rios0/autobump/internal/infrastructure/repositories/gitlab"
+	globalEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
+	"github.com/rios0rios0/gitforge/pkg/providers/infrastructure/azuredevops"
+	"github.com/rios0rios0/gitforge/pkg/providers/infrastructure/github"
+	"github.com/rios0rios0/gitforge/pkg/providers/infrastructure/gitlab"
 	"go.uber.org/dig"
 )
 
+// newDiscoverer wraps a ForgeProvider factory into a RepositoryDiscoverer factory.
+func newDiscoverer(
+	factory func(string) globalEntities.ForgeProvider,
+) func(string) globalEntities.RepositoryDiscoverer {
+	return func(token string) globalEntities.RepositoryDiscoverer {
+		//nolint:errcheck // gitforge providers always implement RepositoryDiscoverer
+		return factory(token).(globalEntities.RepositoryDiscoverer)
+	}
+}
+
 // RegisterProviders registers all repository providers with the DIG container.
 func RegisterProviders(container *dig.Container) error {
-	// Register provider registry with all adapters
-	if err := container.Provide(func() *GitServiceRegistry {
-		return NewGitServiceRegistry(
-			gitlab.NewAdapter(),
-			azuredevops.NewAdapter(),
-			github.NewAdapter(),
-		)
-	}); err != nil {
-		return err
-	}
+	return container.Provide(func() *ProviderRegistry {
+		reg := NewProviderRegistry()
 
-	// Register discoverer registry with all provider factories
-	if err := container.Provide(func() *DiscovererRegistry {
-		reg := NewDiscovererRegistry()
-		reg.Register("github", github.NewDiscoverer)
-		reg.Register("gitlab", gitlab.NewDiscoverer)
-		reg.Register("azuredevops", azuredevops.NewDiscoverer)
+		// Register token-less adapters for URL matching and service-type detection
+		reg.RegisterAdapter(github.NewProvider(""))
+		reg.RegisterAdapter(gitlab.NewProvider(""))
+		reg.RegisterAdapter(azuredevops.NewProvider(""))
+
+		// Register factories for token-based construction
+		reg.RegisterFactory("github", github.NewProvider)
+		reg.RegisterFactory("gitlab", gitlab.NewProvider)
+		reg.RegisterFactory("azuredevops", azuredevops.NewProvider)
+
+		// Register discoverer factories
+		reg.RegisterDiscoverer("github", newDiscoverer(github.NewProvider))
+		reg.RegisterDiscoverer("gitlab", newDiscoverer(gitlab.NewProvider))
+		reg.RegisterDiscoverer("azuredevops", newDiscoverer(azuredevops.NewProvider))
+
 		return reg
-	}); err != nil {
-		return err
-	}
-
-	return nil
+	})
 }

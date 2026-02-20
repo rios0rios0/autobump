@@ -18,9 +18,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
-- changed the Go module dependencies to their latest versions
-- changed the Go module dependencies to their latest versions
-- changed the Go module dependencies to their latest versions
+- changed all gitforge import paths to the new DDD `pkg/` structure (e.g. `infrastructure/git` → `pkg/git/infrastructure`)
+- updated commit signing code from `SigningOptions` struct to `CommitSigner` interface pattern using `NewSSHSigner` and `NewGPGSigner`
+- updated `GitOperations` initialization from global `SetAdapterFinder` to constructor injection via `NewGitOperations`
 
 ## [2.19.0] - 2026-02-14
 
