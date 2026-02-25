@@ -63,23 +63,6 @@ curl -fsSL https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh
 
 Download pre-built binaries from the [releases page](https://github.com/rios0rios0/autobump/releases).
 
-### Build from Source
-
-If you'd like to compile it yourself, make sure you have Go 1.25+ and Make installed, then use the following commands:
-
-```bash
-# Download dependencies
-go mod download
-
-# Build the binary
-make build
-
-# Install system-wide (optional)
-make install
-```
-
-This will create the binary at `./bin/autobump` and optionally install it to `/usr/local/bin/autobump`.
-
 ## Configuration
 
 Create a configuration file based on the example from `configs/autobump.yaml` and put it in `~/.config/autobump.yaml`.
@@ -221,7 +204,7 @@ AutoBump will query each provider's API to find all repositories in the configur
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
