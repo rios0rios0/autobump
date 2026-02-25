@@ -4,6 +4,12 @@
         <img src="https://img.shields.io/github/release/rios0rios0/autobump.svg?style=for-the-badge&logo=github" alt="Latest Release"/></a>
     <a href="https://github.com/rios0rios0/autobump/blob/main/LICENSE">
         <img src="https://img.shields.io/github/license/rios0rios0/autobump.svg?style=for-the-badge&logo=github" alt="License"/></a>
+    <a href="https://github.com/rios0rios0/autobump/actions/workflows/default.yaml">
+        <img src="https://img.shields.io/github/actions/workflow/status/rios0rios0/autobump/default.yaml?branch=main&style=for-the-badge&logo=github" alt="Build Status"/></a>
+    <a href="https://sonarcloud.io/summary/overall?id=rios0rios0_autobump">
+        <img src="https://img.shields.io/sonar/coverage/rios0rios0_autobump?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarqubecloud" alt="Coverage"/></a>
+    <a href="https://sonarcloud.io/summary/overall?id=rios0rios0_autobump">
+        <img src="https://img.shields.io/sonar/quality_gate/rios0rios0_autobump?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarqubecloud" alt="Quality Gate"/></a>
 </p>
 
 Automatically update CHANGELOG.md according to the [Keep a Changelog (version 1.1.0)](https://keepachangelog.com/en/1.1.0/) standard and the [Semantic Versioning (version 2.0.0)](https://semver.org/spec/v2.0.0.html) standard,
