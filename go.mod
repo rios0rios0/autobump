@@ -8,10 +8,10 @@ require (
 	github.com/ProtonMail/go-crypto v1.3.0
 	github.com/go-git/go-git/v5 v5.16.5
 	github.com/google/go-github/v66 v66.0.0
-	github.com/rios0rios0/testkit v0.0.0-20260214183626-8263c467c4cd
+	github.com/rios0rios0/testkit v0.0.0-20260225040157-ee82f3616fa4
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
-	gitlab.com/gitlab-org/api/client-go v1.41.0
+	gitlab.com/gitlab-org/api/client-go v1.43.0
 	go.uber.org/dig v1.19.0
 	golang.org/x/term v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -24,7 +24,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
-	github.com/go-git/go-billy/v5 v5.7.0 // indirect
+	github.com/go-git/go-billy/v5 v5.8.0 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
