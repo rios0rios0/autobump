@@ -1,4 +1,10 @@
-# AutoBump
+<h1 align="center">AutoBump</h1>
+<p align="center">
+    <a href="https://github.com/rios0rios0/autobump/releases/latest">
+        <img src="https://img.shields.io/github/release/rios0rios0/autobump.svg?style=for-the-badge&logo=github" alt="Latest Release"/></a>
+    <a href="https://github.com/rios0rios0/autobump/blob/main/LICENSE">
+        <img src="https://img.shields.io/github/license/rios0rios0/autobump.svg?style=for-the-badge&logo=github" alt="License"/></a>
+</p>
 
 Automatically update CHANGELOG.md according to the [Keep a Changelog (version 1.1.0)](https://keepachangelog.com/en/1.1.0/) standard and the [Semantic Versioning (version 2.0.0)](https://semver.org/spec/v2.0.0.html) standard,
 commit the changes, push the commits, and create a merge request/pull request on GitLab, Azure DevOps, or GitHub.
@@ -6,6 +12,7 @@ commit the changes, push the commits, and create a merge request/pull request on
 ## Supported Languages
 
 AutoBump supports automatic language detection and version updates for:
+
 - **Go**: Detects via `go.mod`, updates version in `go.mod`
 - **Java**: Detects via `build.gradle`, `pom.xml`, updates `build.gradle` and `application.yaml`
 - **Python**: Detects via `pyproject.toml`, `setup.py`, updates `__init__.py`
@@ -69,6 +76,7 @@ This will create the binary at `./bin/autobump` and optionally install it to `/u
 
 Create a configuration file based on the example from `configs/autobump.yaml` and put it in `~/.config/autobump.yaml`.
 You will need to configure at least one access token depending on which Git platform you use:
+
 - **GitLab**: Set `gitlab_access_token` field with your GitLab personal access token (e.g., `glpat-TOKEN`)
 - **Azure DevOps**: Set `azure_devops_access_token` field with your Azure DevOps personal access token
 - **GitHub**: Set `github_access_token` field with your GitHub personal access token (e.g., `ghp_TOKEN`)
@@ -92,6 +100,7 @@ gpg_key_path: "/home/user/.gnupg/autobump.asc"
 ```
 
 To export your GPG key:
+
 ```bash
 gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobump.asc
 ```
@@ -130,14 +139,14 @@ Modify the configuration file and add a list of your projects into the `projects
 projects:
   # Local repository path with auto-detected language
   - path: "/home/user/repo1"
-  
+
   # Local repository with manually specified language
   - path: "/home/user/repo2"
     language: "Java"
-  
+
   # Git URL - AutoBump will clone automatically into a temporary directory
   - path: "git@github.com:example/repo3.git"
-  
+
   # Project with specific access token (overrides global token)
   - path: "https://gitlab.com/user/repo4.git"
     project_access_token: "???"
@@ -179,6 +188,7 @@ providers:
 ```
 
 The `token` field supports three formats:
+
 - **Inline**: `"ghp_TOKEN"` -- the token value directly
 - **Environment variable**: `"${ENV_VAR}"` -- reads the token from an environment variable
 - **File path**: `"/path/to/file"` -- reads the token from a file on disk
@@ -201,26 +211,10 @@ AutoBump will query each provider's API to find all repositories in the configur
 6. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
 7. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
 
-## Development
+## Contributing
 
-### Prerequisites
-- Go 1.25+
-- Make
-
-### Building
-```bash
-go mod download
-make build
-```
-
-### Testing
-```bash
-go test ./...
-```
-
-### Linting
-This project uses the linting configuration from the [rios0rios0/pipelines](https://github.com/rios0rios0/pipelines) repository. The CI/CD pipeline automatically runs linting via the reusable workflow.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
+See [LICENSE](LICENSE) for details.
