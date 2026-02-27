@@ -5,13 +5,13 @@ go 1.26.0
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/ProtonMail/go-crypto v1.3.0
+	github.com/ProtonMail/go-crypto v1.4.0
 	github.com/go-git/go-git/v5 v5.17.0
 	github.com/google/go-github/v66 v66.0.0
-	github.com/rios0rios0/testkit v0.0.0-20260225040157-ee82f3616fa4
+	github.com/rios0rios0/testkit v0.0.0-20260226133256-05e6293bbf63
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
-	gitlab.com/gitlab-org/api/client-go v1.43.0
+	gitlab.com/gitlab-org/api/client-go v1.44.0
 	go.uber.org/dig v1.19.0
 	golang.org/x/term v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
