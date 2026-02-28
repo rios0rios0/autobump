@@ -8,7 +8,7 @@ development practices, refer to the **[Development Guide](https://github.com/rio
 ## Prerequisites
 
 - [Go](https://go.dev/dl/) 1.26+
-- [Make](https://www.gnu.org/software/make/)
+- [GNU Make](https://www.gnu.org/software/make/)
 
 ## Development Workflow
 
@@ -22,13 +22,17 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```bash
    make build
    ```
-5. Make your changes
-6. Validate:
+5. Run linting:
    ```bash
    make lint
+   ```
+6. Run tests:
+   ```bash
    make test
+   ```
+7. Run security analysis (SAST):
+   ```bash
    make sast
    ```
-7. Update `CHANGELOG.md` under `[Unreleased]`
 8. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
 9. Open a pull request against `main`
