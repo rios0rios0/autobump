@@ -331,10 +331,7 @@ func overlapRatio(a, b []string) float64 {
 		}
 	}
 
-	minLen := len(a)
-	if len(b) < minLen {
-		minLen = len(b)
-	}
+	minLen := min(len(b), len(a))
 
 	return float64(intersection) / float64(minLen)
 }
