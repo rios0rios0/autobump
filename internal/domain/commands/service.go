@@ -4,14 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -20,9 +18,13 @@ import (
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	infraRepos "github.com/rios0rios0/autobump/internal/infrastructure/repositories"
-	gitutil "github.com/rios0rios0/autobump/internal/infrastructure/repositories/git"
 	"github.com/rios0rios0/autobump/internal/infrastructure/repositories/python"
 	"github.com/rios0rios0/autobump/internal/support"
+	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
+	gitHelpers "github.com/rios0rios0/gitforge/pkg/git/infrastructure/helpers"
+	globalEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
+	signingInfra "github.com/rios0rios0/gitforge/pkg/signing/infrastructure"
+	signingHelpers "github.com/rios0rios0/gitforge/pkg/signing/infrastructure/helpers"
 )
 
 var (
@@ -33,6 +35,22 @@ var (
 	ErrNoVersionFileFound           = errors.New("no version file found")
 	ErrLanguageNotFoundInConfig     = errors.New("language not found in config")
 )
+
+// providerRegistry is set by the application at startup via SetProviderRegistry.
+var providerRegistry *infraRepos.ProviderRegistry //nolint:gochecknoglobals // required for provider access
+
+// SetProviderRegistry sets the provider registry for the commands package.
+func SetProviderRegistry(reg *infraRepos.ProviderRegistry) {
+	providerRegistry = reg
+}
+
+// gitOps is set by the application at startup via SetGitOperations.
+var gitOps *gitInfra.GitOperations //nolint:gochecknoglobals // required for git operations
+
+// SetGitOperations sets the GitOperations instance for the commands package.
+func SetGitOperations(ops *gitInfra.GitOperations) {
+	gitOps = ops
+}
 
 // RepoContext holds the context for processing a repository.
 type RepoContext struct {
@@ -126,14 +144,15 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 		return "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 
-	// Get the adapter for this URL to handle service-specific logic
-	adapter := infraRepos.GetAdapterByURL(ctx.ProjectConfig.Path)
-	service := gitutil.GetServiceTypeByURL(ctx.ProjectConfig.Path)
+	// Detect service type and get the adapter for URL preparation
+	serviceType := gitOps.GetServiceTypeByURL(ctx.ProjectConfig.Path)
+	adapter := getLocalAuthAdapter(serviceType)
 
 	// Prepare the clone URL (adapters may strip embedded credentials, etc.)
 	cloneURL := ctx.ProjectConfig.Path
 	if adapter != nil {
 		cloneURL = adapter.PrepareCloneURL(ctx.ProjectConfig.Path)
+		adapter.ConfigureTransport()
 	}
 
 	// setup the clone options
@@ -143,15 +162,15 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 	}
 
 	// get authentication methods
-	var authMethods []transport.AuthMethod
-	authMethods, err = gitutil.GetAuthMethods(
-		service,
+	authMethods := collectAuthMethods(
+		serviceType,
 		ctx.GlobalGitConfig.Raw.Section("user").Option("name"),
 		ctx.GlobalConfig,
 		ctx.ProjectConfig,
 	)
-	if err != nil {
-		return "", err
+
+	if len(authMethods) == 0 {
+		return "", fmt.Errorf("no authentication credentials found for cloning %s", ctx.ProjectConfig.Path)
 	}
 
 	// try each authentication method
@@ -178,25 +197,47 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 }
 
 func createPullRequest(
-	globalConfig *entities.GlobalConfig,
-	projectConfig *entities.ProjectConfig,
+	ctx *RepoContext,
 	repo *git.Repository,
 	branchName string,
 	serviceType entities.ServiceType,
 ) error {
-	prProvider := infraRepos.NewPullRequestProvider(serviceType)
-	if prProvider == nil {
-		log.Warnf("Service type '%v' not supported yet...", serviceType)
+	token := resolveToken(serviceType, ctx.GlobalConfig, ctx.ProjectConfig)
+	if token == "" {
+		log.Warnf("No token found for service type '%v', cannot create pull request", serviceType)
 		return nil
 	}
 
-	return prProvider.CreatePullRequest(
-		globalConfig,
-		projectConfig,
-		repo,
-		branchName,
-		projectConfig.NewVersion,
-	)
+	provider, err := getForgeProvider(serviceType, token)
+	if err != nil {
+		log.Warnf("Service type '%v' not supported for PR creation: %v", serviceType, err)
+		return nil
+	}
+
+	remoteURL, err := gitInfra.GetRemoteRepoURL(repo)
+	if err != nil {
+		return err
+	}
+
+	targetBranch := resolveDefaultBranch(repo)
+	gitforgeRepo := buildGitforgeRepo(remoteURL, targetBranch)
+	input := globalEntities.PullRequestInput{
+		SourceBranch: branchName,
+		TargetBranch: targetBranch,
+		Title:        "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion,
+		Description: fmt.Sprintf(
+			"Automated version bump to %s\n\nThis PR was automatically created by AutoBump.",
+			ctx.ProjectConfig.NewVersion,
+		),
+	}
+
+	_, err = provider.CreatePullRequest(context.Background(), gitforgeRepo, input)
+	if err != nil {
+		return fmt.Errorf("failed to create pull request: %w", err)
+	}
+
+	log.Info("Successfully created pull request")
+	return nil
 }
 
 func cloneRepoIfNeeded(ctx *RepoContext) (string, error) {
@@ -253,7 +294,7 @@ func ensureProjectLanguage(ctx *RepoContext) {
 func setupRepo(ctx *RepoContext) error {
 	if ctx.Repo == nil {
 		var err error
-		ctx.Repo, err = gitutil.OpenRepo(ctx.ProjectConfig.Path)
+		ctx.Repo, err = gitInfra.OpenRepo(ctx.ProjectConfig.Path)
 		if err != nil {
 			return err
 		}
@@ -284,7 +325,7 @@ func createBumpBranch(ctx *RepoContext, changelogPath string) (string, entities.
 	// Store the version for PR creation even if branch exists
 	ctx.ProjectConfig.NewVersion = nextVersion.String()
 
-	branchExists, err := gitutil.CheckBranchExists(ctx.Repo, branchName)
+	branchExists, err := gitInfra.CheckBranchExists(ctx.Repo, branchName)
 	if err != nil {
 		return "", entities.BranchCreated, err
 	}
@@ -293,7 +334,7 @@ func createBumpBranch(ctx *RepoContext, changelogPath string) (string, entities.
 		return branchName, entities.BranchExistsNoPR, nil // Return branch name for PR check
 	}
 
-	err = gitutil.CreateAndSwitchBranch(ctx.Repo, ctx.Worktree, branchName, ctx.Head.Hash())
+	err = gitInfra.CreateAndSwitchBranch(ctx.Repo, ctx.Worktree, branchName, ctx.Head.Hash())
 	if err != nil {
 		return "", entities.BranchCreated, err
 	}
@@ -358,7 +399,7 @@ func addFilesToWorktree(ctx *RepoContext, changelogPath string) error {
 }
 
 func commitAndPushChanges(ctx *RepoContext, branchName string) error {
-	_, err := commitChangesWithGPG(ctx)
+	_, err := commitChanges(ctx)
 	if err != nil {
 		return err
 	}
@@ -374,40 +415,52 @@ func commitAndPushChanges(ctx *RepoContext, branchName string) error {
 	return nil
 }
 
-func commitChangesWithGPG(ctx *RepoContext) (plumbing.Hash, error) {
+// commitChanges commits the staged changes with optional GPG or SSH signing.
+func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 	cfg, err := ctx.Repo.Config()
 	if err != nil {
 		return plumbing.Hash{}, fmt.Errorf("failed to get repo config: %w", err)
 	}
 
-	gpgSign := gitutil.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "commit", "gpgsign")
-	gpgFormat := gitutil.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg", "format")
+	gpgSign := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "commit", "gpgsign")
+	gpgFormat := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg", "format")
 
-	var signKey *openpgp.Entity
-	if gpgSign == "true" && gpgFormat != "ssh" {
+	name := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
+	email := ctx.GlobalGitConfig.Raw.Section("user").Option("email")
+	commitMessage := "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion
+
+	var signer globalEntities.CommitSigner
+
+	switch {
+	case gpgSign == "true" && gpgFormat == "ssh":
+		log.Info("Signing commit with SSH key")
+		rawKey := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
+
+		sshKeyPath, sshErr := signingHelpers.ReadSSHSigningKey(rawKey)
+		if sshErr != nil {
+			return plumbing.Hash{}, sshErr
+		}
+		signer = signingInfra.NewSSHSigner(sshKeyPath)
+
+	case gpgSign == "true":
 		log.Info("Signing commit with GPG key")
-		gpgKeyID := gitutil.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
+		gpgKeyID := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
 
-		var gpgKeyReader io.Reader
-		gpgKeyReader, err = support.GetGpgKeyReader(context.Background(), gpgKeyID, ctx.GlobalConfig.GpgKeyPath)
-		if err != nil {
-			return plumbing.Hash{}, err
+		gpgKeyReader, gpgErr := signingHelpers.GetGpgKeyReader(
+			context.Background(), gpgKeyID, ctx.GlobalConfig.GpgKeyPath, "autobump",
+		)
+		if gpgErr != nil {
+			return plumbing.Hash{}, gpgErr
 		}
 
-		signKey, err = support.GetGpgKey(gpgKeyReader)
-		if err != nil {
-			return plumbing.Hash{}, err
+		signKey, gpgErr := signingHelpers.GetGpgKey(gpgKeyReader)
+		if gpgErr != nil {
+			return plumbing.Hash{}, gpgErr
 		}
+		signer = signingInfra.NewGPGSigner(signKey)
 	}
 
-	commitMessage := "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion
-	return gitutil.CommitChanges(
-		ctx.Worktree,
-		commitMessage,
-		signKey,
-		ctx.GlobalGitConfig.Raw.Section("user").Option("name"),
-		ctx.GlobalGitConfig.Raw.Section("user").Option("email"),
-	)
+	return gitInfra.CommitChanges(ctx.Repo, ctx.Worktree, commitMessage, signer, name, email)
 }
 
 func pushChanges(ctx *RepoContext, branchName string) error {
@@ -420,27 +473,55 @@ func pushChanges(ctx *RepoContext, branchName string) error {
 
 	remoteURL := remoteCfg.Config().URLs[0]
 	if strings.HasPrefix(remoteURL, "git@") {
-		return gitutil.PushChangesSSH(ctx.Repo, refSpec)
+		return gitInfra.PushChangesSSH(ctx.Repo, refSpec)
 	} else if strings.HasPrefix(remoteURL, "https://") || strings.HasPrefix(remoteURL, "http://") {
-		var cfg *gitconfig.Config
-		cfg, err = ctx.Repo.Config()
-		if err != nil {
-			return fmt.Errorf("failed to get repo config: %w", err)
-		}
-		return gitutil.PushChangesHTTPS(ctx.Repo, cfg, refSpec, ctx.GlobalConfig, ctx.ProjectConfig)
+		return pushChangesHTTPS(ctx, refSpec)
 	}
 
 	// If none of the conditions match, return an error
 	return fmt.Errorf("%w: %s", ErrUnsupportedRemoteURL, remoteURL)
 }
 
-func createAndCheckoutPullRequest(ctx *RepoContext, branchName string) error {
-	serviceType, err := gitutil.GetRemoteServiceType(ctx.Repo)
+// pushChangesHTTPS pushes changes over HTTPS using tokens resolved from the config.
+func pushChangesHTTPS(ctx *RepoContext, refSpec gitconfig.RefSpec) error {
+	log.Info("Pushing local changes to remote repository through HTTPS")
+
+	serviceType, err := gitOps.GetRemoteServiceType(ctx.Repo)
 	if err != nil {
 		return err
 	}
 
-	err = createPullRequest(ctx.GlobalConfig, ctx.ProjectConfig, ctx.Repo, branchName, serviceType)
+	username := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
+	authMethods := collectAuthMethods(serviceType, username, ctx.GlobalConfig, ctx.ProjectConfig)
+	if len(authMethods) == 0 {
+		return errors.New("no authentication credentials found for pushing")
+	}
+
+	pushOptions := &git.PushOptions{
+		RefSpecs:   []gitconfig.RefSpec{refSpec},
+		RemoteName: "origin",
+	}
+
+	var lastErr error
+	for _, auth := range authMethods {
+		pushOptions.Auth = auth
+		pushErr := ctx.Repo.Push(pushOptions)
+		if pushErr == nil {
+			return nil
+		}
+		lastErr = pushErr
+	}
+
+	return fmt.Errorf("could not push changes to remote repository: %w", lastErr)
+}
+
+func createAndCheckoutPullRequest(ctx *RepoContext, branchName string) error {
+	serviceType, err := gitOps.GetRemoteServiceType(ctx.Repo)
+	if err != nil {
+		return err
+	}
+
+	err = createPullRequest(ctx, ctx.Repo, branchName, serviceType)
 	if err != nil {
 		return err
 	}
@@ -449,9 +530,9 @@ func createAndCheckoutPullRequest(ctx *RepoContext, branchName string) error {
 }
 
 func checkoutToMainBranch(ctx *RepoContext) error {
-	err := gitutil.CheckoutBranch(ctx.Worktree, "main")
+	err := gitInfra.CheckoutBranch(ctx.Worktree, "main")
 	if err != nil {
-		return gitutil.CheckoutBranch(ctx.Worktree, "master")
+		return gitInfra.CheckoutBranch(ctx.Worktree, "master")
 	}
 	return nil
 }
@@ -463,7 +544,7 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 		return err
 	}
 
-	latestTag, err := gitutil.GetLatestTag(ctx.Repo)
+	latestTag, err := gitInfra.GetLatestTag(ctx.Repo)
 	if err != nil {
 		return err
 	}
@@ -500,7 +581,7 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 
 	// Get global Git config
 	var err error
-	ctx.GlobalGitConfig, err = gitutil.GetGlobalGitConfig()
+	ctx.GlobalGitConfig, err = gitHelpers.GetGlobalGitConfig()
 	if err != nil {
 		return err
 	}
@@ -597,18 +678,31 @@ func handleExistingBranchWithoutPR(ctx *RepoContext, branchName string) error {
 
 // checkPullRequestExists checks if a PR exists for the given branch using the appropriate provider.
 func checkPullRequestExists(ctx *RepoContext, branchName string) (bool, error) {
-	serviceType, err := gitutil.GetRemoteServiceType(ctx.Repo)
+	serviceType, err := gitOps.GetRemoteServiceType(ctx.Repo)
 	if err != nil {
 		return false, err
 	}
 
-	prProvider := infraRepos.NewPullRequestProvider(serviceType)
-	if prProvider == nil {
-		log.Warnf("Service type '%v' not supported for PR check", serviceType)
-		return false, nil // Assume no PR exists if provider not supported
+	token := resolveToken(serviceType, ctx.GlobalConfig, ctx.ProjectConfig)
+	if token == "" {
+		log.Warnf("No token found for service type '%v', cannot check PR", serviceType)
+		return false, nil
 	}
 
-	return prProvider.PullRequestExists(ctx.GlobalConfig, ctx.ProjectConfig, ctx.Repo, branchName)
+	provider, provErr := getForgeProvider(serviceType, token)
+	if provErr != nil {
+		log.Warnf("Service type '%v' not supported for PR check: %v", serviceType, provErr)
+		return false, nil
+	}
+
+	remoteURL, urlErr := gitInfra.GetRemoteRepoURL(ctx.Repo)
+	if urlErr != nil {
+		return false, urlErr
+	}
+
+	targetBranch := resolveDefaultBranch(ctx.Repo)
+	gitforgeRepo := buildGitforgeRepo(remoteURL, targetBranch)
+	return provider.PullRequestExists(context.Background(), gitforgeRepo, branchName)
 }
 
 // IterateProjects iterates over the projects and processes them using the ProcessRepo function.
@@ -641,13 +735,13 @@ func IterateProjects(globalConfig *entities.GlobalConfig) error {
 func DiscoverAndProcess(
 	ctx context.Context,
 	globalConfig *entities.GlobalConfig,
-	discovererRegistry *infraRepos.DiscovererRegistry,
+	registry *infraRepos.ProviderRegistry,
 ) error {
 	totalRepos := 0
 	totalErrors := 0
 
 	for _, provCfg := range globalConfig.Providers {
-		discoverer, err := discovererRegistry.Get(provCfg.Type, provCfg.Token)
+		discoverer, err := registry.GetDiscoverer(provCfg.Type, provCfg.Token)
 		if err != nil {
 			log.Errorf("Failed to initialize provider %q: %v", provCfg.Type, err)
 			totalErrors++
@@ -693,9 +787,227 @@ func repoToProjectConfig(
 	provCfg entities.ProviderConfig,
 ) *entities.ProjectConfig {
 	return &entities.ProjectConfig{
-		Path:               repo.CloneURL,
+		Path:               repo.RemoteURL,
 		Name:               repo.Name,
 		ProjectAccessToken: provCfg.Token,
+	}
+}
+
+// ---- Provider helpers ----
+
+// serviceTypeName maps a ServiceType constant to the registry factory name.
+func serviceTypeName(st entities.ServiceType) string {
+	switch st {
+	case entities.GITHUB:
+		return "github"
+	case entities.GITLAB:
+		return "gitlab"
+	case entities.AZUREDEVOPS:
+		return "azuredevops"
+	default:
+		return ""
+	}
+}
+
+// getLocalAuthAdapter returns the token-less adapter from the adapter finder
+// for URL preparation and transport configuration.
+func getLocalAuthAdapter(serviceType entities.ServiceType) globalEntities.LocalGitAuthProvider {
+	if providerRegistry == nil {
+		return nil
+	}
+	return providerRegistry.GetAdapterByServiceType(serviceType)
+}
+
+// resolveToken returns the best token for a given service type from the config.
+func resolveToken(
+	serviceType entities.ServiceType,
+	globalConfig *entities.GlobalConfig,
+	projectConfig *entities.ProjectConfig,
+) string {
+	// Project access token always takes priority
+	if projectConfig.ProjectAccessToken != "" {
+		return projectConfig.ProjectAccessToken
+	}
+
+	switch serviceType {
+	case entities.GITHUB:
+		return globalConfig.GitHubAccessToken
+	case entities.GITLAB:
+		if globalConfig.GitLabAccessToken != "" {
+			return globalConfig.GitLabAccessToken
+		}
+		return globalConfig.GitLabCIJobToken
+	case entities.AZUREDEVOPS:
+		return globalConfig.AzureDevOpsAccessToken
+	default:
+		return ""
+	}
+}
+
+// collectTokens returns all possible tokens for authentication, ordered by priority.
+func collectTokens(
+	serviceType entities.ServiceType,
+	globalConfig *entities.GlobalConfig,
+	projectConfig *entities.ProjectConfig,
+) []string {
+	var tokens []string
+
+	if projectConfig.ProjectAccessToken != "" {
+		tokens = append(tokens, projectConfig.ProjectAccessToken)
+	}
+
+	switch serviceType {
+	case entities.GITHUB:
+		if globalConfig.GitHubAccessToken != "" {
+			tokens = append(tokens, globalConfig.GitHubAccessToken)
+		}
+	case entities.GITLAB:
+		if globalConfig.GitLabAccessToken != "" {
+			tokens = append(tokens, globalConfig.GitLabAccessToken)
+		}
+		if globalConfig.GitLabCIJobToken != "" {
+			tokens = append(tokens, globalConfig.GitLabCIJobToken)
+		}
+	case entities.AZUREDEVOPS:
+		if globalConfig.AzureDevOpsAccessToken != "" {
+			tokens = append(tokens, globalConfig.AzureDevOpsAccessToken)
+		}
+	}
+
+	return tokens
+}
+
+// collectAuthMethods creates providers with each available token and collects
+// all authentication methods.
+func collectAuthMethods(
+	serviceType entities.ServiceType,
+	username string,
+	globalConfig *entities.GlobalConfig,
+	projectConfig *entities.ProjectConfig,
+) []transport.AuthMethod {
+	tokens := collectTokens(serviceType, globalConfig, projectConfig)
+	name := serviceTypeName(serviceType)
+	if name == "" || providerRegistry == nil {
+		return nil
+	}
+
+	var authMethods []transport.AuthMethod
+	for _, token := range tokens {
+		provider, err := providerRegistry.Get(name, token)
+		if err != nil {
+			continue
+		}
+		lgap, ok := provider.(globalEntities.LocalGitAuthProvider)
+		if !ok {
+			continue
+		}
+		lgap.ConfigureTransport()
+		methods := lgap.GetAuthMethods(username)
+		authMethods = append(authMethods, methods...)
+	}
+
+	return authMethods
+}
+
+// getForgeProvider creates a gitforge ForgeProvider with the given token.
+func getForgeProvider(
+	serviceType entities.ServiceType,
+	token string,
+) (globalEntities.ForgeProvider, error) {
+	name := serviceTypeName(serviceType)
+	if name == "" || providerRegistry == nil {
+		return nil, fmt.Errorf("unsupported service type: %v", serviceType)
+	}
+	return providerRegistry.Get(name, token)
+}
+
+// resolveDefaultBranch determines the default branch from the remote origin/HEAD reference.
+func resolveDefaultBranch(repo *git.Repository) string {
+	ref, err := repo.Reference(plumbing.ReferenceName("refs/remotes/origin/HEAD"), true)
+	if err != nil {
+		return "main"
+	}
+	branch := ref.Name().Short()
+	branch = strings.TrimPrefix(branch, "origin/")
+	if branch == "" {
+		return "main"
+	}
+	return branch
+}
+
+// buildGitforgeRepo constructs a gitforge Repository entity from a remote URL.
+func buildGitforgeRepo(remoteURL string, defaultBranch string) globalEntities.Repository {
+	// Parse the remote URL to extract org/project/repo info
+	trimmedURL := strings.TrimSuffix(remoteURL, ".git")
+
+	var org, name, project string
+
+	switch {
+	// GitHub SSH: git@github.com:owner/repo
+	case strings.HasPrefix(trimmedURL, "git@github.com:"):
+		path := strings.TrimPrefix(trimmedURL, "git@github.com:")
+		parts := strings.Split(path, "/")
+		if len(parts) >= 2 { //nolint:mnd // owner/repo
+			org = parts[0]
+			name = parts[1]
+		}
+	// GitHub HTTPS: https://github.com/owner/repo
+	case strings.Contains(trimmedURL, "github.com/"):
+		_, after, _ := strings.Cut(trimmedURL, "github.com/")
+		path := after
+		parts := strings.Split(path, "/")
+		if len(parts) >= 2 { //nolint:mnd // owner/repo
+			org = parts[0]
+			name = parts[1]
+		}
+	// GitLab SSH: git@gitlab.com:group/project
+	case strings.HasPrefix(trimmedURL, "git@") && strings.Contains(trimmedURL, "gitlab"):
+		colonIdx := strings.Index(trimmedURL, ":")
+		if colonIdx > 0 {
+			path := trimmedURL[colonIdx+1:]
+			parts := strings.Split(path, "/")
+			if len(parts) >= 2 { //nolint:mnd // group/project
+				org = strings.Join(parts[:len(parts)-1], "/")
+				name = parts[len(parts)-1]
+			}
+		}
+	// GitLab HTTPS: https://gitlab.com/group/project
+	case strings.Contains(trimmedURL, "gitlab.com/"):
+		_, after, _ := strings.Cut(trimmedURL, "gitlab.com/")
+		path := after
+		parts := strings.Split(path, "/")
+		if len(parts) >= 2 { //nolint:mnd // group/project
+			org = strings.Join(parts[:len(parts)-1], "/")
+			name = parts[len(parts)-1]
+		}
+	// Azure DevOps SSH: git@ssh.dev.azure.com:v3/org/project/repo
+	case strings.HasPrefix(trimmedURL, "git@") && strings.Contains(trimmedURL, "dev.azure.com"):
+		parts := strings.Split(trimmedURL, "/")
+		if len(parts) >= 4 { //nolint:mnd // v3/org/project/repo
+			org = parts[1]
+			project = parts[2]
+			name = parts[3]
+		}
+	// Azure DevOps HTTPS: https://dev.azure.com/org/project/_git/repo
+	case strings.Contains(trimmedURL, "dev.azure.com"):
+		parts := strings.Split(trimmedURL, "/")
+		if len(parts) >= 7 { //nolint:mnd // https://dev.azure.com/org/project/_git/repo
+			org = parts[3]
+			project = parts[4]
+			name = parts[6]
+		}
+	}
+
+	if org == "" || name == "" {
+		log.WithField("remoteURL", remoteURL).Warn("could not parse organization or repository name from remote URL")
+	}
+
+	return globalEntities.Repository{
+		Name:          name,
+		Organization:  org,
+		Project:       project,
+		DefaultBranch: "refs/heads/" + defaultBranch,
+		RemoteURL:     remoteURL,
 	}
 }
 
