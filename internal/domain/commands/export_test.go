@@ -3,11 +3,8 @@ package commands
 // CommitChanges exports the commitChanges function for testing.
 var CommitChanges = commitChanges //nolint:gochecknoglobals // test export
 
-// DetectBySpecialPatterns exports detectBySpecialPatterns for testing.
-var DetectBySpecialPatterns = detectBySpecialPatterns //nolint:gochecknoglobals // test export
-
-// DetectByExtensions exports detectByExtensions for testing.
-var DetectByExtensions = detectByExtensions //nolint:gochecknoglobals // test export
+// ResolveConfigKey exports resolveConfigKey for testing.
+var ResolveConfigKey = resolveConfigKey //nolint:gochecknoglobals // test export
 
 // BuildGitforgeRepo exports buildGitforgeRepo for testing.
 var BuildGitforgeRepo = buildGitforgeRepo //nolint:gochecknoglobals // test export

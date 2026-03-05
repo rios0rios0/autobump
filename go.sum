@@ -83,6 +83,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/rios0rios0/gitforge v0.0.0-20260305015253-f03ae21140bf h1:iBq/h/OqLPerj45/ZXrGV226PMAsyJvSlRCfZkJ9AWM=
 github.com/rios0rios0/gitforge v0.0.0-20260305015253-f03ae21140bf/go.mod h1:K0LNgAiV/I0v1Capn5c95oEBnOoBikvrvPTTmWGkn54=
+github.com/rios0rios0/langforge v0.0.0-20260305155120-804f1a070555 h1:nltV0h/CiQ4sIzpy5+oq45/OqsH1eSE0DKcWveXMwwM=
+github.com/rios0rios0/langforge v0.0.0-20260305155120-804f1a070555/go.mod h1:CX4nR2J76x6sDpVFqMmn7pgfiN2h9UMzOohbAOUEuNQ=
 github.com/rios0rios0/testkit v0.0.0-20260305013341-7c23bf17b0cc h1:pWlVWO5WpSZ72+W+0Ni4RHGEyk5aYSF2kA5hPl+tEdY=
 github.com/rios0rios0/testkit v0.0.0-20260305013341-7c23bf17b0cc/go.mod h1:SjKwWIkAIBDgiy8W/An6cDj9qmTqgZkge8wUD0O6hq0=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=

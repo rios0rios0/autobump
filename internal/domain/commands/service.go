@@ -24,6 +24,8 @@ import (
 	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 	gitHelpers "github.com/rios0rios0/gitforge/pkg/git/infrastructure/helpers"
 	globalEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
+	langEntities "github.com/rios0rios0/langforge/pkg/domain/entities"
+	langRegistry "github.com/rios0rios0/langforge/pkg/infrastructure/registry"
 	signingInfra "github.com/rios0rios0/gitforge/pkg/signing/infrastructure"
 	signingHelpers "github.com/rios0rios0/gitforge/pkg/signing/infrastructure/helpers"
 )
@@ -63,6 +65,31 @@ type RepoContext struct {
 	Head            *plumbing.Reference
 }
 
+//nolint:gochecknoglobals // read-only lookup table mapping langforge Language constants to common config key aliases
+var langforgeAliases = map[langEntities.Language][]string{
+	langEntities.LanguageGo:         {"golang"},
+	langEntities.LanguageNode:       {"typescript", "javascript"},
+	langEntities.LanguageJava:       {"java"},
+	langEntities.LanguageJavaGradle: {"java"},
+	langEntities.LanguageJavaMaven:  {"java"},
+	langEntities.LanguageCSharp:     {"cs"},
+}
+
+// resolveConfigKey maps a langforge Language constant to the corresponding
+// configuration key present in the user's GlobalConfig.
+func resolveConfigKey(globalConfig *entities.GlobalConfig, lang langEntities.Language) string {
+	langName := string(lang)
+	if _, ok := globalConfig.LanguagesConfig[langName]; ok {
+		return langName
+	}
+	for _, alias := range langforgeAliases[lang] {
+		if _, ok := globalConfig.LanguagesConfig[alias]; ok {
+			return alias
+		}
+	}
+	return ""
+}
+
 // DetectProjectLanguage detects the language of a project by looking at the files in the project.
 func DetectProjectLanguage(globalConfig *entities.GlobalConfig, cwd string) (string, error) {
 	log.Info("Detecting project language")
@@ -72,24 +99,36 @@ func DetectProjectLanguage(globalConfig *entities.GlobalConfig, cwd string) (str
 		return "", fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	// Check the project type by special files
+	// Primary: use langforge's registry detection (marker files like go.mod, package.json, etc.)
+	registry := langRegistry.NewDefaultRegistry()
+	provider, detectErr := registry.Detect(absPath)
+	if detectErr == nil {
+		configKey := resolveConfigKey(globalConfig, provider.Language())
+		if configKey != "" {
+			log.Infof("Project language detected as %s via marker files", configKey)
+			return configKey, nil
+		}
+	}
+
+	// Fallback: config-driven special patterns (for languages langforge doesn't know)
 	if language := detectBySpecialPatterns(globalConfig, absPath); language != "" {
 		return language, nil
 	}
 
-	// Check the project type by file extensions
-	language, err := detectByExtensions(globalConfig, absPath)
+	// Extension-based detection using langforge's classifier
+	configKey, err := detectByExtensions(globalConfig, absPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to walk project directory: %w", err)
 	}
-	if language != "" {
-		return language, nil
+	if configKey != "" {
+		return configKey, nil
 	}
 
 	return "", ErrProjectLanguageNotRecognized
 }
 
-// detectBySpecialPatterns checks the project type using special file patterns.
+// detectBySpecialPatterns checks the project type using config-driven special file patterns
+// as a fallback for languages not covered by langforge's registry.
 func detectBySpecialPatterns(globalConfig *entities.GlobalConfig, absPath string) string {
 	for language, cfg := range globalConfig.LanguagesConfig {
 		for _, pattern := range cfg.SpecialPatterns {
@@ -103,7 +142,7 @@ func detectBySpecialPatterns(globalConfig *entities.GlobalConfig, absPath string
 	return ""
 }
 
-// detectByExtensions checks the project type using file extensions.
+// detectByExtensions checks the project type using langforge's file extension classifier.
 func detectByExtensions(globalConfig *entities.GlobalConfig, absPath string) (string, error) {
 	var detected string
 	err := filepath.Walk(absPath, func(_ string, info os.FileInfo, err error) error {
@@ -113,9 +152,11 @@ func detectByExtensions(globalConfig *entities.GlobalConfig, absPath string) (st
 		if info.IsDir() || detected != "" {
 			return nil
 		}
-		for language, cfg := range globalConfig.LanguagesConfig {
-			if HasMatchingExtension(info.Name(), cfg.Extensions) {
-				detected = language
+		lang := langEntities.ClassifyFileByExtension(info.Name())
+		if lang != langEntities.LanguageUnknown {
+			configKey := resolveConfigKey(globalConfig, lang)
+			if configKey != "" {
+				detected = configKey
 				return filepath.SkipDir
 			}
 		}
@@ -125,16 +166,6 @@ func detectByExtensions(globalConfig *entities.GlobalConfig, absPath string) (st
 		return "", fmt.Errorf("failed to walk project directory: %w", err)
 	}
 	return detected, nil
-}
-
-// HasMatchingExtension checks if the file has one of the specified extensions.
-func HasMatchingExtension(filename string, extensions []string) bool {
-	for _, ext := range extensions {
-		if strings.HasSuffix(filename, "."+ext) {
-			return true
-		}
-	}
-	return false
 }
 
 // cloneRepo clones a remote repository into a temporary directory.

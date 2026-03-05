@@ -14,6 +14,7 @@ import (
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	"github.com/rios0rios0/autobump/test/domain/entitybuilders"
 	gitforgeEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
+	langEntities "github.com/rios0rios0/langforge/pkg/domain/entities"
 )
 
 func TestDetectProjectLanguage(t *testing.T) {
@@ -76,31 +77,52 @@ func TestDetectProjectLanguage(t *testing.T) {
 	})
 }
 
-func TestHasMatchingExtension(t *testing.T) {
+func TestResolveConfigKey(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return true when extension matches", func(t *testing.T) {
+	t.Run("should return direct match when langforge name is a config key", func(t *testing.T) {
 		// given
-		filename := "main.go"
-		extensions := []string{"go", "py"}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"python": {Extensions: []string{"py"}},
+			}).
+			BuildGlobalConfig()
 
 		// when
-		result := commands.HasMatchingExtension(filename, extensions)
+		result := commands.ResolveConfigKey(globalConfig, langEntities.LanguagePython)
 
 		// then
-		assert.True(t, result)
+		assert.Equal(t, "python", result)
 	})
 
-	t.Run("should return false when no extension matches", func(t *testing.T) {
+	t.Run("should return alias when langforge name is not a config key", func(t *testing.T) {
 		// given
-		filename := "main.rs"
-		extensions := []string{"go", "py"}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {Extensions: []string{"go"}},
+			}).
+			BuildGlobalConfig()
 
 		// when
-		result := commands.HasMatchingExtension(filename, extensions)
+		result := commands.ResolveConfigKey(globalConfig, langEntities.LanguageGo)
 
 		// then
-		assert.False(t, result)
+		assert.Equal(t, "golang", result)
+	})
+
+	t.Run("should return empty string when no match found", func(t *testing.T) {
+		// given
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"python": {Extensions: []string{"py"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.ResolveConfigKey(globalConfig, langEntities.Language("rust"))
+
+		// then
+		assert.Empty(t, result)
 	})
 }
 
@@ -444,79 +466,3 @@ func TestProcessRepo(t *testing.T) {
 	})
 }
 
-func TestDetectBySpecialPatterns(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should return empty string when no patterns match", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {SpecialPatterns: []string{"go.mod"}},
-			}).
-			BuildGlobalConfig()
-
-		// when
-		result := commands.DetectBySpecialPatterns(globalConfig, tmpDir)
-
-		// then
-		assert.Empty(t, result)
-	})
-
-	t.Run("should detect language when pattern matches", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0o644))
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {SpecialPatterns: []string{"go.mod"}},
-			}).
-			BuildGlobalConfig()
-
-		// when
-		result := commands.DetectBySpecialPatterns(globalConfig, tmpDir)
-
-		// then
-		assert.Equal(t, "golang", result)
-	})
-}
-
-func TestDetectByExtensions(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should return empty string when no extensions match", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# test"), 0o644))
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
-
-		// when
-		result, err := commands.DetectByExtensions(globalConfig, tmpDir)
-
-		// then
-		require.NoError(t, err)
-		assert.Empty(t, result)
-	})
-
-	t.Run("should detect language by file extension", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main"), 0o644))
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
-
-		// when
-		result, err := commands.DetectByExtensions(globalConfig, tmpDir)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "golang", result)
-	})
-}
