@@ -24,10 +24,10 @@ import (
 	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 	gitHelpers "github.com/rios0rios0/gitforge/pkg/git/infrastructure/helpers"
 	globalEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
-	langEntities "github.com/rios0rios0/langforge/pkg/domain/entities"
-	langRegistry "github.com/rios0rios0/langforge/pkg/infrastructure/registry"
 	signingInfra "github.com/rios0rios0/gitforge/pkg/signing/infrastructure"
 	signingHelpers "github.com/rios0rios0/gitforge/pkg/signing/infrastructure/helpers"
+	langEntities "github.com/rios0rios0/langforge/pkg/domain/entities"
+	langRegistry "github.com/rios0rios0/langforge/pkg/infrastructure/registry"
 )
 
 var (
@@ -73,6 +73,10 @@ var langforgeAliases = map[langEntities.Language][]string{
 	langEntities.LanguageJavaGradle: {"java"},
 	langEntities.LanguageJavaMaven:  {"java"},
 	langEntities.LanguageCSharp:     {"cs"},
+	langEntities.LanguagePython:     {},
+	langEntities.LanguageTerraform:  {},
+	langEntities.LanguageYAML:       {},
+	langEntities.LanguageUnknown:    {},
 }
 
 // resolveConfigKey maps a langforge Language constant to the corresponding
