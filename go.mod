@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/go-git/go-git/v5 v5.17.0
+	github.com/rios0rios0/langforge v0.0.0-20260305155120-804f1a070555
 	github.com/rios0rios0/testkit v0.0.0-20260305013341-7c23bf17b0cc
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
