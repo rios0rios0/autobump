@@ -937,75 +937,19 @@ func resolveDefaultBranch(repo *git.Repository) string {
 
 // buildGitforgeRepo constructs a gitforge Repository entity from a remote URL.
 func buildGitforgeRepo(remoteURL string, defaultBranch string) globalEntities.Repository {
-	// Parse the remote URL to extract org/project/repo info
-	trimmedURL := strings.TrimSuffix(remoteURL, ".git")
-
-	var org, name, project string
-
-	switch {
-	// GitHub SSH: git@github.com:owner/repo
-	case strings.HasPrefix(trimmedURL, "git@github.com:"):
-		path := strings.TrimPrefix(trimmedURL, "git@github.com:")
-		parts := strings.Split(path, "/")
-		if len(parts) >= 2 { //nolint:mnd // owner/repo
-			org = parts[0]
-			name = parts[1]
-		}
-	// GitHub HTTPS: https://github.com/owner/repo
-	case strings.Contains(trimmedURL, "github.com/"):
-		_, after, _ := strings.Cut(trimmedURL, "github.com/")
-		path := after
-		parts := strings.Split(path, "/")
-		if len(parts) >= 2 { //nolint:mnd // owner/repo
-			org = parts[0]
-			name = parts[1]
-		}
-	// GitLab SSH: git@gitlab.com:group/project
-	case strings.HasPrefix(trimmedURL, "git@") && strings.Contains(trimmedURL, "gitlab"):
-		colonIdx := strings.Index(trimmedURL, ":")
-		if colonIdx > 0 {
-			path := trimmedURL[colonIdx+1:]
-			parts := strings.Split(path, "/")
-			if len(parts) >= 2 { //nolint:mnd // group/project
-				org = strings.Join(parts[:len(parts)-1], "/")
-				name = parts[len(parts)-1]
-			}
-		}
-	// GitLab HTTPS: https://gitlab.com/group/project
-	case strings.Contains(trimmedURL, "gitlab.com/"):
-		_, after, _ := strings.Cut(trimmedURL, "gitlab.com/")
-		path := after
-		parts := strings.Split(path, "/")
-		if len(parts) >= 2 { //nolint:mnd // group/project
-			org = strings.Join(parts[:len(parts)-1], "/")
-			name = parts[len(parts)-1]
-		}
-	// Azure DevOps SSH: git@ssh.dev.azure.com:v3/org/project/repo
-	case strings.HasPrefix(trimmedURL, "git@") && strings.Contains(trimmedURL, "dev.azure.com"):
-		parts := strings.Split(trimmedURL, "/")
-		if len(parts) >= 4 { //nolint:mnd // v3/org/project/repo
-			org = parts[1]
-			project = parts[2]
-			name = parts[3]
-		}
-	// Azure DevOps HTTPS: https://dev.azure.com/org/project/_git/repo
-	case strings.Contains(trimmedURL, "dev.azure.com"):
-		parts := strings.Split(trimmedURL, "/")
-		if len(parts) >= 7 { //nolint:mnd // https://dev.azure.com/org/project/_git/repo
-			org = parts[3]
-			project = parts[4]
-			name = parts[6]
-		}
-	}
-
-	if org == "" || name == "" {
+	parsed, err := gitInfra.ParseRemoteURL(remoteURL)
+	if err != nil {
 		log.WithField("remoteURL", remoteURL).Warn("could not parse organization or repository name from remote URL")
+		return globalEntities.Repository{
+			DefaultBranch: "refs/heads/" + defaultBranch,
+			RemoteURL:     remoteURL,
+		}
 	}
 
 	return globalEntities.Repository{
-		Name:          name,
-		Organization:  org,
-		Project:       project,
+		Name:          parsed.RepoName,
+		Organization:  parsed.Organization,
+		Project:       parsed.Project,
 		DefaultBranch: "refs/heads/" + defaultBranch,
 		RemoteURL:     remoteURL,
 	}
