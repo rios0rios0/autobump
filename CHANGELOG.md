@@ -24,6 +24,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - updated commit signing code from `SigningOptions` struct to `CommitSigner` interface pattern using `NewSSHSigner` and `NewGPGSigner`
 - updated `GitOperations` initialization from global `SetAdapterFinder` to constructor injection via `NewGitOperations`
 - replaced inline `cloneRepo` clone logic with gitforge's `CloneRepo` to consolidate duplicated git clone code
+- changed the Go module dependencies to their latest versions
 
 ## [2.19.0] - 2026-02-14
 
