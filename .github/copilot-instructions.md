@@ -31,7 +31,7 @@ Note: The CI/CD pipeline automatically uses these scripts via the reusable workf
 
 - ALWAYS run the bootstrapping steps first.
 - Run via Makefile: `make run`
-- Run directly: `go run .`
+- Run directly: `go run ./cmd/autobump`
 - Run built binary: `./bin/autobump`
 - Test help: `./bin/autobump --help`
 - Batch mode help: `./bin/autobump batch --help`
@@ -40,87 +40,96 @@ Note: The CI/CD pipeline automatically uses these scripts via the reusable workf
 ### Installation
 
 - Build first: `make build`
-- Install system-wide: `make install` (copies to `/usr/local/bin/autobump`)
+- Install to user bin: `make install` (copies to `~/.local/bin/autobump`)
 
 ## Architecture
 
-The project follows **Clean Architecture** with dependencies always pointing inward toward the domain layer.
+The project follows **Clean Architecture** with dependencies always pointing inward toward the domain layer. Dependency injection is handled by [go.uber.org/dig](https://github.com/uber-go/dig). Provider and Git forge abstractions are sourced from the [rios0rios0/gitforge](https://github.com/rios0rios0/gitforge) library.
 
 ### Repository Structure
 
 ```
 autobump/
-├── main.go                              # Entry point, calls cmd.Execute()
 ├── cmd/
-│   └── root.go                          # CLI commands: root, batch, discover (Cobra)
-├── domain/
-│   ├── models.go                        # Entities: ServiceType, LatestTag, BranchStatus,
-│   │                                    #   Repository; Interfaces: Language, RepositoryDiscoverer
-│   ├── changelog.go                     # Changelog parsing, version calculation, entry
-│   │                                    #   deduplication (token-based similarity)
-│   ├── changelog_test.go                # BDD tests for changelog processing
-│   ├── changelog_dedup_test.go          # BDD tests for deduplication logic
-│   └── export_test.go                   # Exports unexported functions for white-box testing
-├── application/
-│   └── service.go                       # Use cases: ProcessRepo, IterateProjects,
-│                                        #   DiscoverAndProcess, DetectProjectLanguage
-├── config/
-│   └── config.go                        # GlobalConfig, ProjectConfig, ProviderConfig,
-│                                        #   LanguageConfig; config reading/validation/token resolution
-├── infrastructure/
-│   ├── git/
-│   │   └── git.go                       # Git operations: clone, branch, commit (GPG), push
-│   │                                    #   (SSH/HTTPS), tag retrieval (wraps go-git/v5)
-│   ├── language/
-│   │   └── python/
-│   │       └── python.go                # Python Language implementation (pyproject.toml)
-│   └── provider/
-│       ├── interfaces.go                # GitServiceAdapter, PullRequestProvider interfaces
-│       ├── registry.go                  # GitServiceRegistry (adapter lookup by URL/type)
-│       ├── discoverer_registry.go       # DiscovererRegistry (factory-based discoverer creation)
-│       ├── github/
-│       │   ├── github.go                # GitHub adapter: auth, PR creation/existence
-│       │   └── discoverer.go            # GitHub repo discovery (org + user fallback)
-│       ├── gitlab/
-│       │   ├── gitlab.go                # GitLab adapter: auth, MR creation/existence
-│       │   └── discoverer.go            # GitLab repo discovery (group + user fallback)
-│       └── azuredevops/
-│           ├── azuredevops.go           # Azure DevOps adapter: auth, PR creation/existence
-│           └── discoverer.go            # Azure DevOps repo discovery (projects + repos)
+│   └── autobump/
+│       ├── main.go                      # Entry point: wires DI, builds Cobra commands
+│       └── dig.go                       # DIG injection helpers: injectAppContext,
+│                                        #   injectSingleController, injectProviderRegistry
 ├── internal/
+│   ├── app.go                           # AppInternal: aggregates all controllers
+│   ├── container.go                     # RegisterProviders: wires all DIG layers
+│   ├── domain/
+│   │   ├── commands/
+│   │   │   ├── service.go               # Use cases: ProcessRepo, IterateProjects,
+│   │   │   │                            #   DiscoverAndProcess, DetectProjectLanguage
+│   │   │   ├── container.go             # No-op RegisterProviders (commands called directly)
+│   │   │   ├── export_test.go           # Exports unexported functions for white-box testing
+│   │   │   └── service_test.go          # BDD unit tests for command functions
+│   │   └── entities/
+│   │       ├── changelog.go             # Changelog parsing, version calculation, entry
+│   │       │                            #   deduplication (token-based similarity)
+│   │       ├── controller.go            # Controller interface and ControllerBind struct
+│   │       ├── repository.go            # Re-exports gitforge entities: ServiceType,
+│   │       │                            #   LatestTag, BranchStatus, Repository,
+│   │       │                            #   RepositoryDiscoverer, Language interface
+│   │       ├── settings.go              # GlobalConfig, ProjectConfig, ProviderConfig,
+│   │       │                            #   LanguageConfig, VersionFile; config
+│   │       │                            #   reading/validation/token resolution
+│   │       ├── container.go             # No-op RegisterProviders (entities are runtime-loaded)
+│   │       └── export_test.go           # Exports unexported changelog functions for testing
+│   ├── infrastructure/
+│   │   ├── controllers/
+│   │   │   ├── single_controller.go     # Root "autobump" command (single repo mode)
+│   │   │   ├── batch_controller.go      # "batch" subcommand
+│   │   │   ├── discover_controller.go   # "discover" subcommand
+│   │   │   └── container.go             # RegisterProviders for all controllers via DIG
+│   │   └── repositories/
+│   │       ├── provider_registry.go     # ProviderRegistry wrapping gitforge's registry
+│   │       ├── container.go             # Registers GitHub/GitLab/Azure DevOps adapters
+│   │       │                            #   and discoverer factories with the registry
+│   │       └── python/
+│   │           └── python.go            # Python Language implementation (pyproject.toml)
 │   └── support/
-│       └── utils.go                     # File I/O, HTTP downloads, GPG key handling, URL utils
+│       └── utils.go                     # File I/O, HTTP downloads, URL utils
+├── test/
+│   └── domain/
+│       └── entitybuilders/
+│           └── repository_builder.go    # Test builder for Repository entities
 ├── configs/
-│   └── autobump.yaml                    # Default configuration template
+│   ├── autobump.yaml                    # Default configuration template
+│   └── CHANGELOG.template.md           # Default CHANGELOG template
 ├── Makefile                             # Build: build, debug, build-musl, run, install
 ├── go.mod                               # Module: github.com/rios0rios0/autobump (Go 1.26)
 └── .github/
-    └── workflows/default.yaml           # CI/CD pipeline
+    └── workflows/default.yaml           # CI/CD pipeline (go-binary reusable workflow)
 ```
 
 ### Layer Responsibilities
 
 | Layer | Directory | Responsibility |
 |---|---|---|
-| **Domain** | `domain/` | Business entities, interfaces, changelog logic. No external dependencies. |
-| **Application** | `application/` | Use-case orchestration (process repo, batch, discover). Depends only on domain + config. |
-| **Infrastructure** | `infrastructure/` | External adapters: Git (go-git), providers (GitHub/GitLab/Azure DevOps APIs), language implementations. |
-| **Config** | `config/` | Configuration structs, file reading, validation, token resolution (`${ENV_VAR}`, file path, inline). |
-| **CMD** | `cmd/` | CLI entry point using Cobra. Wires dependencies and delegates to application layer. |
-| **Internal** | `internal/support/` | Shared utilities: file I/O, HTTP, GPG, URL manipulation. |
+| **Entities** | `internal/domain/entities/` | Business entities, interfaces, changelog logic, config structs. Re-exports gitforge types. |
+| **Commands** | `internal/domain/commands/` | Use-case orchestration (process repo, batch, discover, language detection). |
+| **Controllers** | `internal/infrastructure/controllers/` | CLI entry points (Cobra). Wires config reading and command invocation. |
+| **Repositories** | `internal/infrastructure/repositories/` | Provider registry (wraps gitforge), language implementations. |
+| **Support** | `internal/support/` | Shared utilities: file I/O, HTTP downloads, URL manipulation. |
+| **CMD** | `cmd/autobump/` | Binary entry point. Wires DIG containers and builds Cobra command tree. |
 
 ### Key Design Patterns
 
-- **Adapter pattern**: `GitServiceAdapter` interface with GitHub/GitLab/Azure DevOps implementations
-- **Registry pattern**: `GitServiceRegistry` for adapter lookup, `DiscovererRegistry` for discoverer factories
-- **Factory pattern**: Discoverer creation from provider config
-- **Strategy pattern**: Language detection via file-pattern matching
+- **Dependency Injection**: `go.uber.org/dig` wires all layers; each package exposes `RegisterProviders(container)`
+- **Adapter pattern**: `ForgeProvider`/`LocalGitAuthProvider` interfaces (from gitforge) with GitHub/GitLab/Azure DevOps implementations
+- **Registry pattern**: `ProviderRegistry` wraps gitforge's registry for adapter and discoverer lookup
+- **Factory pattern**: Discoverer and provider creation from token string via registered factories
+- **Strategy pattern**: Language detection via file-pattern matching (special patterns and extensions)
+- **Controller pattern**: Each CLI subcommand is a `Controller` implementing `GetBind()` and `Execute()`
 
 ### Key Domain Interfaces
 
-- `Language` -- `GetProjectName() (string, error)`
-- `RepositoryDiscoverer` -- `Name() string`, `DiscoverRepositories(ctx, org) ([]Repository, error)`
-- `GitServiceAdapter` -- `GetServiceType()`, `MatchesURL()`, `GetAuthMethods()`, `CreatePullRequest()`, `PullRequestExists()`
+- `Language` (in `internal/domain/entities/`) -- `GetProjectName() (string, error)`
+- `Controller` (in `internal/domain/entities/`) -- `GetBind() ControllerBind`, `Execute(cmd, args)`
+- `RepositoryDiscoverer` -- re-exported from gitforge; `Name() string`, `DiscoverRepositories(ctx, org) ([]Repository, error)`
+- `ForgeProvider`/`LocalGitAuthProvider` -- gitforge interfaces for Git hosting provider adapters
 
 ### Key Domain Functions
 
@@ -144,8 +153,9 @@ autobump/
 
 ## Configuration
 
-- Default config location: `~/.config/autobump.yaml`
-- Fallback: `configs/autobump.yaml` in repository, then remote default URL
+- Default config search order: `.`, `.config/`, `configs/`, `~/`, `~/.config/` (file names: `autobump.yaml`, `autobump.yml`, `.autobump.yaml`, `.autobump.yml`)
+- Final fallback: remote default URL (`configs/autobump.yaml` in this repository)
+- Config structs live in `internal/domain/entities/settings.go`: `GlobalConfig`, `ProjectConfig`, `ProviderConfig`, `LanguageConfig`, `VersionFile`
 - Supports `projects` list (batch mode) and `providers` list (discover mode)
 - Token resolution: inline string, `${ENV_VAR}` expansion, or file path auto-detection
 
@@ -177,20 +187,22 @@ The tool auto-detects and supports:
 - Test descriptions use `"should ... when ..."` format via `t.Run()` subtests
 - Tests use `testify/assert` and `testify/require` for assertions
 - Tests use `t.Parallel()` at both parent and subtest level
+- Test files use build tags (`//go:build unit`) to separate unit from integration tests
 
 ### Test Files
 
 | File | Tests |
 |---|---|
-| `domain/changelog_test.go` | Changelog processing, version bumping, section parsing, formatting |
-| `domain/changelog_dedup_test.go` | Entry normalization, tokenization, version extraction, overlap ratio, deduplication |
-| `domain/export_test.go` | Exports unexported functions for white-box testing |
+| `internal/domain/commands/service_test.go` | Language detection, repo processing, discover/batch logic |
+| `internal/domain/commands/export_test.go` | Exports unexported command functions for white-box testing |
+| `internal/domain/entities/export_test.go` | Exports unexported changelog/dedup functions for white-box testing |
+| `test/domain/entitybuilders/repository_builder.go` | Test builder for `Repository` entities |
 
 ### Running Tests
 
 ```bash
-make test             # Full test suite via pipeline scripts (ALWAYS use this)
-go test ./domain/...  # Quick domain-only check during development (acceptable)
+make test               # Full test suite via pipeline scripts (ALWAYS use this)
+go test ./internal/...  # Quick internal-only check during development (acceptable)
 ```
 
 ## Validation
@@ -224,7 +236,7 @@ go test ./domain/...  # Quick domain-only check during development (acceptable)
 make lint && make test && make build && ./bin/autobump --help
 
 # Quick test cycle during development
-go test ./domain/... && make build
+go test ./internal/... && make build
 
 # Clean rebuild
 rm -rf bin && make build
