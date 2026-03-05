@@ -20,6 +20,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - changed the Go module dependencies to their latest versions
 - changed all gitforge import paths to the new DDD `pkg/` structure (e.g. `infrastructure/git` → `pkg/git/infrastructure`)
+- replaced inline `buildGitforgeRepo` URL parsing logic with gitforge's `ParseRemoteURL` to consolidate duplicated code
 - updated commit signing code from `SigningOptions` struct to `CommitSigner` interface pattern using `NewSSHSigner` and `NewGPGSigner`
 - updated `GitOperations` initialization from global `SetAdapterFinder` to constructor injection via `NewGitOperations`
 
