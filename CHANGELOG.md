@@ -18,6 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
+- replaced local language detection logic (extension matching, `HasMatchingExtension`) with langforge's `ClassifyFileByExtension` and `LanguageRegistry.Detect` to centralize language abstractions
 - replaced raw struct literals in tests with testkit builders for consistent test data construction
 - changed the Go module dependencies to their latest versions
 - changed all gitforge import paths to the new DDD `pkg/` structure (e.g. `infrastructure/git` → `pkg/git/infrastructure`)
