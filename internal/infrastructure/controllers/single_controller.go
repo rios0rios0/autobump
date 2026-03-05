@@ -10,7 +10,7 @@ import (
 
 	"github.com/rios0rios0/autobump/internal/domain/commands"
 	"github.com/rios0rios0/autobump/internal/domain/entities"
-	"github.com/rios0rios0/autobump/internal/support"
+	downloadHelpers "github.com/rios0rios0/gitforge/pkg/config/infrastructure/helpers"
 )
 
 // SingleController handles the root "autobump" command (single repo mode).
@@ -79,7 +79,7 @@ func findReadAndValidateConfig(configPath string) (*entities.GlobalConfig, error
 		log.Warn("Missing languages key, using the default configuration")
 
 		var data []byte
-		data, err = support.DownloadFile(entities.DefaultConfigURL)
+		data, err = downloadHelpers.DownloadFile(entities.DefaultConfigURL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to download default config: %w", err)
 		}
