@@ -32,6 +32,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - replaced local changelog processing functions (~550 lines) with thin wrappers delegating to gitforge's `Changelog` struct
 - changed the Go module dependencies to their latest versions
 
+### Fixed
+
+- fixed `typecheck` finding by removing stale `export_test.go` that referenced functions moved to gitforge
+- fixed `exhaustive` finding by adding missing `Language` keys to `langforgeAliases` map
+
+
 ## [2.19.0] - 2026-02-14
 
 ### Added
