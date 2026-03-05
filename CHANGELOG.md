@@ -23,6 +23,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - replaced inline `buildGitforgeRepo` URL parsing logic with gitforge's `ParseRemoteURL` to consolidate duplicated code
 - updated commit signing code from `SigningOptions` struct to `CommitSigner` interface pattern using `NewSSHSigner` and `NewGPGSigner`
 - updated `GitOperations` initialization from global `SetAdapterFinder` to constructor injection via `NewGitOperations`
+- replaced inline `cloneRepo` clone logic with gitforge's `CloneRepo` to consolidate duplicated git clone code
 
 ## [2.19.0] - 2026-02-14
 
