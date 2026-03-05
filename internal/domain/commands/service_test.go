@@ -12,6 +12,7 @@ import (
 
 	"github.com/rios0rios0/autobump/internal/domain/commands"
 	"github.com/rios0rios0/autobump/internal/domain/entities"
+	"github.com/rios0rios0/autobump/test/domain/entitybuilders"
 	gitforgeEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
 )
 
@@ -23,14 +24,11 @@ func TestDetectProjectLanguage(t *testing.T) {
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0o644))
 
-		globalConfig := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {
-					SpecialPatterns: []string{"go.mod"},
-					Extensions:      []string{"go"},
-				},
-			},
-		}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {SpecialPatterns: []string{"go.mod"}, Extensions: []string{"go"}},
+			}).
+			BuildGlobalConfig()
 
 		// when
 		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
@@ -45,13 +43,11 @@ func TestDetectProjectLanguage(t *testing.T) {
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.py"), []byte("print('hello')"), 0o644))
 
-		globalConfig := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"python": {
-					Extensions: []string{"py"},
-				},
-			},
-		}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"python": {Extensions: []string{"py"}},
+			}).
+			BuildGlobalConfig()
 
 		// when
 		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
@@ -65,14 +61,11 @@ func TestDetectProjectLanguage(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 
-		globalConfig := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {
-					SpecialPatterns: []string{"go.mod"},
-					Extensions:      []string{"go"},
-				},
-			},
-		}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {SpecialPatterns: []string{"go.mod"}, Extensions: []string{"go"}},
+			}).
+			BuildGlobalConfig()
 
 		// when
 		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
@@ -243,12 +236,12 @@ func TestResolveToken(t *testing.T) {
 
 	t.Run("should return project access token when set", func(t *testing.T) {
 		// given
-		globalConfig := &entities.GlobalConfig{
-			GitHubAccessToken: "global-token",
-		}
-		projectConfig := &entities.ProjectConfig{
-			ProjectAccessToken: "project-token",
-		}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithGitHubAccessToken("global-token").
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithProjectAccessToken("project-token").
+			BuildProjectConfig()
 
 		// when
 		token := commands.ResolveToken(gitforgeEntities.GITHUB, globalConfig, projectConfig)
@@ -259,10 +252,10 @@ func TestResolveToken(t *testing.T) {
 
 	t.Run("should return GitHub global token when project token is empty", func(t *testing.T) {
 		// given
-		globalConfig := &entities.GlobalConfig{
-			GitHubAccessToken: "github-global",
-		}
-		projectConfig := &entities.ProjectConfig{}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithGitHubAccessToken("github-global").
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
 		token := commands.ResolveToken(gitforgeEntities.GITHUB, globalConfig, projectConfig)
@@ -273,10 +266,10 @@ func TestResolveToken(t *testing.T) {
 
 	t.Run("should return GitLab CI job token as fallback", func(t *testing.T) {
 		// given
-		globalConfig := &entities.GlobalConfig{
-			GitLabCIJobToken: "ci-job-token",
-		}
-		projectConfig := &entities.ProjectConfig{}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithGitLabCIJobToken("ci-job-token").
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
 		token := commands.ResolveToken(gitforgeEntities.GITLAB, globalConfig, projectConfig)
@@ -287,8 +280,8 @@ func TestResolveToken(t *testing.T) {
 
 	t.Run("should return empty string for unknown service type", func(t *testing.T) {
 		// given
-		globalConfig := &entities.GlobalConfig{}
-		projectConfig := &entities.ProjectConfig{}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
 		token := commands.ResolveToken(gitforgeEntities.UNKNOWN, globalConfig, projectConfig)
@@ -303,12 +296,12 @@ func TestCollectTokens(t *testing.T) {
 
 	t.Run("should return project access token first when set", func(t *testing.T) {
 		// given
-		globalConfig := &entities.GlobalConfig{
-			GitHubAccessToken: "global-github",
-		}
-		projectConfig := &entities.ProjectConfig{
-			ProjectAccessToken: "project-token",
-		}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithGitHubAccessToken("global-github").
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithProjectAccessToken("project-token").
+			BuildProjectConfig()
 
 		// when
 		tokens := commands.CollectTokens(gitforgeEntities.GITHUB, globalConfig, projectConfig)
@@ -321,11 +314,11 @@ func TestCollectTokens(t *testing.T) {
 
 	t.Run("should return GitLab access token and CI job token", func(t *testing.T) {
 		// given
-		globalConfig := &entities.GlobalConfig{
-			GitLabAccessToken: "gitlab-pat",
-			GitLabCIJobToken:  "ci-job-token",
-		}
-		projectConfig := &entities.ProjectConfig{}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithGitLabAccessToken("gitlab-pat").
+			WithGitLabCIJobToken("ci-job-token").
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
 		tokens := commands.CollectTokens(gitforgeEntities.GITLAB, globalConfig, projectConfig)
@@ -338,10 +331,10 @@ func TestCollectTokens(t *testing.T) {
 
 	t.Run("should return Azure DevOps token", func(t *testing.T) {
 		// given
-		globalConfig := &entities.GlobalConfig{
-			AzureDevOpsAccessToken: "ado-token",
-		}
-		projectConfig := &entities.ProjectConfig{}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithAzureDevOpsAccessToken("ado-token").
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
 		tokens := commands.CollectTokens(gitforgeEntities.AZUREDEVOPS, globalConfig, projectConfig)
@@ -353,8 +346,8 @@ func TestCollectTokens(t *testing.T) {
 
 	t.Run("should return empty slice when no tokens configured", func(t *testing.T) {
 		// given
-		globalConfig := &entities.GlobalConfig{}
-		projectConfig := &entities.ProjectConfig{}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
 		tokens := commands.CollectTokens(gitforgeEntities.GITHUB, globalConfig, projectConfig)
@@ -365,10 +358,10 @@ func TestCollectTokens(t *testing.T) {
 
 	t.Run("should return empty slice for unknown service type", func(t *testing.T) {
 		// given
-		globalConfig := &entities.GlobalConfig{
-			GitHubAccessToken: "github-token",
-		}
-		projectConfig := &entities.ProjectConfig{}
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithGitHubAccessToken("github-token").
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
 		tokens := commands.CollectTokens(gitforgeEntities.UNKNOWN, globalConfig, projectConfig)
@@ -409,15 +402,15 @@ func TestRepoToProjectConfig(t *testing.T) {
 
 	t.Run("should convert repository and provider config to project config", func(t *testing.T) {
 		// given
-		repo := gitforgeEntities.Repository{
-			Name:         "my-repo",
-			Organization: "my-org",
-			RemoteURL:    "https://github.com/my-org/my-repo.git",
-		}
-		provCfg := entities.ProviderConfig{
-			Type:  "github",
-			Token: "test-token",
-		}
+		repo := entitybuilders.NewRepositoryBuilder().
+			WithName("my-repo").
+			WithOrganization("my-org").
+			WithRemoteURL("https://github.com/my-org/my-repo.git").
+			BuildRepository()
+		provCfg := entitybuilders.NewProviderConfigBuilder().
+			WithType("github").
+			WithToken("test-token").
+			BuildProviderConfig()
 
 		// when
 		result := commands.RepoToProjectConfig(repo, provCfg)
@@ -434,14 +427,14 @@ func TestProcessRepo(t *testing.T) {
 
 	t.Run("should return error when git repo cannot be opened", func(t *testing.T) {
 		// given
-		globalConfig := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
 				"golang": {Extensions: []string{"go"}},
-			},
-		}
-		projectConfig := &entities.ProjectConfig{
-			Path: "/nonexistent/path/that/does/not/exist",
-		}
+			}).
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath("/nonexistent/path/that/does/not/exist").
+			BuildProjectConfig()
 
 		// when
 		err := commands.ProcessRepo(globalConfig, projectConfig)
@@ -457,11 +450,11 @@ func TestDetectBySpecialPatterns(t *testing.T) {
 	t.Run("should return empty string when no patterns match", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
-		globalConfig := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
 				"golang": {SpecialPatterns: []string{"go.mod"}},
-			},
-		}
+			}).
+			BuildGlobalConfig()
 
 		// when
 		result := commands.DetectBySpecialPatterns(globalConfig, tmpDir)
@@ -474,11 +467,11 @@ func TestDetectBySpecialPatterns(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0o644))
-		globalConfig := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
 				"golang": {SpecialPatterns: []string{"go.mod"}},
-			},
-		}
+			}).
+			BuildGlobalConfig()
 
 		// when
 		result := commands.DetectBySpecialPatterns(globalConfig, tmpDir)
@@ -495,11 +488,11 @@ func TestDetectByExtensions(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# test"), 0o644))
-		globalConfig := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
 				"golang": {Extensions: []string{"go"}},
-			},
-		}
+			}).
+			BuildGlobalConfig()
 
 		// when
 		result, err := commands.DetectByExtensions(globalConfig, tmpDir)
@@ -513,11 +506,11 @@ func TestDetectByExtensions(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main"), 0o644))
-		globalConfig := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
 				"golang": {Extensions: []string{"go"}},
-			},
-		}
+			}).
+			BuildGlobalConfig()
 
 		// when
 		result, err := commands.DetectByExtensions(globalConfig, tmpDir)

@@ -18,6 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
+- replaced raw struct literals in tests with testkit builders for consistent test data construction
 - changed the Go module dependencies to their latest versions
 - changed all gitforge import paths to the new DDD `pkg/` structure (e.g. `infrastructure/git` → `pkg/git/infrastructure`)
 - replaced inline `buildGitforgeRepo` URL parsing logic with gitforge's `ParseRemoteURL` to consolidate duplicated code
