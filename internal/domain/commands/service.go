@@ -138,30 +138,12 @@ func HasMatchingExtension(filename string, extensions []string) bool {
 
 // cloneRepo clones a remote repository into a temporary directory.
 func cloneRepo(ctx *RepoContext) (string, error) {
-	// create a temporary directory
 	tmpDir, err := os.MkdirTemp("", "autobump-")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 
-	// Detect service type and get the adapter for URL preparation
 	serviceType := gitOps.GetServiceTypeByURL(ctx.ProjectConfig.Path)
-	adapter := getLocalAuthAdapter(serviceType)
-
-	// Prepare the clone URL (adapters may strip embedded credentials, etc.)
-	cloneURL := ctx.ProjectConfig.Path
-	if adapter != nil {
-		cloneURL = adapter.PrepareCloneURL(ctx.ProjectConfig.Path)
-		adapter.ConfigureTransport()
-	}
-
-	// setup the clone options
-	log.Infof("Cloning %s into %s", cloneURL, tmpDir)
-	cloneOptions := &git.CloneOptions{
-		URL: cloneURL,
-	}
-
-	// get authentication methods
 	authMethods := collectAuthMethods(
 		serviceType,
 		ctx.GlobalGitConfig.Raw.Section("user").Option("name"),
@@ -169,30 +151,13 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 		ctx.ProjectConfig,
 	)
 
-	if len(authMethods) == 0 {
-		return "", fmt.Errorf("no authentication credentials found for cloning %s", ctx.ProjectConfig.Path)
+	repo, err := gitOps.CloneRepo(ctx.ProjectConfig.Path, tmpDir, authMethods)
+	if err != nil {
+		return "", err
 	}
 
-	// try each authentication method
-	clonedSuccessfully := false
-	for _, auth := range authMethods {
-		cloneOptions.Auth = auth
-		ctx.Repo, err = git.PlainClone(tmpDir, false, cloneOptions)
-
-		// if action finished successfully, return
-		if err == nil {
-			log.Infof("Successfully cloned %s", ctx.ProjectConfig.Path)
-			ctx.ProjectConfig.Path = tmpDir
-			clonedSuccessfully = true
-			break
-		}
-	}
-
-	// if all authentication methods failed, return the last error
-	if !clonedSuccessfully {
-		return "", fmt.Errorf("failed to clone %s: %w", ctx.ProjectConfig.Path, err)
-	}
-
+	ctx.Repo = repo
+	ctx.ProjectConfig.Path = tmpDir
 	return tmpDir, nil
 }
 
@@ -807,15 +772,6 @@ func serviceTypeName(st entities.ServiceType) string {
 	default:
 		return ""
 	}
-}
-
-// getLocalAuthAdapter returns the token-less adapter from the adapter finder
-// for URL preparation and transport configuration.
-func getLocalAuthAdapter(serviceType entities.ServiceType) globalEntities.LocalGitAuthProvider {
-	if providerRegistry == nil {
-		return nil
-	}
-	return providerRegistry.GetAdapterByServiceType(serviceType)
 }
 
 // resolveToken returns the best token for a given service type from the config.
