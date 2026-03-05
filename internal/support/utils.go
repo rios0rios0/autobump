@@ -2,18 +2,12 @@ package support
 
 import (
 	"bufio"
-	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"time"
 )
 
 var ErrFileNotFound = errors.New("file not found")
-
-const DownloadTimeout = 30
 
 // ReadLines reads a whole file into memory.
 func ReadLines(filePath string) ([]string, error) {
@@ -53,30 +47,4 @@ func WriteLines(filePath string, lines []string) error {
 		return fmt.Errorf("failed to write to file: %w", err)
 	}
 	return nil
-}
-
-// DownloadFile downloads a file from the given URL.
-func DownloadFile(url string) ([]byte, error) {
-	var data []byte
-
-	ctx, cancel := context.WithTimeout(context.Background(), DownloadTimeout*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create download request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req) //nolint:gosec // URL comes from caller, validated at boundary
-	if err != nil {
-		return nil, fmt.Errorf("failed to download file: %w", err)
-	}
-	defer resp.Body.Close()
-
-	data, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	return data, nil
 }

@@ -20,6 +20,7 @@ import (
 	infraRepos "github.com/rios0rios0/autobump/internal/infrastructure/repositories"
 	"github.com/rios0rios0/autobump/internal/infrastructure/repositories/python"
 	"github.com/rios0rios0/autobump/internal/support"
+	downloadHelpers "github.com/rios0rios0/gitforge/pkg/config/infrastructure/helpers"
 	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 	gitHelpers "github.com/rios0rios0/gitforge/pkg/git/infrastructure/helpers"
 	globalEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
@@ -961,7 +962,7 @@ func createChangelogIfNotExists(changelogPath string) (bool, error) {
 	if _, err := os.Stat(changelogPath); os.IsNotExist(err) {
 		log.Warnf("Creating empty CHANGELOG file at '%s'.", changelogPath)
 		var fileContent []byte
-		fileContent, err = support.DownloadFile(entities.DefaultChangelogURL)
+		fileContent, err = downloadHelpers.DownloadFile(entities.DefaultChangelogURL)
 		if err != nil {
 			return false, fmt.Errorf("failed to download CHANGELOG template: %w", err)
 		}
