@@ -6,22 +6,19 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
-	"regexp"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 
-	"github.com/rios0rios0/autobump/internal/support"
+	configEntities "github.com/rios0rios0/gitforge/pkg/config/domain/entities"
+	configHelpers "github.com/rios0rios0/gitforge/pkg/config/domain/helpers"
+	downloadHelpers "github.com/rios0rios0/gitforge/pkg/config/infrastructure/helpers"
 )
-
-// envVarPattern matches ${VAR_NAME} placeholders in token strings.
-var envVarPattern = regexp.MustCompile(`\$\{([^}]+)}`)
 
 // GlobalConfig represents the top-level configuration.
 type GlobalConfig struct {
-	Providers              []ProviderConfig          `yaml:"providers"`
+	Providers              []configEntities.ProviderConfig `yaml:"providers"`
 	Projects               []ProjectConfig           `yaml:"projects"`
 	LanguagesConfig        map[string]LanguageConfig `yaml:"languages"`
 	GpgKeyPath             string                    `yaml:"gpg_key_path"`
@@ -31,12 +28,8 @@ type GlobalConfig struct {
 	GitLabCIJobToken       string                    `yaml:"gitlab_ci_job_token"`
 }
 
-// ProviderConfig describes a single Git hosting provider for auto-discovery.
-type ProviderConfig struct {
-	Type          string   `yaml:"type"`          // "github", "gitlab", "azuredevops"
-	Token         string   `yaml:"token"`         // inline, ${ENV_VAR}, or file path
-	Organizations []string `yaml:"organizations"` // org names or URLs to scan
-}
+// ProviderConfig is re-exported from gitforge for backward compatibility.
+type ProviderConfig = configEntities.ProviderConfig
 
 // LanguageConfig holds per-language detection and versioning rules.
 type LanguageConfig struct {
@@ -96,7 +89,7 @@ func ReadConfig(configPath string) (*GlobalConfig, error) {
 
 	// Resolve provider tokens (env vars and file paths)
 	for i := range globalConfig.Providers {
-		globalConfig.Providers[i].Token = resolveToken(globalConfig.Providers[i].Token)
+		globalConfig.Providers[i].Token = globalConfig.Providers[i].ResolveToken()
 	}
 
 	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
@@ -117,7 +110,7 @@ func readData(configPath string) ([]byte, error) {
 		return data, nil
 	}
 	// It's a URL, so read the data from the URL
-	return support.DownloadFile(configPath)
+	return downloadHelpers.DownloadFile(configPath)
 }
 
 // handleTokenFile reads the token from a file if it exists and replaces the token string.
@@ -136,39 +129,8 @@ func handleTokenFile(name string, token *string) {
 	}
 }
 
-// resolveToken expands ${ENV_VAR} references in the token string and,
-// if the result is a path to an existing file, reads the token from it.
-func resolveToken(raw string) string {
-	if raw == "" {
-		return raw
-	}
-
-	// Expand ${ENV_VAR} references
-	resolved := envVarPattern.ReplaceAllStringFunc(raw, func(match string) string {
-		varName := envVarPattern.FindStringSubmatch(match)[1]
-		if val := os.Getenv(varName); val != "" {
-			return val
-		}
-		log.Warnf("Environment variable %q is not set", varName)
-		return ""
-	})
-
-	// If the resolved value is a path to an existing file, read the token from it
-	if _, err := os.Stat(resolved); err == nil {
-		data, readErr := os.ReadFile(resolved)
-		if readErr != nil {
-			log.Warnf("Failed to read token file %q: %v", resolved, readErr)
-			return resolved
-		}
-		log.Infof("Read token from file %q", resolved)
-		return strings.TrimSpace(string(data))
-	}
-
-	return resolved
-}
-
 // ValidateProviders validates provider configuration entries.
-func ValidateProviders(providers []ProviderConfig) error {
+func ValidateProviders(providers []configEntities.ProviderConfig) error {
 	for i, p := range providers {
 		if p.Type == "" {
 			return fmt.Errorf(
@@ -252,7 +214,7 @@ func FindConfigOnMissing(configPath string) string {
 		log.Info("No config file specified, searching for default locations")
 
 		var err error
-		configPath, err = FindConfig()
+		configPath, err = configHelpers.FindConfigFile("autobump")
 		if err != nil {
 			log.Warn(
 				"Config file not found in default locations, " +
@@ -267,43 +229,3 @@ func FindConfigOnMissing(configPath string) string {
 	return configPath
 }
 
-// FindConfig finds the config file in a list of default locations using globbing.
-func FindConfig() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	// list of directories to search, in descending order of priority
-	locations := []string{
-		".",
-		".config",
-		"configs",
-		homeDir,
-		filepath.Join(homeDir, ".config"),
-	}
-
-	// all possible config file names
-	patterns := []string{
-		".autobump.yaml",
-		".autobump.yml",
-		"autobump.yaml",
-		"autobump.yml",
-	}
-
-	for _, location := range locations {
-		for _, pattern := range patterns {
-			configPath := filepath.Join(location, pattern)
-			_, err = os.Stat(configPath)
-			if err == nil {
-				return configPath, nil
-			}
-			// if the error is not a "file not found" error, log it
-			if !os.IsNotExist(err) {
-				log.Warnf("Failed to check '%s' for config file: %v", configPath, err)
-			}
-		}
-	}
-
-	return "", ErrConfigFileNotFoundError
-}
