@@ -1073,6 +1073,7 @@ func updateVersion(globalConfig *entities.GlobalConfig, projectConfig *entities.
 			})
 		}
 
+		//nolint:gosec // G703 false positive: path originates from filepath.Glob and is validated by os.Stat above
 		err = os.WriteFile(versionFile.Path, []byte(updatedContent), originalFileMode)
 		if err != nil {
 			return fmt.Errorf("failed to write to file %s: %w", versionFile.Path, err)
