@@ -16,27 +16,24 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.19.1] - 2026-03-06
+
 ### Changed
 
+- changed all gitforge import paths to the new DDD `pkg/` structure (e.g. `infrastructure/git` → `pkg/git/infrastructure`)
+- changed the Go module dependencies to their latest versions
+- replaced inline `buildGitforgeRepo` URL parsing logic with gitforge's `ParseRemoteURL` to consolidate duplicated code
+- replaced local `ProviderConfig` struct and `resolveToken()` with gitforge's `configEntities.ProviderConfig` type alias and `ResolveToken()` method
+- replaced local changelog processing functions (~550 lines) with thin wrappers delegating to gitforge's `Changelog` struct
 - replaced local language detection logic (extension matching, `HasMatchingExtension`) with langforge's `ClassifyFileByExtension` and `LanguageRegistry.Detect` to centralize language abstractions
 - replaced raw struct literals in tests with testkit builders for consistent test data construction
-- changed the Go module dependencies to their latest versions
-- changed all gitforge import paths to the new DDD `pkg/` structure (e.g. `infrastructure/git` → `pkg/git/infrastructure`)
-- replaced inline `buildGitforgeRepo` URL parsing logic with gitforge's `ParseRemoteURL` to consolidate duplicated code
-- updated commit signing code from `SigningOptions` struct to `CommitSigner` interface pattern using `NewSSHSigner` and `NewGPGSigner`
 - updated `GitOperations` initialization from global `SetAdapterFinder` to constructor injection via `NewGitOperations`
-- replaced inline `cloneRepo` clone logic with gitforge's `CloneRepo` to consolidate duplicated git clone code
-- replaced local `ProviderConfig` struct and `resolveToken()` with gitforge's `configEntities.ProviderConfig` type alias and `ResolveToken()` method
-- replaced local `FindConfig()` with gitforge's `configHelpers.FindConfigFile("autobump")`
-- replaced local `DownloadFile()` in `support/utils.go` with gitforge's `downloadHelpers.DownloadFile()`
-- replaced local changelog processing functions (~550 lines) with thin wrappers delegating to gitforge's `Changelog` struct
-- changed the Go module dependencies to their latest versions
+- updated commit signing code from `SigningOptions` struct to `CommitSigner` interface pattern using `NewSSHSigner` and `NewGPGSigner`
 
 ### Fixed
 
-- fixed `typecheck` finding by removing stale `export_test.go` that referenced functions moved to gitforge
 - fixed `exhaustive` finding by adding missing `Language` keys to `langforgeAliases` map
-
+- fixed `typecheck` finding by removing stale `export_test.go` that referenced functions moved to gitforge
 
 ## [2.19.0] - 2026-02-14
 
