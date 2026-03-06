@@ -19,13 +19,13 @@ import (
 // GlobalConfig represents the top-level configuration.
 type GlobalConfig struct {
 	Providers              []configEntities.ProviderConfig `yaml:"providers"`
-	Projects               []ProjectConfig           `yaml:"projects"`
-	LanguagesConfig        map[string]LanguageConfig `yaml:"languages"`
-	GpgKeyPath             string                    `yaml:"gpg_key_path"`
-	GitLabAccessToken      string                    `yaml:"gitlab_access_token"`
-	AzureDevOpsAccessToken string                    `yaml:"azure_devops_access_token"`
-	GitHubAccessToken      string                    `yaml:"github_access_token"`
-	GitLabCIJobToken       string                    `yaml:"gitlab_ci_job_token"`
+	Projects               []ProjectConfig                 `yaml:"projects"`
+	LanguagesConfig        map[string]LanguageConfig       `yaml:"languages"`
+	GpgKeyPath             string                          `yaml:"gpg_key_path"`
+	GitLabAccessToken      string                          `yaml:"gitlab_access_token"`
+	AzureDevOpsAccessToken string                          `yaml:"azure_devops_access_token"`
+	GitHubAccessToken      string                          `yaml:"github_access_token"`
+	GitLabCIJobToken       string                          `yaml:"gitlab_ci_job_token"`
 }
 
 // ProviderConfig is re-exported from gitforge for backward compatibility.
@@ -228,4 +228,3 @@ func FindConfigOnMissing(configPath string) string {
 	}
 	return configPath
 }
-
