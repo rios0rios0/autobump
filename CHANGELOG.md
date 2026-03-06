@@ -31,6 +31,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - replaced local `DownloadFile()` in `support/utils.go` with gitforge's `downloadHelpers.DownloadFile()`
 - replaced local changelog processing functions (~550 lines) with thin wrappers delegating to gitforge's `Changelog` struct
 - changed the Go module dependencies to their latest versions
+- changed the Go version to `1.26.1` and updated all module dependencies
 
 ### Fixed
 
