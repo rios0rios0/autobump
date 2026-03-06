@@ -18,41 +18,39 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
-- replaced local language detection logic (extension matching, `HasMatchingExtension`) with langforge's `ClassifyFileByExtension` and `LanguageRegistry.Detect` to centralize language abstractions
-- replaced raw struct literals in tests with testkit builders for consistent test data construction
+- changed all `gitforge` import paths to the new DDD `pkg/` structure (e.g. `infrastructure/git` → `pkg/git/infrastructure`)
 - changed the Go module dependencies to their latest versions
-- changed all gitforge import paths to the new DDD `pkg/` structure (e.g. `infrastructure/git` → `pkg/git/infrastructure`)
-- replaced inline `buildGitforgeRepo` URL parsing logic with gitforge's `ParseRemoteURL` to consolidate duplicated code
-- updated commit signing code from `SigningOptions` struct to `CommitSigner` interface pattern using `NewSSHSigner` and `NewGPGSigner`
+- replaced inline `buildGitforgeRepo` URL parsing logic with `gitforge`'s `ParseRemoteURL` to consolidate duplicated code
+- replaced inline `cloneRepo` clone logic with `gitforge`'s `CloneRepo` to consolidate duplicated git clone code
+- replaced local `DownloadFile()` in `support/utils.go` with `gitforge`'s `downloadHelpers.DownloadFile()`
+- replaced local `FindConfig()` with `gitforge`'s `configHelpers.FindConfigFile("autobump")`
+- replaced local `ProviderConfig` struct and `resolveToken()` with `gitforge`'s `configEntities.ProviderConfig` type alias and `ResolveToken()` method
+- replaced local changelog processing functions (~550 lines) with thin wrappers delegating to `gitforge`'s `Changelog` struct
+- replaced local language detection logic (extension matching, `HasMatchingExtension`) with `langforge`'s `ClassifyFileByExtension` and `LanguageRegistry.Detect` to centralize language abstractions
+- replaced raw struct literals in tests with `testkit` builders for consistent test data construction
 - updated `GitOperations` initialization from global `SetAdapterFinder` to constructor injection via `NewGitOperations`
-- replaced inline `cloneRepo` clone logic with gitforge's `CloneRepo` to consolidate duplicated git clone code
-- replaced local `ProviderConfig` struct and `resolveToken()` with gitforge's `configEntities.ProviderConfig` type alias and `ResolveToken()` method
-- replaced local `FindConfig()` with gitforge's `configHelpers.FindConfigFile("autobump")`
-- replaced local `DownloadFile()` in `support/utils.go` with gitforge's `downloadHelpers.DownloadFile()`
-- replaced local changelog processing functions (~550 lines) with thin wrappers delegating to gitforge's `Changelog` struct
-- changed the Go module dependencies to their latest versions
+- updated commit signing code from `SigningOptions` struct to `CommitSigner` interface pattern using `NewSSHSigner` and `NewGPGSigner`
 
 ### Fixed
 
-- fixed `typecheck` finding by removing stale `export_test.go` that referenced functions moved to gitforge
 - fixed `exhaustive` finding by adding missing `Language` keys to `langforgeAliases` map
-
+- fixed `typecheck` finding by removing stale `export_test.go` that referenced functions moved to gitforge
 
 ## [2.19.0] - 2026-02-14
 
 ### Added
 
 - added `AdapterFinder` interface in git utilities to break import cycles between infrastructure packages
-- added entity builders (`RepositoryBuilder`) following testkit `BaseBuilder` pattern in `test/domain/entitybuilders/`
 - added `github.com/rios0rios0/testkit` dependency for test builders
 - added `go.uber.org/dig` dependency for dependency injection
+- added entity builders (`RepositoryBuilder`) following `testkit` `BaseBuilder` pattern in `test/domain/entitybuilders/`
+- created `SingleController`, `BatchController`, and `DiscoverController` as cobra CLI adapters
+- introduced `AppInternal` to aggregate all controllers via DIG injection
+- introduced `Controller` interface with `GetBind()` and `Execute()` following separation of concerns principles
 
 ### Changed
 
-- created `SingleController`, `BatchController`, and `DiscoverController` as cobra CLI adapters
 - extracted `ProcessRepo`, `IterateProjects`, and `DiscoverAndProcess` into `internal/domain/commands/`
-- introduced `AppInternal` to aggregate all controllers via DIG injection
-- introduced `Controller` interface with `GetBind()` and `Execute()` following separation of concerns principles
 - moved all code under `internal/` package for proper Go encapsulation
 - moved config types (`GlobalConfig`, `ProjectConfig`, etc.) into `internal/domain/entities/`
 - moved entry point from `main.go` to `cmd/autobump/main.go` with separate `dig.go` for DI bootstrap
@@ -201,7 +199,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
-- refactored the project to remove warnings from golangci-lint
+- refactored the project to remove warnings from `golangci-lint`
 
 ## [2.11.0] - 2024-01-23
 
