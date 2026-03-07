@@ -708,28 +708,31 @@ func checkPullRequestExists(ctx *RepoContext, branchName string) (bool, error) {
 
 // IterateProjects iterates over the projects and processes them using the ProcessRepo function.
 func IterateProjects(globalConfig *entities.GlobalConfig) error {
-	var err error
+	totalErrors := 0
 	for _, project := range globalConfig.Projects {
 		// verify if the project path exists
-		if _, err = os.Stat(project.Path); os.IsNotExist(err) {
+		if _, err := os.Stat(project.Path); os.IsNotExist(err) {
 			// if the project path does not exist, check if it is a remote repository
 			if !strings.HasPrefix(project.Path, "https://") &&
 				!strings.HasPrefix(project.Path, "git@") {
 				// if it is neither a local path nor a remote repository, skip the project
 				log.Errorf("Project path does not exist: %s\n", project.Path)
 				log.Warn("Skipping project")
-				err = ErrProjectPathDoesNotExist
+				totalErrors++
 				continue
 			}
 		}
 
-		err = ProcessRepo(globalConfig, &project)
-		if err != nil {
+		if err := ProcessRepo(globalConfig, &project); err != nil {
 			log.Errorf("Error processing project at %s: %v\n", project.Path, err)
+			totalErrors++
 		}
 	}
 
-	return err
+	if totalErrors > 0 {
+		return fmt.Errorf("batch processing completed with %d error(s)", totalErrors)
+	}
+	return nil
 }
 
 // DiscoverAndProcess discovers repositories from configured providers and processes each one.
@@ -778,6 +781,9 @@ func DiscoverAndProcess(
 	}
 
 	log.Infof("Discovery complete: %d repos processed, %d errors", totalRepos, totalErrors)
+	if totalErrors > 0 {
+		return fmt.Errorf("discovery completed with %d error(s) out of %d repos", totalErrors, totalRepos)
+	}
 	return nil
 }
 
