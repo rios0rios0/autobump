@@ -14,6 +14,7 @@ type GlobalConfigBuilder struct {
 	projects               []entities.ProjectConfig
 	languagesConfig        map[string]entities.LanguageConfig
 	gpgKeyPath             string
+	gpgKeyPassphrase       string
 	gitLabAccessToken      string
 	azureDevOpsAccessToken string
 	gitHubAccessToken      string
@@ -61,6 +62,12 @@ func (b *GlobalConfigBuilder) WithGpgKeyPath(gpgKeyPath string) *GlobalConfigBui
 	return b
 }
 
+// WithGpgKeyPassphrase sets the GPG key passphrase.
+func (b *GlobalConfigBuilder) WithGpgKeyPassphrase(passphrase string) *GlobalConfigBuilder {
+	b.gpgKeyPassphrase = passphrase
+	return b
+}
+
 // WithGitLabAccessToken sets the GitLab access token.
 func (b *GlobalConfigBuilder) WithGitLabAccessToken(token string) *GlobalConfigBuilder {
 	b.gitLabAccessToken = token
@@ -97,6 +104,7 @@ func (b *GlobalConfigBuilder) BuildGlobalConfig() *entities.GlobalConfig {
 		Projects:               b.projects,
 		LanguagesConfig:        b.languagesConfig,
 		GpgKeyPath:             b.gpgKeyPath,
+		GpgKeyPassphrase:       b.gpgKeyPassphrase,
 		GitLabAccessToken:      b.gitLabAccessToken,
 		AzureDevOpsAccessToken: b.azureDevOpsAccessToken,
 		GitHubAccessToken:      b.gitHubAccessToken,
@@ -111,6 +119,7 @@ func (b *GlobalConfigBuilder) Reset() testkit.Builder {
 	b.projects = nil
 	b.languagesConfig = make(map[string]entities.LanguageConfig)
 	b.gpgKeyPath = ""
+	b.gpgKeyPassphrase = ""
 	b.gitLabAccessToken = ""
 	b.azureDevOpsAccessToken = ""
 	b.gitHubAccessToken = ""
@@ -143,6 +152,7 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 		projects:               projectsCopy,
 		languagesConfig:        languagesConfigCopy,
 		gpgKeyPath:             b.gpgKeyPath,
+		gpgKeyPassphrase:       b.gpgKeyPassphrase,
 		gitLabAccessToken:      b.gitLabAccessToken,
 		azureDevOpsAccessToken: b.azureDevOpsAccessToken,
 		gitHubAccessToken:      b.gitHubAccessToken,
