@@ -22,6 +22,7 @@ type GlobalConfig struct {
 	Projects               []ProjectConfig                 `yaml:"projects"`
 	LanguagesConfig        map[string]LanguageConfig       `yaml:"languages"`
 	GpgKeyPath             string                          `yaml:"gpg_key_path"`
+	GpgKeyPassphrase       string                          `yaml:"gpg_key_passphrase"`
 	GitLabAccessToken      string                          `yaml:"gitlab_access_token"`
 	AzureDevOpsAccessToken string                          `yaml:"azure_devops_access_token"`
 	GitHubAccessToken      string                          `yaml:"github_access_token"`
@@ -83,6 +84,7 @@ func ReadConfig(configPath string) (*GlobalConfig, error) {
 		}
 	}
 
+	handleTokenFile("GPG passphrase", &globalConfig.GpgKeyPassphrase)
 	handleTokenFile("GitLab", &globalConfig.GitLabAccessToken)
 	handleTokenFile("Azure DevOps", &globalConfig.AzureDevOpsAccessToken)
 	handleTokenFile("GitHub", &globalConfig.GitHubAccessToken)
@@ -93,6 +95,10 @@ func ReadConfig(configPath string) (*GlobalConfig, error) {
 	}
 
 	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
+
+	if globalConfig.GpgKeyPassphrase == "" {
+		globalConfig.GpgKeyPassphrase = os.Getenv("GPG_PASSPHRASE")
+	}
 
 	return globalConfig, nil
 }

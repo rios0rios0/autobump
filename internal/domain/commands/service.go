@@ -454,7 +454,7 @@ func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 			return plumbing.Hash{}, gpgErr
 		}
 
-		signKey, gpgErr := signingHelpers.GetGpgKey(gpgKeyReader)
+		signKey, gpgErr := signingHelpers.GetGpgKey(gpgKeyReader, ctx.GlobalConfig.GpgKeyPassphrase)
 		if gpgErr != nil {
 			return plumbing.Hash{}, gpgErr
 		}
