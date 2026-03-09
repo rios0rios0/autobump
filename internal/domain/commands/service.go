@@ -76,6 +76,8 @@ var langforgeAliases = map[langEntities.Language][]string{
 	langEntities.LanguagePython:     {},
 	langEntities.LanguageTerraform:  {},
 	langEntities.LanguageYAML:       {},
+	langEntities.LanguageDockerfile: {},
+	langEntities.LanguagePipeline:   {},
 	langEntities.LanguageUnknown:    {},
 }
 

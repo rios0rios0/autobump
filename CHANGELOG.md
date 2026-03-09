@@ -23,6 +23,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - updated `gitforge` dependency with fixes for GPG key format detection, Azure DevOps PR creation, and passphrase support
+- updated `langforge` dependency to v0.2.0 with Dockerfile and pipeline detection support
 
 ## [2.19.1] - 2026-03-06
 
