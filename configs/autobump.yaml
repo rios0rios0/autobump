@@ -1,6 +1,10 @@
-# (optional) path to your password-protected GPG private key used to sign the commits
+# (optional) path to your GPG private key used to sign the commits
 # example: "gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobump.asc"
-#gpg_key_path: "/home/user/.gnupg/autobump.asc"
+#gpg_key_path: '/home/user/.gnupg/autobump.asc'
+
+# (optional) passphrase for the GPG key above
+# can be a literal string, a file path, or resolved from the GPG_PASSPHRASE env var
+#gpg_key_passphrase: '/home/user/.gnupg/autobump-passphrase.txt'
 
 # GitLab/Azure DevOps/GitHub personal access token used to create MRs/PRs
 # set it to a path to read the token from a file

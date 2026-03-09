@@ -22,6 +22,7 @@ type GlobalConfig struct {
 	Projects               []ProjectConfig                 `yaml:"projects"`
 	LanguagesConfig        map[string]LanguageConfig       `yaml:"languages"`
 	GpgKeyPath             string                          `yaml:"gpg_key_path"`
+	GpgKeyPassphrase       string                          `yaml:"gpg_key_passphrase"`
 	GitLabAccessToken      string                          `yaml:"gitlab_access_token"`
 	AzureDevOpsAccessToken string                          `yaml:"azure_devops_access_token"`
 	GitHubAccessToken      string                          `yaml:"github_access_token"`
@@ -83,9 +84,10 @@ func ReadConfig(configPath string) (*GlobalConfig, error) {
 		}
 	}
 
-	handleTokenFile("GitLab", &globalConfig.GitLabAccessToken)
-	handleTokenFile("Azure DevOps", &globalConfig.AzureDevOpsAccessToken)
-	handleTokenFile("GitHub", &globalConfig.GitHubAccessToken)
+	handleTokenFile("GPG passphrase", &globalConfig.GpgKeyPassphrase)
+	handleTokenFile("GitLab access token", &globalConfig.GitLabAccessToken)
+	handleTokenFile("Azure DevOps access token", &globalConfig.AzureDevOpsAccessToken)
+	handleTokenFile("GitHub access token", &globalConfig.GitHubAccessToken)
 
 	// Resolve provider tokens (env vars and file paths)
 	for i := range globalConfig.Providers {
@@ -93,6 +95,10 @@ func ReadConfig(configPath string) (*GlobalConfig, error) {
 	}
 
 	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
+
+	if globalConfig.GpgKeyPassphrase == "" {
+		globalConfig.GpgKeyPassphrase = os.Getenv("GPG_PASSPHRASE")
+	}
 
 	return globalConfig, nil
 }
@@ -117,11 +123,11 @@ func readData(configPath string) ([]byte, error) {
 func handleTokenFile(name string, token *string) {
 	if *token != "" {
 		if _, err := os.Stat(*token); !os.IsNotExist(err) {
-			log.Infof("Reading %s access token from file %s", name, *token)
+			log.Infof("Reading %s from file...", name)
 			var fileToken []byte
 			fileToken, err = os.ReadFile(*token)
 			if err != nil {
-				log.Errorf("failed to read %s access token: %v", name, err)
+				log.Errorf("failed to read %s from file: %v", name, err)
 			} else {
 				*token = strings.TrimSpace(string(fileToken))
 			}
