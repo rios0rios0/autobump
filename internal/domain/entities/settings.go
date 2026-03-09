@@ -123,7 +123,7 @@ func readData(configPath string) ([]byte, error) {
 func handleTokenFile(name string, token *string) {
 	if *token != "" {
 		if _, err := os.Stat(*token); !os.IsNotExist(err) {
-			log.Infof("Reading %s from file %s", name, *token)
+			log.Infof("Reading %s from file...", name)
 			var fileToken []byte
 			fileToken, err = os.ReadFile(*token)
 			if err != nil {
