@@ -85,9 +85,9 @@ func ReadConfig(configPath string) (*GlobalConfig, error) {
 	}
 
 	handleTokenFile("GPG passphrase", &globalConfig.GpgKeyPassphrase)
-	handleTokenFile("GitLab", &globalConfig.GitLabAccessToken)
-	handleTokenFile("Azure DevOps", &globalConfig.AzureDevOpsAccessToken)
-	handleTokenFile("GitHub", &globalConfig.GitHubAccessToken)
+	handleTokenFile("GitLab access token", &globalConfig.GitLabAccessToken)
+	handleTokenFile("Azure DevOps access token", &globalConfig.AzureDevOpsAccessToken)
+	handleTokenFile("GitHub access token", &globalConfig.GitHubAccessToken)
 
 	// Resolve provider tokens (env vars and file paths)
 	for i := range globalConfig.Providers {
@@ -123,11 +123,11 @@ func readData(configPath string) ([]byte, error) {
 func handleTokenFile(name string, token *string) {
 	if *token != "" {
 		if _, err := os.Stat(*token); !os.IsNotExist(err) {
-			log.Infof("Reading %s access token from file %s", name, *token)
+			log.Infof("Reading %s from file %s", name, *token)
 			var fileToken []byte
 			fileToken, err = os.ReadFile(*token)
 			if err != nil {
-				log.Errorf("failed to read %s access token: %v", name, err)
+				log.Errorf("failed to read %s from file: %v", name, err)
 			} else {
 				*token = strings.TrimSpace(string(fileToken))
 			}
