@@ -228,7 +228,7 @@ func createPullRequest(
 		SourceBranch: branchName,
 		TargetBranch: targetBranch,
 		Title:        "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion,
-		Description: generatePRDescription(ctx),
+		Description:  generatePRDescription(ctx),
 	}
 
 	pr, err := provider.CreatePullRequest(context.Background(), gitforgeRepo, input)
@@ -243,17 +243,16 @@ func createPullRequest(
 func generatePRDescription(ctx *RepoContext) string {
 	var sb strings.Builder
 	sb.WriteString("## Summary\n\n")
-	sb.WriteString(fmt.Sprintf(
-		"This PR bumps the version to **%s** for project **%s**.\n\n",
+	fmt.Fprintf(&sb, "This PR bumps the version to **%s** for project **%s**.\n\n",
 		ctx.ProjectConfig.NewVersion, ctx.ProjectConfig.Name,
-	))
+	)
 
 	sb.WriteString("### Changes\n\n")
 	sb.WriteString("- Updated `CHANGELOG.md` with the new version and date\n")
 
 	versionFiles, _ := getVersionFiles(ctx.GlobalConfig, ctx.ProjectConfig)
 	for _, vf := range versionFiles {
-		sb.WriteString(fmt.Sprintf("- Updated version in `%s`\n", filepath.Base(vf.Path)))
+		fmt.Fprintf(&sb, "- Updated version in `%s`\n", filepath.Base(vf.Path))
 	}
 
 	sb.WriteString("\n### Review Checklist\n\n")
