@@ -7,13 +7,10 @@ import (
 
 // RegisterProviders registers all controller providers with the DIG container.
 func RegisterProviders(container *dig.Container) error {
-	if err := container.Provide(NewSingleController); err != nil {
+	if err := container.Provide(NewLocalController); err != nil {
 		return err
 	}
-	if err := container.Provide(NewBatchController); err != nil {
-		return err
-	}
-	if err := container.Provide(NewDiscoverController); err != nil {
+	if err := container.Provide(NewRunController); err != nil {
 		return err
 	}
 	if err := container.Provide(NewControllers); err != nil {
@@ -24,11 +21,11 @@ func RegisterProviders(container *dig.Container) error {
 
 // NewControllers aggregates all controllers into a slice for the AppInternal.
 func NewControllers(
-	batchController *BatchController,
-	discoverController *DiscoverController,
+	runController *RunController,
+	localController *LocalController,
 ) *[]entities.Controller {
 	return &[]entities.Controller{
-		batchController,
-		discoverController,
+		runController,
+		localController,
 	}
 }

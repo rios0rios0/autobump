@@ -34,8 +34,8 @@ Note: The CI/CD pipeline automatically uses these scripts via the reusable workf
 - Run directly: `go run ./cmd/autobump`
 - Run built binary: `./bin/autobump`
 - Test help: `./bin/autobump --help`
-- Batch mode help: `./bin/autobump batch --help`
-- Discover mode help: `./bin/autobump discover --help`
+- Local mode help: `./bin/autobump local --help`
+- Run mode help: `./bin/autobump run --help`
 
 ### Installation
 
@@ -54,7 +54,8 @@ autobump/
 │   └── autobump/
 │       ├── main.go                      # Entry point: wires DI, builds Cobra commands
 │       └── dig.go                       # DIG injection helpers: injectAppContext,
-│                                        #   injectSingleController, injectProviderRegistry
+│                                        #   injectLocalController, injectRunController,
+│                                        #   injectProviderRegistry
 ├── internal/
 │   ├── app.go                           # AppInternal: aggregates all controllers
 │   ├── container.go                     # RegisterProviders: wires all DIG layers
@@ -79,9 +80,9 @@ autobump/
 │   │       └── export_test.go           # Exports unexported changelog functions for testing
 │   ├── infrastructure/
 │   │   ├── controllers/
-│   │   │   ├── single_controller.go     # Root "autobump" command (single repo mode)
-│   │   │   ├── batch_controller.go      # "batch" subcommand
-│   │   │   ├── discover_controller.go   # "discover" subcommand
+│   │   │   ├── local_controller.go      # "local" subcommand (single repo mode)
+│   │   │   ├── run_controller.go        # "run" subcommand (batch + discover engine)
+│   │   │   ├── config_helpers.go        # Shared config reading/validation helper
 │   │   │   └── container.go             # RegisterProviders for all controllers via DIG
 │   │   └── repositories/
 │   │       ├── provider_registry.go     # ProviderRegistry wrapping gitforge's registry
@@ -142,24 +143,27 @@ autobump/
 
 | Command | Description |
 |---|---|
-| `autobump` | Single project mode: detects language, bumps version, creates PR |
-| `autobump batch` | Batch mode: processes all projects listed in config |
-| `autobump discover` | Discovery mode: queries provider APIs to find repos, then bumps each |
+| `autobump` | Shows help (use `autobump .` as shorthand for local mode) |
+| `autobump local` | Single project mode: detects language, bumps version, creates PR |
+| `autobump run` | Engine mode: auto-detects batch (static project list) and/or discover (provider APIs) from config |
+| `autobump batch` | **Deprecated**: hidden alias for `run` (shows deprecation warning) |
+| `autobump discover` | **Deprecated**: hidden alias for `run` (shows deprecation warning) |
 
 ### CLI Flags
 
-- `--config/-c` -- config file path (available on all commands)
-- `--language/-l` -- override detected language (root command only)
+- `--config/-c` -- config file path (persistent, available on all commands)
+- `--verbose/-v` -- enable verbose output (persistent, available on all commands)
+- `--language/-l` -- override detected language (`local` command and root shorthand only)
 
 ## Configuration
 
 - Default config search order: `.`, `.config/`, `configs/`, `~/`, `~/.config/` (file names: `autobump.yaml`, `autobump.yml`, `.autobump.yaml`, `.autobump.yml`)
 - Final fallback: remote default URL (`configs/autobump.yaml` in this repository)
 - Config structs live in `internal/domain/entities/settings.go`: `GlobalConfig`, `ProjectConfig`, `ProviderConfig`, `LanguageConfig`, `VersionFile`
-- Supports `projects` list (batch mode) and `providers` list (discover mode)
+- Supports `projects` list and/or `providers` list (both processed by `run` command)
 - Token resolution: inline string, `${ENV_VAR}` expansion, or file path auto-detection
 
-### Provider Configuration (discover mode)
+### Provider Configuration (run mode with providers)
 
 ```yaml
 providers:
@@ -212,7 +216,7 @@ go test ./internal/...  # Quick internal-only check during development (acceptab
 1. `make lint` -- must report 0 issues
 2. `make test` -- all tests must pass
 3. `make build` -- must complete successfully
-4. `./bin/autobump --help` -- must show help text with all three commands
+4. `./bin/autobump --help` -- must show help text with `local` and `run` commands
 5. `make sast` -- should report no new findings
 
 ### Pre-commit

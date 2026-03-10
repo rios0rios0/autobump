@@ -24,15 +24,32 @@ func injectAppContext() *internal.AppInternal {
 	return appInternal
 }
 
-func injectSingleController() *controllers.SingleController {
+func injectLocalController() *controllers.LocalController {
 	container := dig.New()
 
 	if err := internal.RegisterProviders(container); err != nil {
 		panic(err)
 	}
 
-	var controller *controllers.SingleController
-	if err := container.Invoke(func(c *controllers.SingleController) {
+	var controller *controllers.LocalController
+	if err := container.Invoke(func(c *controllers.LocalController) {
+		controller = c
+	}); err != nil {
+		panic(err)
+	}
+
+	return controller
+}
+
+func injectRunController() *controllers.RunController {
+	container := dig.New()
+
+	if err := internal.RegisterProviders(container); err != nil {
+		panic(err)
+	}
+
+	var controller *controllers.RunController
+	if err := container.Invoke(func(c *controllers.RunController) {
 		controller = c
 	}); err != nil {
 		panic(err)
