@@ -98,20 +98,24 @@ gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobum
 
 ## Usage
 
-There are two ways to run AutoBump: for a single project or for multiple projects in batch mode.
+AutoBump has two main modes: **local** (single repository) and **run** (batch engine).
 
-### 1. Single Project Mode
+### 1. Local Mode
 
-Simply run this command in the project directory. AutoBump will automatically detect the project language, update the version files, update the CHANGELOG.md file, and create a merge request/pull request on your Git platform (GitLab, Azure DevOps, or GitHub).
+Process a single repository. Run in the project directory or specify a path:
 
 ```bash
-autobump
+autobump local              # Current directory
+autobump local /path/to/repo  # Specific path
+autobump .                  # Shorthand for local mode
 ```
+
+AutoBump will automatically detect the project language, update the version files, update the CHANGELOG.md file, and create a merge request/pull request on your Git platform (GitLab, Azure DevOps, or GitHub).
 
 You can manually specify the project language using the `-l` or `--language` flag:
 
 ```bash
-autobump -l java
+autobump local -l java
 ```
 
 Available languages: `go`, `java`, `python`, `typescript`, `cs`
@@ -119,12 +123,20 @@ Available languages: `go`, `java`, `python`, `typescript`, `cs`
 You can also specify a custom configuration file path:
 
 ```bash
-autobump -c /path/to/custom/config.yaml
+autobump local -c /path/to/custom/config.yaml
 ```
 
-### 2. Batch Mode
+### 2. Run Mode (Batch + Discover)
 
-Modify the configuration file and add a list of your projects into the `projects` section:
+The `run` command processes repositories from a configuration file. It auto-detects the mode based on config content:
+
+- If `projects` is configured, iterates the static project list
+- If `providers` is configured, discovers repos via provider APIs
+- If both are present, both are processed
+
+#### Static Project List
+
+Add a `projects` section to your configuration file:
 
 ```yaml
 projects:
@@ -143,17 +155,7 @@ projects:
     project_access_token: "???"
 ```
 
-Then run AutoBump in batch mode:
-
-```bash
-autobump batch
-```
-
-AutoBump will iterate through each project and perform the same actions as in single project mode.
-
-### 3. Discover Mode
-
-Instead of manually listing projects, AutoBump can automatically discover all repositories from your Git hosting providers (GitHub, GitLab, Azure DevOps) and bump them.
+#### Provider Discovery
 
 Add a `providers` section to your configuration file:
 
@@ -184,17 +186,17 @@ The `token` field supports three formats:
 - **Environment variable**: `"${ENV_VAR}"` -- reads the token from an environment variable
 - **File path**: `"/path/to/file"` -- reads the token from a file on disk
 
-Then run AutoBump in discover mode:
+Then run:
 
 ```bash
-autobump discover
+autobump run
 ```
 
-AutoBump will query each provider's API to find all repositories in the configured organizations, then run the bump process on each discovered repository.
+AutoBump will process all configured sources (static project list and/or provider API discovery).
 
 ## How It Works
 
-1. **Repository Discovery** *(discover mode only)*: Queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations
+1. **Repository Discovery** *(run mode with providers)*: Queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations
 2. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
 3. **Version Detection**: Reads the current version from CHANGELOG.md
 4. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
