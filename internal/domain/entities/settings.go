@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
+	logger "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 
 	configEntities "github.com/rios0rios0/gitforge/pkg/config/domain/entities"
@@ -123,11 +123,11 @@ func readData(configPath string) ([]byte, error) {
 func handleTokenFile(name string, token *string) {
 	if *token != "" {
 		if _, err := os.Stat(*token); !os.IsNotExist(err) {
-			log.Infof("Reading %s from file...", name)
+			logger.Infof("Reading %s from file...", name)
 			var fileToken []byte
 			fileToken, err = os.ReadFile(*token)
 			if err != nil {
-				log.Errorf("failed to read %s from file: %v", name, err)
+				logger.Errorf("failed to read %s from file: %v", name, err)
 			} else {
 				*token = strings.TrimSpace(string(fileToken))
 			}
@@ -192,7 +192,7 @@ func ValidateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 			globalConfig.AzureDevOpsAccessToken == "" &&
 			globalConfig.GitHubAccessToken == "" &&
 			projectConfig.ProjectAccessToken == "" {
-			log.Error(
+			logger.Error(
 				"Project access token is required when personal access token " +
 					"is not set in batch mode",
 			)
@@ -217,19 +217,19 @@ func ValidateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 // FindConfigOnMissing finds the config file if not manually set.
 func FindConfigOnMissing(configPath string) string {
 	if configPath == "" {
-		log.Info("No config file specified, searching for default locations")
+		logger.Info("No config file specified, searching for default locations")
 
 		var err error
 		configPath, err = configHelpers.FindConfigFile("autobump")
 		if err != nil {
-			log.Warn(
+			logger.Warn(
 				"Config file not found in default locations, " +
 					"using the repository configuration as the last resort",
 			)
 			configPath = DefaultConfigURL
 		}
 
-		log.Infof("Using config file: \"%v\"", configPath)
+		logger.Infof("Using config file: \"%v\"", configPath)
 		return configPath
 	}
 	return configPath

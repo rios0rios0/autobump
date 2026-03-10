@@ -1,7 +1,7 @@
 package controllers
 
 import (
-	log "github.com/sirupsen/logrus"
+	logger "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/rios0rios0/autobump/internal/domain/commands"
@@ -26,15 +26,20 @@ func (it *BatchController) GetBind() entities.ControllerBind {
 
 // Execute runs the batch mode.
 func (it *BatchController) Execute(cmd *cobra.Command, _ []string) {
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	if verbose {
+		logger.SetLevel(logger.DebugLevel)
+	}
+
 	configPath, _ := cmd.Flags().GetString("config")
 
 	globalConfig, err := findReadAndValidateConfig(configPath)
 	if err != nil {
-		log.Errorf("failed to read config: %v", err)
+		logger.Errorf("failed to read config: %v", err)
 		return
 	}
 
 	if iterateErr := commands.IterateProjects(globalConfig); iterateErr != nil {
-		log.Errorf("batch processing failed: %v", iterateErr)
+		logger.Errorf("batch processing failed: %v", iterateErr)
 	}
 }

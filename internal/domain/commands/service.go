@@ -14,7 +14,7 @@ import (
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
-	log "github.com/sirupsen/logrus"
+	logger "github.com/sirupsen/logrus"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	infraRepos "github.com/rios0rios0/autobump/internal/infrastructure/repositories"
@@ -98,7 +98,7 @@ func resolveConfigKey(globalConfig *entities.GlobalConfig, lang langEntities.Lan
 
 // DetectProjectLanguage detects the language of a project by looking at the files in the project.
 func DetectProjectLanguage(globalConfig *entities.GlobalConfig, cwd string) (string, error) {
-	log.Info("Detecting project language")
+	logger.Info("Detecting project language")
 
 	absPath, err := filepath.Abs(cwd)
 	if err != nil {
@@ -111,7 +111,7 @@ func DetectProjectLanguage(globalConfig *entities.GlobalConfig, cwd string) (str
 	if detectErr == nil {
 		configKey := resolveConfigKey(globalConfig, provider.Language())
 		if configKey != "" {
-			log.Infof("Project language detected as %s via marker files", configKey)
+			logger.Infof("Project language detected as %s via marker files", configKey)
 			return configKey, nil
 		}
 	}
@@ -140,7 +140,7 @@ func detectBySpecialPatterns(globalConfig *entities.GlobalConfig, absPath string
 		for _, pattern := range cfg.SpecialPatterns {
 			matches, _ := filepath.Glob(filepath.Join(absPath, pattern))
 			if len(matches) > 0 {
-				log.Infof("Project language detected as %s via file pattern '%s'", language, pattern)
+				logger.Infof("Project language detected as %s via file pattern '%s'", language, pattern)
 				return language
 			}
 		}
@@ -207,13 +207,13 @@ func createPullRequest(
 ) error {
 	token := resolveToken(serviceType, ctx.GlobalConfig, ctx.ProjectConfig)
 	if token == "" {
-		log.Warnf("No token found for service type '%v', cannot create pull request", serviceType)
+		logger.Warnf("No token found for service type '%v', cannot create pull request", serviceType)
 		return nil
 	}
 
 	provider, err := getForgeProvider(serviceType, token)
 	if err != nil {
-		log.Warnf("Service type '%v' not supported for PR creation: %v", serviceType, err)
+		logger.Warnf("Service type '%v' not supported for PR creation: %v", serviceType, err)
 		return nil
 	}
 
@@ -228,19 +228,45 @@ func createPullRequest(
 		SourceBranch: branchName,
 		TargetBranch: targetBranch,
 		Title:        "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion,
-		Description: fmt.Sprintf(
-			"Automated version bump to %s\n\nThis PR was automatically created by AutoBump.",
-			ctx.ProjectConfig.NewVersion,
-		),
+		Description: generatePRDescription(ctx),
 	}
 
-	_, err = provider.CreatePullRequest(context.Background(), gitforgeRepo, input)
+	pr, err := provider.CreatePullRequest(context.Background(), gitforgeRepo, input)
 	if err != nil {
 		return fmt.Errorf("failed to create pull request: %w", err)
 	}
 
-	log.Info("Successfully created pull request")
+	logger.Infof("Created PR #%d: %s", pr.ID, pr.URL)
 	return nil
+}
+
+func generatePRDescription(ctx *RepoContext) string {
+	var sb strings.Builder
+	sb.WriteString("## Summary\n\n")
+	sb.WriteString(fmt.Sprintf(
+		"This PR bumps the version to **%s** for project **%s**.\n\n",
+		ctx.ProjectConfig.NewVersion, ctx.ProjectConfig.Name,
+	))
+
+	sb.WriteString("### Changes\n\n")
+	sb.WriteString("- Updated `CHANGELOG.md` with the new version and date\n")
+
+	versionFiles, _ := getVersionFiles(ctx.GlobalConfig, ctx.ProjectConfig)
+	for _, vf := range versionFiles {
+		sb.WriteString(fmt.Sprintf("- Updated version in `%s`\n", filepath.Base(vf.Path)))
+	}
+
+	sb.WriteString("\n### Review Checklist\n\n")
+	sb.WriteString("- [ ] Verify build passes\n")
+	sb.WriteString("- [ ] Verify tests pass\n")
+	sb.WriteString("- [ ] Review changelog entries\n")
+	if len(versionFiles) > 0 {
+		sb.WriteString("- [ ] Verify version file updates\n")
+	}
+
+	sb.WriteString("\n---\n")
+	sb.WriteString("*This PR was automatically created by [AutoBump](https://github.com/rios0rios0/autobump)*\n")
+	return sb.String()
 }
 
 func cloneRepoIfNeeded(ctx *RepoContext) (string, error) {
@@ -276,7 +302,7 @@ func shouldBumpProject(ctx *RepoContext, changelogPath string) (bool, error) {
 		return false, err
 	}
 	if bumpEmpty {
-		log.Infof("Bump is empty, skipping project %s", ctx.ProjectConfig.Name)
+		logger.Infof("Bump is empty, skipping project %s", ctx.ProjectConfig.Name)
 		return false, nil
 	}
 	return true, nil
@@ -286,7 +312,7 @@ func ensureProjectLanguage(ctx *RepoContext) {
 	if ctx.ProjectConfig.Language == "" {
 		projectLanguage, err := DetectProjectLanguage(ctx.GlobalConfig, ctx.ProjectConfig.Path)
 		if err != nil {
-			log.Warnf("Could not detect project language: %v, will only update changelog", err)
+			logger.Warnf("Could not detect project language: %v, will only update changelog", err)
 			ctx.ProjectConfig.Language = ""
 			return
 		}
@@ -333,7 +359,7 @@ func createBumpBranch(ctx *RepoContext, changelogPath string) (string, entities.
 		return "", entities.BranchCreated, err
 	}
 	if branchExists {
-		log.Warnf("Branch '%s' already exists (local or remote)", branchName)
+		logger.Warnf("Branch '%s' already exists (local or remote)", branchName)
 		return branchName, entities.BranchExistsNoPR, nil // Return branch name for PR check
 	}
 
@@ -346,15 +372,15 @@ func createBumpBranch(ctx *RepoContext, changelogPath string) (string, entities.
 }
 
 func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) error {
-	log.Info("Updating CHANGELOG.md file")
+	logger.Info("Updating CHANGELOG.md file")
 	version, err := updateChangelogFile(changelogPath)
 	if err != nil {
-		log.Errorf("No version found in CHANGELOG.md for project at %s\n", ctx.ProjectConfig.Path)
+		logger.Errorf("No version found in CHANGELOG.md for project at %s\n", ctx.ProjectConfig.Path)
 		return err
 	}
 
 	ctx.ProjectConfig.NewVersion = version.String()
-	log.Infof("Updating version to %s", ctx.ProjectConfig.NewVersion)
+	logger.Infof("Updating version to %s", ctx.ProjectConfig.NewVersion)
 	err = updateVersion(ctx.GlobalConfig, ctx.ProjectConfig)
 	if err != nil {
 		return err
@@ -382,7 +408,7 @@ func addFilesToWorktree(ctx *RepoContext, changelogPath string) error {
 			continue
 		}
 
-		log.Infof("Adding version file %s", versionFileRelativePath)
+		logger.Infof("Adding version file %s", versionFileRelativePath)
 		_, err = ctx.Worktree.Add(versionFileRelativePath)
 		if err != nil {
 			return fmt.Errorf("failed to add version file: %w", err)
@@ -410,7 +436,7 @@ func commitAndPushChanges(ctx *RepoContext, branchName string) error {
 	err = pushChanges(ctx, branchName)
 	if err != nil {
 		if err.Error() == "object not found" {
-			log.Error("Got error object not found (remote branch already exists?)")
+			logger.Error("Got error object not found (remote branch already exists?)")
 		}
 		return err
 	}
@@ -436,7 +462,7 @@ func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 
 	switch {
 	case gpgSign == "true" && gpgFormat == "ssh":
-		log.Info("Signing commit with SSH key")
+		logger.Info("Signing commit with SSH key")
 		rawKey := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
 
 		sshKeyPath, sshErr := signingHelpers.ReadSSHSigningKey(rawKey)
@@ -446,7 +472,7 @@ func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 		signer = signingInfra.NewSSHSigner(sshKeyPath)
 
 	case gpgSign == "true":
-		log.Info("Signing commit with GPG key")
+		logger.Info("Signing commit with GPG key")
 		gpgKeyID := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
 
 		gpgKeyReader, gpgErr := signingHelpers.GetGpgKeyReader(
@@ -487,7 +513,7 @@ func pushChanges(ctx *RepoContext, branchName string) error {
 
 // pushChangesHTTPS pushes changes over HTTPS using tokens resolved from the config.
 func pushChangesHTTPS(ctx *RepoContext, refSpec gitconfig.RefSpec) error {
-	log.Info("Pushing local changes to remote repository through HTTPS")
+	logger.Info("Pushing local changes to remote repository through HTTPS")
 
 	serviceType, err := gitOps.GetRemoteServiceType(ctx.Repo)
 	if err != nil {
@@ -654,7 +680,7 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 		return err
 	}
 
-	log.Infof("Successfully processed project '%s'", ctx.ProjectConfig.Name)
+	logger.Infof("Successfully processed project '%s'", ctx.ProjectConfig.Name)
 	return nil
 }
 
@@ -663,19 +689,19 @@ func handleExistingBranchWithoutPR(ctx *RepoContext, branchName string) error {
 	// Branch exists, check if PR exists
 	prExists, prErr := checkPullRequestExists(ctx, branchName)
 	if prErr != nil {
-		log.Warnf("Failed to check if PR exists: %v, skipping project", prErr)
+		logger.Warnf("Failed to check if PR exists: %v, skipping project", prErr)
 		return nil
 	}
 	if prExists {
-		log.Infof("Pull request already exists for branch '%s', skipping project", branchName)
+		logger.Infof("Pull request already exists for branch '%s', skipping project", branchName)
 		return nil
 	}
 	// PR doesn't exist, create it
-	log.Infof("Branch exists but no PR found, creating pull request for branch '%s'", branchName)
+	logger.Infof("Branch exists but no PR found, creating pull request for branch '%s'", branchName)
 	if err := createAndCheckoutPullRequest(ctx, branchName); err != nil {
 		return err
 	}
-	log.Infof("Successfully created PR for existing branch in project '%s'", ctx.ProjectConfig.Name)
+	logger.Infof("Successfully created PR for existing branch in project '%s'", ctx.ProjectConfig.Name)
 	return nil
 }
 
@@ -688,13 +714,13 @@ func checkPullRequestExists(ctx *RepoContext, branchName string) (bool, error) {
 
 	token := resolveToken(serviceType, ctx.GlobalConfig, ctx.ProjectConfig)
 	if token == "" {
-		log.Warnf("No token found for service type '%v', cannot check PR", serviceType)
+		logger.Warnf("No token found for service type '%v', cannot check PR", serviceType)
 		return false, nil
 	}
 
 	provider, provErr := getForgeProvider(serviceType, token)
 	if provErr != nil {
-		log.Warnf("Service type '%v' not supported for PR check: %v", serviceType, provErr)
+		logger.Warnf("Service type '%v' not supported for PR check: %v", serviceType, provErr)
 		return false, nil
 	}
 
@@ -718,8 +744,8 @@ func IterateProjects(globalConfig *entities.GlobalConfig) error {
 			if !strings.HasPrefix(project.Path, "https://") &&
 				!strings.HasPrefix(project.Path, "git@") {
 				// if it is neither a local path nor a remote repository, skip the project
-				log.Errorf("Project path does not exist: %s\n", project.Path)
-				log.Warn("Skipping project")
+				logger.Errorf("Project path does not exist: %s\n", project.Path)
+				logger.Warn("Skipping project")
 				err = ErrProjectPathDoesNotExist
 				continue
 			}
@@ -727,7 +753,7 @@ func IterateProjects(globalConfig *entities.GlobalConfig) error {
 
 		err = ProcessRepo(globalConfig, &project)
 		if err != nil {
-			log.Errorf("Error processing project at %s: %v\n", project.Path, err)
+			logger.Errorf("Error processing project at %s: %v\n", project.Path, err)
 		}
 	}
 
@@ -746,30 +772,30 @@ func DiscoverAndProcess(
 	for _, provCfg := range globalConfig.Providers {
 		discoverer, err := registry.GetDiscoverer(provCfg.Type, provCfg.Token)
 		if err != nil {
-			log.Errorf("Failed to initialize provider %q: %v", provCfg.Type, err)
+			logger.Errorf("Failed to initialize provider %q: %v", provCfg.Type, err)
 			totalErrors++
 			continue
 		}
 
-		log.Infof("Processing provider: %s", discoverer.Name())
+		logger.Infof("Processing provider: %s", discoverer.Name())
 
 		for _, org := range provCfg.Organizations {
-			log.Infof("Discovering repositories in %q...", org)
+			logger.Infof("Discovering repositories in %q...", org)
 
 			repos, discoverErr := discoverer.DiscoverRepositories(ctx, org)
 			if discoverErr != nil {
-				log.Errorf("Failed to discover repos in %q: %v", org, discoverErr)
+				logger.Errorf("Failed to discover repos in %q: %v", org, discoverErr)
 				totalErrors++
 				continue
 			}
 
-			log.Infof("Found %d repositories in %q", len(repos), org)
+			logger.Infof("Found %d repositories in %q", len(repos), org)
 
 			for _, repo := range repos {
 				totalRepos++
 				projectConfig := repoToProjectConfig(repo, provCfg)
 				if processErr := ProcessRepo(globalConfig, projectConfig); processErr != nil {
-					log.Errorf(
+					logger.Errorf(
 						"Error processing %s/%s: %v",
 						repo.Organization, repo.Name, processErr,
 					)
@@ -779,7 +805,7 @@ func DiscoverAndProcess(
 		}
 	}
 
-	log.Infof("Discovery complete: %d repos processed, %d errors", totalRepos, totalErrors)
+	logger.Infof("Discovery complete: %d repos processed, %d errors", totalRepos, totalErrors)
 	return nil
 }
 
@@ -933,7 +959,7 @@ func resolveDefaultBranch(repo *git.Repository) string {
 func buildGitforgeRepo(remoteURL string, defaultBranch string) globalEntities.Repository {
 	parsed, err := gitInfra.ParseRemoteURL(remoteURL)
 	if err != nil {
-		log.WithField("remoteURL", remoteURL).Warn("could not parse organization or repository name from remote URL")
+		logger.WithField("remoteURL", remoteURL).Warn("could not parse organization or repository name from remote URL")
 		return globalEntities.Repository{
 			DefaultBranch: "refs/heads/" + defaultBranch,
 			RemoteURL:     remoteURL,
@@ -997,7 +1023,7 @@ func getNextVersion(changelogPath string) (*semver.Version, error) {
 // createChangelogIfNotExists create an empty CHANGELOG file if it doesn't exist.
 func createChangelogIfNotExists(changelogPath string) (bool, error) {
 	if _, err := os.Stat(changelogPath); os.IsNotExist(err) {
-		log.Warnf("Creating empty CHANGELOG file at '%s'.", changelogPath)
+		logger.Warnf("Creating empty CHANGELOG file at '%s'.", changelogPath)
 		var fileContent []byte
 		fileContent, err = downloadHelpers.DownloadFile(entities.DefaultChangelogURL)
 		if err != nil {
@@ -1021,7 +1047,7 @@ func createChangelogIfNotExists(changelogPath string) (bool, error) {
 func updateVersion(globalConfig *entities.GlobalConfig, projectConfig *entities.ProjectConfig) error {
 	// If language is empty/unknown, skip version file updates
 	if projectConfig.Language == "" {
-		log.Info("Language is unknown, skipping version file updates (only changelog will be updated)")
+		logger.Info("Language is unknown, skipping version file updates (only changelog will be updated)")
 		return nil
 	}
 
@@ -1029,7 +1055,7 @@ func updateVersion(globalConfig *entities.GlobalConfig, projectConfig *entities.
 	if err != nil {
 		// If language config not found, just warn and continue with changelog only
 		if errors.Is(err, ErrLanguageNotFoundInConfig) {
-			log.Warnf("Language '%s' not found in config, skipping version file updates", projectConfig.Language)
+			logger.Warnf("Language '%s' not found in config, skipping version file updates", projectConfig.Language)
 			return nil
 		}
 		return err
@@ -1037,7 +1063,7 @@ func updateVersion(globalConfig *entities.GlobalConfig, projectConfig *entities.
 
 	// If no version files configured for this language, just continue
 	if len(versionFiles) == 0 {
-		log.Warnf(
+		logger.Warnf(
 			"No version files configured for language '%s', only changelog will be updated",
 			projectConfig.Language,
 		)
@@ -1050,10 +1076,10 @@ func updateVersion(globalConfig *entities.GlobalConfig, projectConfig *entities.
 		var info os.FileInfo
 		info, err = os.Stat(versionFile.Path)
 		if os.IsNotExist(err) {
-			log.Warnf("Version file %s does not exist", versionFile.Path)
+			logger.Warnf("Version file %s does not exist", versionFile.Path)
 			continue
 		}
-		log.Infof("Updating version file %s", versionFile.Path)
+		logger.Infof("Updating version file %s", versionFile.Path)
 
 		originalFileMode := info.Mode()
 		oneVersionFileExists = true
@@ -1084,7 +1110,7 @@ func updateVersion(globalConfig *entities.GlobalConfig, projectConfig *entities.
 
 	// If no version files exist, just warn and continue (don't fail)
 	if !oneVersionFileExists {
-		log.Warnf("No version files found for language '%s', only changelog will be updated", projectConfig.Language)
+		logger.Warnf("No version files found for language '%s', only changelog will be updated", projectConfig.Language)
 	}
 
 	return nil
@@ -1113,11 +1139,11 @@ func getVersionFiles(
 	if languageInterface != nil {
 		languageProjectName, err := languageInterface.GetProjectName()
 		if err == nil && languageProjectName != "" {
-			log.Infof("Using project name '%s' from language interface", languageProjectName)
+			logger.Infof("Using project name '%s' from language interface", languageProjectName)
 			projectName = strings.ReplaceAll(languageProjectName, "-", "_")
 		}
 	} else {
-		log.Infof("Language '%s' does not have a language interface", projectConfig.Language)
+		logger.Infof("Language '%s' does not have a language interface", projectConfig.Language)
 	}
 
 	languageConfig, exists := globalConfig.LanguagesConfig[projectConfig.Language]

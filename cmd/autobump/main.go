@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	log "github.com/sirupsen/logrus"
+	logger "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/rios0rios0/autobump/internal"
@@ -25,6 +25,7 @@ func buildRootCommand(singleController *controllers.SingleController) *cobra.Com
 
 	cmd.Flags().StringP("config", "c", "", "config file path")
 	cmd.Flags().StringP("language", "l", "", "project language")
+	cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
 
 	return cmd
 }
@@ -49,6 +50,15 @@ func addSubcommands(rootCmd *cobra.Command, appContext *internal.AppInternal) {
 }
 
 func main() {
+	//nolint:exhaustruct // Minimal TextFormatter initialization with required fields only
+	logger.SetFormatter(&logger.TextFormatter{
+		ForceColors:   true,
+		FullTimestamp: true,
+	})
+	if os.Getenv("DEBUG") == "true" {
+		logger.SetLevel(logger.DebugLevel)
+	}
+
 	// Initialize the provider registry via DIG and create GitOperations with it
 	providerRegistry := injectProviderRegistry()
 	gitOps := gitInfra.NewGitOperations(providerRegistry)
@@ -64,7 +74,7 @@ func main() {
 	addSubcommands(rootCmd, appContext)
 
 	if err := rootCmd.Execute(); err != nil {
-		log.Errorf("Uncaught error: %v", err)
+		logger.Errorf("Uncaught error: %v", err)
 		os.Exit(1)
 	}
 }
