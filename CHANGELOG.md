@@ -16,6 +16,17 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed logrus import alias from `log` to `logger` across all files to follow Go logging conventions
+- changed PR description from plain text to structured markdown with Summary, Changes, and Review Checklist sections
+- changed PR creation logging to include PR ID and URL
+
+### Added
+
+- added colorful logging with `ForceColors` and `FullTimestamp` configuration
+- added `--verbose` / `-v` persistent flag and `DEBUG` env var support for debug log level
+
 ## [2.20.0] - 2026-03-09
 
 ### Added

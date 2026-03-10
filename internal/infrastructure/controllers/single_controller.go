@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	log "github.com/sirupsen/logrus"
+	logger "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/rios0rios0/autobump/internal/domain/commands"
@@ -31,18 +31,23 @@ func (it *SingleController) GetBind() entities.ControllerBind {
 
 // Execute runs the single-repo bump process.
 func (it *SingleController) Execute(cmd *cobra.Command, _ []string) {
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	if verbose {
+		logger.SetLevel(logger.DebugLevel)
+	}
+
 	configPath, _ := cmd.Flags().GetString("config")
 	language, _ := cmd.Flags().GetString("language")
 
 	globalConfig, err := findReadAndValidateConfig(configPath)
 	if err != nil {
-		log.Errorf("failed to read config: %v", err)
+		logger.Errorf("failed to read config: %v", err)
 		return
 	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		log.Errorf("failed to get the current working directory: %v", err)
+		logger.Errorf("failed to get the current working directory: %v", err)
 		return
 	}
 
@@ -54,14 +59,14 @@ func (it *SingleController) Execute(cmd *cobra.Command, _ []string) {
 	if projectConfig.Language == "" {
 		detectedLanguage, detectErr := commands.DetectProjectLanguage(globalConfig, cwd)
 		if detectErr != nil {
-			log.Errorf("failed to detect project language: %v", detectErr)
+			logger.Errorf("failed to detect project language: %v", detectErr)
 			return
 		}
 		projectConfig.Language = detectedLanguage
 	}
 
 	if processErr := commands.ProcessRepo(globalConfig, projectConfig); processErr != nil {
-		log.Errorf("failed to process repo: %v", processErr)
+		logger.Errorf("failed to process repo: %v", processErr)
 	}
 }
 
@@ -76,7 +81,7 @@ func findReadAndValidateConfig(configPath string) (*entities.GlobalConfig, error
 
 	err = entities.ValidateGlobalConfig(globalConfig, false)
 	if errors.Is(err, entities.ErrLanguagesKeyMissingError) {
-		log.Warn("Missing languages key, using the default configuration")
+		logger.Warn("Missing languages key, using the default configuration")
 
 		var data []byte
 		data, err = downloadHelpers.DownloadFile(entities.DefaultConfigURL)
