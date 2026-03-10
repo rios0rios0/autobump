@@ -24,8 +24,8 @@ import (
 	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 	gitHelpers "github.com/rios0rios0/gitforge/pkg/git/infrastructure/helpers"
 	globalEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
+	registryInfra "github.com/rios0rios0/gitforge/pkg/registry/infrastructure"
 	signingInfra "github.com/rios0rios0/gitforge/pkg/signing/infrastructure"
-	signingHelpers "github.com/rios0rios0/gitforge/pkg/signing/infrastructure/helpers"
 	langEntities "github.com/rios0rios0/langforge/pkg/domain/entities"
 	langRegistry "github.com/rios0rios0/langforge/pkg/infrastructure/registry"
 )
@@ -452,40 +452,18 @@ func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 
 	gpgSign := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "commit", "gpgsign")
 	gpgFormat := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg", "format")
+	signingKey := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
 
 	name := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
 	email := ctx.GlobalGitConfig.Raw.Section("user").Option("email")
 	commitMessage := "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion
 
-	var signer globalEntities.CommitSigner
-
-	switch {
-	case gpgSign == "true" && gpgFormat == "ssh":
-		logger.Info("Signing commit with SSH key")
-		rawKey := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
-
-		sshKeyPath, sshErr := signingHelpers.ReadSSHSigningKey(rawKey)
-		if sshErr != nil {
-			return plumbing.Hash{}, sshErr
-		}
-		signer = signingInfra.NewSSHSigner(sshKeyPath)
-
-	case gpgSign == "true":
-		logger.Info("Signing commit with GPG key")
-		gpgKeyID := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
-
-		gpgKeyReader, gpgErr := signingHelpers.GetGpgKeyReader(
-			context.Background(), gpgKeyID, ctx.GlobalConfig.GpgKeyPath, "autobump",
-		)
-		if gpgErr != nil {
-			return plumbing.Hash{}, gpgErr
-		}
-
-		signKey, gpgErr := signingHelpers.GetGpgKey(gpgKeyReader, ctx.GlobalConfig.GpgKeyPassphrase)
-		if gpgErr != nil {
-			return plumbing.Hash{}, gpgErr
-		}
-		signer = signingInfra.NewGPGSigner(signKey)
+	signer, err := signingInfra.ResolveSignerFromGitConfig(
+		gpgSign, gpgFormat, signingKey,
+		ctx.GlobalConfig.GpgKeyPath, ctx.GlobalConfig.GpgKeyPassphrase, "autobump",
+	)
+	if err != nil {
+		return plumbing.Hash{}, fmt.Errorf("failed to resolve commit signer: %w", err)
 	}
 
 	return gitInfra.CommitChanges(ctx.Repo, ctx.Worktree, commitMessage, signer, name, email)
@@ -494,26 +472,6 @@ func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 func pushChanges(ctx *RepoContext, branchName string) error {
 	refSpec := gitconfig.RefSpec("refs/heads/" + branchName + ":refs/heads/" + branchName)
 
-	remoteCfg, err := ctx.Repo.Remote("origin")
-	if err != nil {
-		return fmt.Errorf("failed to get remote origin: %w", err)
-	}
-
-	remoteURL := remoteCfg.Config().URLs[0]
-	if strings.HasPrefix(remoteURL, "git@") {
-		return gitInfra.PushChangesSSH(ctx.Repo, refSpec)
-	} else if strings.HasPrefix(remoteURL, "https://") || strings.HasPrefix(remoteURL, "http://") {
-		return pushChangesHTTPS(ctx, refSpec)
-	}
-
-	// If none of the conditions match, return an error
-	return fmt.Errorf("%w: %s", ErrUnsupportedRemoteURL, remoteURL)
-}
-
-// pushChangesHTTPS pushes changes over HTTPS using tokens resolved from the config.
-func pushChangesHTTPS(ctx *RepoContext, refSpec gitconfig.RefSpec) error {
-	logger.Info("Pushing local changes to remote repository through HTTPS")
-
 	serviceType, err := gitOps.GetRemoteServiceType(ctx.Repo)
 	if err != nil {
 		return err
@@ -521,26 +479,8 @@ func pushChangesHTTPS(ctx *RepoContext, refSpec gitconfig.RefSpec) error {
 
 	username := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
 	authMethods := collectAuthMethods(serviceType, username, ctx.GlobalConfig, ctx.ProjectConfig)
-	if len(authMethods) == 0 {
-		return errors.New("no authentication credentials found for pushing")
-	}
 
-	pushOptions := &git.PushOptions{
-		RefSpecs:   []gitconfig.RefSpec{refSpec},
-		RemoteName: "origin",
-	}
-
-	var lastErr error
-	for _, auth := range authMethods {
-		pushOptions.Auth = auth
-		pushErr := ctx.Repo.Push(pushOptions)
-		if pushErr == nil {
-			return nil
-		}
-		lastErr = pushErr
-	}
-
-	return fmt.Errorf("could not push changes to remote repository: %w", lastErr)
+	return gitInfra.PushWithTransportDetection(ctx.Repo, refSpec, authMethods)
 }
 
 func createAndCheckoutPullRequest(ctx *RepoContext, branchName string) error {
@@ -823,20 +763,6 @@ func repoToProjectConfig(
 
 // ---- Provider helpers ----
 
-// serviceTypeName maps a ServiceType constant to the registry factory name.
-func serviceTypeName(st entities.ServiceType) string {
-	switch st {
-	case entities.GITHUB:
-		return "github"
-	case entities.GITLAB:
-		return "gitlab"
-	case entities.AZUREDEVOPS:
-		return "azuredevops"
-	default:
-		return ""
-	}
-}
-
 // resolveToken returns the best token for a given service type from the config.
 func resolveToken(
 	serviceType entities.ServiceType,
@@ -905,7 +831,7 @@ func collectAuthMethods(
 	projectConfig *entities.ProjectConfig,
 ) []transport.AuthMethod {
 	tokens := collectTokens(serviceType, globalConfig, projectConfig)
-	name := serviceTypeName(serviceType)
+	name := registryInfra.ServiceTypeToProviderName(serviceType)
 	if name == "" || providerRegistry == nil {
 		return nil
 	}
@@ -933,7 +859,7 @@ func getForgeProvider(
 	serviceType entities.ServiceType,
 	token string,
 ) (globalEntities.ForgeProvider, error) {
-	name := serviceTypeName(serviceType)
+	name := registryInfra.ServiceTypeToProviderName(serviceType)
 	if name == "" || providerRegistry == nil {
 		return nil, fmt.Errorf("unsupported service type: %v", serviceType)
 	}

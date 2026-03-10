@@ -14,6 +14,7 @@ import (
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	"github.com/rios0rios0/autobump/test/domain/entitybuilders"
 	gitforgeEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
+	registryInfra "github.com/rios0rios0/gitforge/pkg/registry/infrastructure"
 	langEntities "github.com/rios0rios0/langforge/pkg/domain/entities"
 )
 
@@ -205,7 +206,7 @@ func TestBuildGitforgeRepo(t *testing.T) {
 	})
 }
 
-func TestServiceTypeName(t *testing.T) {
+func TestServiceTypeToProviderName(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return github for GITHUB type", func(t *testing.T) {
@@ -213,7 +214,7 @@ func TestServiceTypeName(t *testing.T) {
 		serviceType := gitforgeEntities.GITHUB
 
 		// when
-		name := commands.ServiceTypeName(serviceType)
+		name := registryInfra.ServiceTypeToProviderName(serviceType)
 
 		// then
 		assert.Equal(t, "github", name)
@@ -224,7 +225,7 @@ func TestServiceTypeName(t *testing.T) {
 		serviceType := gitforgeEntities.GITLAB
 
 		// when
-		name := commands.ServiceTypeName(serviceType)
+		name := registryInfra.ServiceTypeToProviderName(serviceType)
 
 		// then
 		assert.Equal(t, "gitlab", name)
@@ -235,7 +236,7 @@ func TestServiceTypeName(t *testing.T) {
 		serviceType := gitforgeEntities.AZUREDEVOPS
 
 		// when
-		name := commands.ServiceTypeName(serviceType)
+		name := registryInfra.ServiceTypeToProviderName(serviceType)
 
 		// then
 		assert.Equal(t, "azuredevops", name)
@@ -246,7 +247,7 @@ func TestServiceTypeName(t *testing.T) {
 		serviceType := gitforgeEntities.UNKNOWN
 
 		// when
-		name := commands.ServiceTypeName(serviceType)
+		name := registryInfra.ServiceTypeToProviderName(serviceType)
 
 		// then
 		assert.Empty(t, name)
@@ -465,4 +466,3 @@ func TestProcessRepo(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
-
