@@ -3,7 +3,7 @@ package controllers
 import (
 	"context"
 
-	log "github.com/sirupsen/logrus"
+	logger "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/rios0rios0/autobump/internal/domain/commands"
@@ -40,28 +40,33 @@ Requires a 'providers' section in the configuration file.`,
 
 // Execute runs the discover mode.
 func (it *DiscoverController) Execute(cmd *cobra.Command, _ []string) {
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	if verbose {
+		logger.SetLevel(logger.DebugLevel)
+	}
+
 	configPath, _ := cmd.Flags().GetString("config")
 
 	globalConfig, err := findReadAndValidateConfig(configPath)
 	if err != nil {
-		log.Errorf("failed to read config: %v", err)
+		logger.Errorf("failed to read config: %v", err)
 		return
 	}
 
 	if len(globalConfig.Providers) == 0 {
-		log.Error("no providers configured; add a 'providers' section to the config file")
+		logger.Error("no providers configured; add a 'providers' section to the config file")
 		return
 	}
 
 	if validateErr := entities.ValidateProviders(globalConfig.Providers); validateErr != nil {
-		log.Errorf("provider validation failed: %v", validateErr)
+		logger.Errorf("provider validation failed: %v", validateErr)
 		return
 	}
 
 	if discoverErr := commands.DiscoverAndProcess(
 		context.Background(), globalConfig, it.providerRegistry,
 	); discoverErr != nil {
-		log.Errorf("discover failed: %v", discoverErr)
+		logger.Errorf("discover failed: %v", discoverErr)
 	}
 }
 
