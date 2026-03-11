@@ -18,14 +18,25 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
+- changed commit signing resolution to use gitforge's shared `ResolveSignerFromGitConfig()`, eliminating duplicated GPG/SSH signer logic
+- changed push logic to use gitforge's shared `PushWithTransportDetection()`, eliminating duplicated SSH/HTTPS detection and auth retry loop
+- changed `serviceTypeName()` to use gitforge's shared `ServiceTypeToProviderName()`, eliminating duplicated provider name mapping
 - changed logrus import alias from `log` to `logger` across all files to follow Go logging conventions
 - changed PR description from plain text to structured markdown with Summary, Changes, and Review Checklist sections
 - changed PR creation logging to include PR ID and URL
+- changed CLI structure to match `autoupdate` pattern: `local` for single-repo, `run` for batch/discover
+- changed root command to show help by default (use `autobump local` or `autobump .` for single-repo)
+- merged `batch` and `discover` into unified `run` command that auto-detects mode from config
 
 ### Added
 
 - added colorful logging with `ForceColors` and `FullTimestamp` configuration
 - added `--verbose` / `-v` persistent flag and `DEBUG` env var support for debug log level
+
+### Deprecated
+
+- deprecated `batch` subcommand (use `run` instead; hidden alias with warning)
+- deprecated `discover` subcommand (use `run` instead; hidden alias with warning)
 
 ## [2.20.0] - 2026-03-09
 
