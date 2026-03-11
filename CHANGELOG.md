@@ -21,6 +21,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed logrus import alias from `log` to `logger` across all files to follow Go logging conventions
 - changed PR description from plain text to structured markdown with Summary, Changes, and Review Checklist sections
 - changed PR creation logging to include PR ID and URL
+- changed the Go version to `1.26.1` and updated all module dependencies
 
 ### Added
 
