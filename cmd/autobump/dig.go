@@ -41,23 +41,6 @@ func injectLocalController() *controllers.LocalController {
 	return controller
 }
 
-func injectRunController() *controllers.RunController {
-	container := dig.New()
-
-	if err := internal.RegisterProviders(container); err != nil {
-		panic(err)
-	}
-
-	var controller *controllers.RunController
-	if err := container.Invoke(func(c *controllers.RunController) {
-		controller = c
-	}); err != nil {
-		panic(err)
-	}
-
-	return controller
-}
-
 func injectProviderRegistry() *infraRepos.ProviderRegistry {
 	container := dig.New()
 
