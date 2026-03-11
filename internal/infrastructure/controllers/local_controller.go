@@ -58,8 +58,12 @@ func (it *LocalController) Execute(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	if _, statErr := os.Stat(repoDir); os.IsNotExist(statErr) {
-		logger.Errorf("path does not exist: %s", repoDir)
+	if _, statErr := os.Stat(repoDir); statErr != nil {
+		if os.IsNotExist(statErr) {
+			logger.Errorf("path does not exist: %s", repoDir)
+		} else {
+			logger.Errorf("failed to access path %s: %v", repoDir, statErr)
+		}
 		return
 	}
 

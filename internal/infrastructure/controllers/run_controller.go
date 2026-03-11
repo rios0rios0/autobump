@@ -1,8 +1,6 @@
 package controllers
 
 import (
-	"context"
-
 	logger "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -73,7 +71,7 @@ func (it *RunController) Execute(cmd *cobra.Command, _ []string) {
 		} else {
 			logger.Info("Running provider discovery...")
 			if discoverErr := commands.DiscoverAndProcess(
-				context.Background(), globalConfig, it.providerRegistry,
+				cmd.Context(), globalConfig, it.providerRegistry,
 			); discoverErr != nil {
 				logger.Errorf("discover failed: %v", discoverErr)
 			}

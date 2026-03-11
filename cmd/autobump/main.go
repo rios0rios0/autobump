@@ -46,11 +46,16 @@ Usage modes:
 	return cmd
 }
 
-func addSubcommands(
-	rootCmd *cobra.Command,
-	appContext *internal.AppInternal,
-	runController *controllers.RunController,
-) {
+func addSubcommands(rootCmd *cobra.Command, appContext *internal.AppInternal) {
+	// Find the RunController from registered controllers for deprecation aliases
+	var runController *controllers.RunController
+	for _, ctrl := range appContext.GetControllers() {
+		if rc, ok := ctrl.(*controllers.RunController); ok {
+			runController = rc
+			break
+		}
+	}
+
 	for _, controller := range appContext.GetControllers() {
 		bind := controller.GetBind()
 		ctrl := controller // capture for closure
@@ -68,9 +73,8 @@ func addSubcommands(
 		if rc, ok := ctrl.(*controllers.RunController); ok {
 			rc.AddFlags(subCmd)
 		}
-		if _, ok := ctrl.(*controllers.LocalController); ok {
-			subCmd.Flags().StringP("language", "l", "", "project language")
-			subCmd.Args = cobra.MaximumNArgs(1)
+		if lc, ok := ctrl.(*controllers.LocalController); ok {
+			lc.AddFlags(subCmd)
 		}
 
 		rootCmd.AddCommand(subCmd)
@@ -122,8 +126,7 @@ func main() {
 
 	// Add all subcommands (including deprecation aliases)
 	appContext := injectAppContext()
-	runController := injectRunController()
-	addSubcommands(rootCmd, appContext, runController)
+	addSubcommands(rootCmd, appContext)
 
 	if err := rootCmd.Execute(); err != nil {
 		logger.Errorf("Uncaught error: %v", err)
