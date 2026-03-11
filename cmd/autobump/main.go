@@ -12,25 +12,50 @@ import (
 	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 )
 
-func buildRootCommand(singleController *controllers.SingleController) *cobra.Command {
-	bind := singleController.GetBind()
+func buildRootCommand(localController *controllers.LocalController) *cobra.Command {
 	//nolint:exhaustruct // Minimal Command initialization with required fields only
 	cmd := &cobra.Command{
-		Use:   bind.Use,
-		Short: bind.Short,
-		Run: func(command *cobra.Command, arguments []string) {
-			singleController.Execute(command, arguments)
+		Use:   "autobump [path]",
+		Short: "AutoBump is a tool that automatically updates CHANGELOG.md",
+		Long: `AutoBump automates the release process: reads CHANGELOG.md, calculates
+the next semantic version, updates version files, commits, pushes, and creates PRs.
+
+Supports GitHub, GitLab, and Azure DevOps as Git hosting providers.
+
+Usage modes:
+  autobump local             Bump version in the current directory
+  autobump local /path       Bump version in a specific directory
+  autobump run               Batch mode using a config file (cronjob)`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return command.Help()
+			}
+			localController.Execute(command, args)
+			return nil
 		},
 	}
 
-	cmd.Flags().StringP("config", "c", "", "config file path")
-	cmd.Flags().StringP("language", "l", "", "project language")
+	// Global persistent flags
+	cmd.PersistentFlags().StringP("config", "c", "", "Path to config file (default: auto-detect)")
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
+
+	// Root-level flags (for `autobump .` shorthand)
+	cmd.Flags().StringP("language", "l", "", "project language")
 
 	return cmd
 }
 
 func addSubcommands(rootCmd *cobra.Command, appContext *internal.AppInternal) {
+	// Find the RunController from registered controllers for deprecation aliases
+	var runController *controllers.RunController
+	for _, ctrl := range appContext.GetControllers() {
+		if rc, ok := ctrl.(*controllers.RunController); ok {
+			runController = rc
+			break
+		}
+	}
+
 	for _, controller := range appContext.GetControllers() {
 		bind := controller.GetBind()
 		ctrl := controller // capture for closure
@@ -44,9 +69,39 @@ func addSubcommands(rootCmd *cobra.Command, appContext *internal.AppInternal) {
 			},
 		}
 
-		subCmd.Flags().StringP("config", "c", "", "config file path")
+		// Add controller-specific flags
+		if rc, ok := ctrl.(*controllers.RunController); ok {
+			rc.AddFlags(subCmd)
+		}
+		if lc, ok := ctrl.(*controllers.LocalController); ok {
+			lc.AddFlags(subCmd)
+		}
+
 		rootCmd.AddCommand(subCmd)
 	}
+
+	// Hidden deprecation aliases for backward compatibility
+	//nolint:exhaustruct // Minimal Command initialization with required fields only
+	batchCmd := &cobra.Command{
+		Use:    "batch",
+		Short:  "Deprecated: use 'run' instead",
+		Hidden: true,
+		Run: func(cmd *cobra.Command, args []string) {
+			logger.Warn("'batch' is deprecated, use 'run' instead")
+			runController.Execute(cmd, args)
+		},
+	}
+	//nolint:exhaustruct // Minimal Command initialization with required fields only
+	discoverCmd := &cobra.Command{
+		Use:    "discover",
+		Short:  "Deprecated: use 'run' instead",
+		Hidden: true,
+		Run: func(cmd *cobra.Command, args []string) {
+			logger.Warn("'discover' is deprecated, use 'run' instead")
+			runController.Execute(cmd, args)
+		},
+	}
+	rootCmd.AddCommand(batchCmd, discoverCmd)
 }
 
 func main() {
@@ -65,11 +120,11 @@ func main() {
 	commands.SetGitOperations(gitOps)
 	commands.SetProviderRegistry(providerRegistry)
 
-	// Inject the single controller and create root command
-	singleController := injectSingleController()
-	rootCmd := buildRootCommand(singleController)
+	// Inject the local controller and create root command
+	localController := injectLocalController()
+	rootCmd := buildRootCommand(localController)
 
-	// Add all subcommands
+	// Add all subcommands (including deprecation aliases)
 	appContext := injectAppContext()
 	addSubcommands(rootCmd, appContext)
 

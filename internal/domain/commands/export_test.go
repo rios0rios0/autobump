@@ -9,9 +9,6 @@ var ResolveConfigKey = resolveConfigKey //nolint:gochecknoglobals // test export
 // BuildGitforgeRepo exports buildGitforgeRepo for testing.
 var BuildGitforgeRepo = buildGitforgeRepo //nolint:gochecknoglobals // test export
 
-// ServiceTypeName exports serviceTypeName for testing.
-var ServiceTypeName = serviceTypeName //nolint:gochecknoglobals // test export
-
 // ResolveToken exports resolveToken for testing.
 var ResolveToken = resolveToken //nolint:gochecknoglobals // test export
 

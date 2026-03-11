@@ -36,7 +36,7 @@ Clean Architecture with Hexagonal (Ports & Adapters) design using `go.uber.org/d
   - `commands/service.go` — Core use cases: `ProcessRepo`, `IterateProjects`, `DiscoverAndProcess`, `DetectProjectLanguage`
   - `entities/` — Domain types: `GlobalConfig`, `ProjectConfig`, `LanguageConfig`, `Controller` interface
 - **`internal/infrastructure/`** — Implementations
-  - `controllers/` — Cobra CLI handlers: `SingleController` (root), `BatchController`, `DiscoverController`
+  - `controllers/` — Cobra CLI handlers: `LocalController` (single-repo), `RunController` (batch + discover engine)
   - `repositories/` — Git provider adapters wrapping `gitforge`'s `ProviderRegistry`
 - **`internal/support/`** — Shared utilities (file I/O, HTTP, URL helpers)
 - **`test/domain/entitybuilders/`** — testkit-based Builder pattern for test data
@@ -60,11 +60,12 @@ Dependencies always point inward: infrastructure → domain, never the reverse.
 
 ### CLI Modes
 
-| Command             | Controller            | Use Case                                      |
-|---------------------|-----------------------|-----------------------------------------------|
-| `autobump`          | `SingleController`    | Process a single repository                   |
-| `autobump batch`    | `BatchController`     | Process all projects listed in config          |
-| `autobump discover` | `DiscoverController`  | Query provider APIs to find and process repos  |
+| Command                          | Controller        | Use Case                                                    |
+|----------------------------------|-------------------|-------------------------------------------------------------|
+| `autobump local` or `autobump .` | `LocalController` | Process a single repository                                |
+| `autobump run`                   | `RunController`   | Process repos from config (auto-detects batch vs discover) |
+
+The `run` command auto-detects the mode: if the config has a `providers` section, it discovers repos via APIs; if it has a `projects` section, it iterates the static list. Both can run together.
 
 ### Language Detection Strategy
 
