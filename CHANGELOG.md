@@ -28,6 +28,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed CLI structure to match `autoupdate` pattern: `local` for single-repo, `run` for batch/discover
 - changed PR creation logging to include PR ID and URL
 - changed PR description from plain text to structured markdown with Summary, Changes, and Review Checklist sections
+- changed `serviceTypeName()` to use gitforge's shared `ServiceTypeToProviderName()`, eliminating duplicated provider name mapping
 - changed commit signing resolution to use gitforge's shared `ResolveSignerFromGitConfig()`, eliminating duplicated GPG/SSH signer logic
 - changed logrus import alias from `log` to `logger` across all files to follow Go logging conventions
 - changed push logic to use gitforge's shared `PushWithTransportDetection()`, eliminating duplicated SSH/HTTPS detection and auth retry loop
@@ -37,6 +38,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Deprecated
 
+- deprecated `batch` subcommand (use `run` instead; hidden alias with warning)
 - deprecated `discover` subcommand (use `run` instead; hidden alias with warning)
 
 ## [2.20.0] - 2026-03-09
