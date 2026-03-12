@@ -1,6 +1,6 @@
 module github.com/rios0rios0/autobump
 
-go 1.26.0
+go 1.26.1
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -21,8 +21,8 @@ require (
 	github.com/google/go-github/v66 v66.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gitlab.com/gitlab-org/api/client-go v1.46.0 // indirect
-	golang.org/x/mod v0.33.0 // indirect
-	golang.org/x/term v0.40.0 // indirect
+	golang.org/x/mod v0.34.0 // indirect
+	golang.org/x/term v0.41.0 // indirect
 )
 
 require (
@@ -47,10 +47,10 @@ require (
 	github.com/skeema/knownhosts v1.3.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
-	golang.org/x/crypto v0.48.0 // indirect
-	golang.org/x/net v0.51.0 // indirect
-	golang.org/x/oauth2 v0.35.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
-	golang.org/x/time v0.14.0 // indirect
+	golang.org/x/crypto v0.49.0 // indirect
+	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/oauth2 v0.36.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )

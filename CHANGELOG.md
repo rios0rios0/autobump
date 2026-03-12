@@ -27,6 +27,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed CLI structure to match `autoupdate` pattern: `local` for single-repo, `run` for batch/discover
 - changed root command to show help by default (use `autobump local` or `autobump .` for single-repo)
 - merged `batch` and `discover` into unified `run` command that auto-detects mode from config
+- changed the Go version to `1.26.1` and updated all module dependencies
 
 ### Added
 
