@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added Maven `pom.xml` version file support for Java projects
+
 ## [2.21.0] - 2026-03-12
 
 ### Added
