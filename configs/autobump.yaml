@@ -53,6 +53,8 @@ languages:
         patterns: [ "(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')" ]
       - path: "lib/build.gradle"
         patterns: [ "(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')" ]
+      - path: "pom.xml"
+        patterns: [ "(\\s*<version>)\\d+\\.\\d+\\.\\d+(</version>)" ]
       - path: "src/main/resources/application.yaml"
         patterns: [ "(\\s*version:\\s*')\\d+\\.\\d+\\.\\d+(')" ]
 
