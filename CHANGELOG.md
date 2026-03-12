@@ -16,23 +16,25 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
-### Changed
-
-- changed commit signing resolution to use gitforge's shared `ResolveSignerFromGitConfig()`, eliminating duplicated GPG/SSH signer logic
-- changed push logic to use gitforge's shared `PushWithTransportDetection()`, eliminating duplicated SSH/HTTPS detection and auth retry loop
-- changed `serviceTypeName()` to use gitforge's shared `ServiceTypeToProviderName()`, eliminating duplicated provider name mapping
-- changed logrus import alias from `log` to `logger` across all files to follow Go logging conventions
-- changed PR description from plain text to structured markdown with Summary, Changes, and Review Checklist sections
-- changed PR creation logging to include PR ID and URL
-- changed CLI structure to match `autoupdate` pattern: `local` for single-repo, `run` for batch/discover
-- changed root command to show help by default (use `autobump local` or `autobump .` for single-repo)
-- merged `batch` and `discover` into unified `run` command that auto-detects mode from config
-- changed the Go version to `1.26.1` and updated all module dependencies
+## [2.21.0] - 2026-03-12
 
 ### Added
 
-- added colorful logging with `ForceColors` and `FullTimestamp` configuration
 - added `--verbose` / `-v` persistent flag and `DEBUG` env var support for debug log level
+- added colorful logging with `ForceColors` and `FullTimestamp` configuration
+
+### Changed
+
+- changed CLI structure to match `autoupdate` pattern: `local` for single-repo, `run` for batch/discover
+- changed PR creation logging to include PR ID and URL
+- changed PR description from plain text to structured markdown with Summary, Changes, and Review Checklist sections
+- changed `serviceTypeName()` to use gitforge's shared `ServiceTypeToProviderName()`, eliminating duplicated provider name mapping
+- changed commit signing resolution to use gitforge's shared `ResolveSignerFromGitConfig()`, eliminating duplicated GPG/SSH signer logic
+- changed logrus import alias from `log` to `logger` across all files to follow Go logging conventions
+- changed push logic to use gitforge's shared `PushWithTransportDetection()`, eliminating duplicated SSH/HTTPS detection and auth retry loop
+- changed root command to show help by default (use `autobump local` or `autobump .` for single-repo)
+- changed the Go version to `1.26.1` and updated all module dependencies
+- merged `batch` and `discover` into unified `run` command that auto-detects mode from config
 
 ### Deprecated
 
