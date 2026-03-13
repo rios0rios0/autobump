@@ -31,11 +31,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - changed CLI structure to match `autoupdate` pattern: `local` for single-repo, `run` for batch/discover
 - changed PR creation logging to include PR ID and URL
-- changed PR description from plain text to structured markdown with Summary, Changes, and Review Checklist sections
-- changed `serviceTypeName()` to use gitforge's shared `ServiceTypeToProviderName()`, eliminating duplicated provider name mapping
-- changed commit signing resolution to use gitforge's shared `ResolveSignerFromGitConfig()`, eliminating duplicated GPG/SSH signer logic
-- changed logrus import alias from `log` to `logger` across all files to follow Go logging conventions
-- changed push logic to use gitforge's shared `PushWithTransportDetection()`, eliminating duplicated SSH/HTTPS detection and auth retry loop
+- changed PR description from plain text to structured Markdown with Summary, Changes, and Review Checklist sections
+- changed `logrus` import alias from `log` to `logger` across all files to follow Go logging conventions
+- changed `serviceTypeName()` to use `gitforge`'s shared `ServiceTypeToProviderName()`, eliminating duplicated provider name mapping
+- changed commit signing resolution to use `gitforge`'s shared `ResolveSignerFromGitConfig()`, eliminating duplicated GPG/SSH signer logic
+- changed push logic to use `gitforge`'s shared `PushWithTransportDetection()`, eliminating duplicated SSH/HTTPS detection and auth retry loop
 - changed root command to show help by default (use `autobump local` or `autobump .` for single-repo)
 - changed the Go version to `1.26.1` and updated all module dependencies
 - merged `batch` and `discover` into unified `run` command that auto-detects mode from config
@@ -73,7 +73,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Fixed
 
 - fixed `exhaustive` finding by adding missing `Language` keys to `langforgeAliases` map
-- fixed `typecheck` finding by removing stale `export_test.go` that referenced functions moved to gitforge
+- fixed `typecheck` finding by removing stale `export_test.go` that referenced functions moved to `gitforge`
 
 ## [2.19.0] - 2026-02-14
 
