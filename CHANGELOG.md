@@ -16,13 +16,15 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
-### Changed
-
-- changed the Go module dependencies to their latest versions
+## [2.22.0] - 2026-03-13
 
 ### Added
 
 - added Maven `pom.xml` version file support for Java projects
+
+### Changed
+
+- changed the Go module dependencies to their latest versions
 
 ## [2.21.0] - 2026-03-12
 
