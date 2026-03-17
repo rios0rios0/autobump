@@ -145,6 +145,22 @@ func TestMergeLanguagesConfig(t *testing.T) {
 		assert.Equal(t, defaults["python"], result["python"])
 	})
 
+	t.Run("should deduplicate special patterns when user repeats default values", func(t *testing.T) {
+		// given
+		overrides := map[string]entities.LanguageConfig{
+			"typescript": {
+				SpecialPatterns: []string{"package.json", "webpack.config.js"},
+			},
+		}
+
+		// when
+		result := entities.MergeLanguagesConfig(defaults, overrides)
+
+		// then
+		ts := result["typescript"]
+		assert.Equal(t, []string{"package.json", "tsconfig.json", "yarn.lock", "webpack.config.js"}, ts.SpecialPatterns)
+	})
+
 	t.Run("should deduplicate extensions when user repeats default values", func(t *testing.T) {
 		// given
 		overrides := map[string]entities.LanguageConfig{
