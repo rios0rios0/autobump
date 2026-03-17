@@ -16,6 +16,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed `gitforge` dependency to `v0.6.2`, adding support for SSH config aliases in GitHub URL parsing
+- changed `langforge` dependency to `v0.3.1`
+
 ## [2.22.1] - 2026-03-16
 
 ### Changed
