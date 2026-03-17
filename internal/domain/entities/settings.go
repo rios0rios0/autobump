@@ -3,9 +3,11 @@ package entities
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"strings"
 
 	logger "github.com/sirupsen/logrus"
@@ -222,9 +224,7 @@ func MergeLanguagesConfig(
 	defaults, overrides map[string]LanguageConfig,
 ) map[string]LanguageConfig {
 	result := make(map[string]LanguageConfig, len(defaults))
-	for k, v := range defaults {
-		result[k] = v
-	}
+	maps.Copy(result, defaults)
 
 	for lang, override := range overrides {
 		base, exists := result[lang]
@@ -234,10 +234,10 @@ func MergeLanguagesConfig(
 		}
 
 		if len(override.Extensions) > 0 {
-			base.Extensions = dedup(append(base.Extensions, override.Extensions...))
+			base.Extensions = dedup(append(slices.Clone(base.Extensions), override.Extensions...))
 		}
 		if len(override.SpecialPatterns) > 0 {
-			base.SpecialPatterns = dedup(append(base.SpecialPatterns, override.SpecialPatterns...))
+			base.SpecialPatterns = dedup(append(slices.Clone(base.SpecialPatterns), override.SpecialPatterns...))
 		}
 		if len(override.VersionFiles) > 0 {
 			base.VersionFiles = mergeVersionFiles(base.VersionFiles, override.VersionFiles)
@@ -252,8 +252,7 @@ func MergeLanguagesConfig(
 // mergeVersionFiles merges override version files into base.
 // Files with a matching path replace the default; others are appended.
 func mergeVersionFiles(base, overrides []VersionFile) []VersionFile {
-	merged := make([]VersionFile, len(base))
-	copy(merged, base)
+	merged := slices.Clone(base)
 
 	for _, ov := range overrides {
 		found := false

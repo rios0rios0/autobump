@@ -32,21 +32,26 @@ func findReadAndValidateConfig(configPath string) (*entities.GlobalConfig, error
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
-	defaultConfig, defaultErr := downloadDefaultConfig()
-	if defaultErr != nil {
-		logger.Warnf("Could not download default config: %v", defaultErr)
+	var defaultConfig *entities.GlobalConfig
+	var defaultErr error
+	if configPath != entities.DefaultConfigURL {
+		defaultConfig, defaultErr = downloadDefaultConfig()
+		if defaultErr != nil {
+			logger.Warnf("Could not download default config: %v", defaultErr)
+		}
 	}
 
 	err = entities.ValidateGlobalConfig(globalConfig, false)
-	if errors.Is(err, entities.ErrLanguagesKeyMissingError) {
+	switch {
+	case errors.Is(err, entities.ErrLanguagesKeyMissingError):
 		if defaultErr != nil {
-			return nil, fmt.Errorf("failed to download default config: %w", defaultErr)
+			return nil, defaultErr
 		}
 		logger.Warn("Missing languages key, using the default configuration")
 		globalConfig.LanguagesConfig = defaultConfig.LanguagesConfig
-	} else if err != nil {
+	case err != nil:
 		return nil, fmt.Errorf("failed to validate global config: %w", err)
-	} else if defaultConfig != nil {
+	case defaultConfig != nil:
 		globalConfig.LanguagesConfig = entities.MergeLanguagesConfig(
 			defaultConfig.LanguagesConfig, globalConfig.LanguagesConfig,
 		)
