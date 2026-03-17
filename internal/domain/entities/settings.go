@@ -3,9 +3,11 @@ package entities
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"strings"
 
 	logger "github.com/sirupsen/logrus"
@@ -212,6 +214,73 @@ func ValidateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 	}
 
 	return nil
+}
+
+// MergeLanguagesConfig deep-merges user language overrides into defaults.
+// Version files with the same path are replaced; new paths are appended.
+// Extensions and special patterns from defaults are preserved when the user
+// provides only version files. New languages are added wholesale.
+func MergeLanguagesConfig(
+	defaults, overrides map[string]LanguageConfig,
+) map[string]LanguageConfig {
+	result := make(map[string]LanguageConfig, len(defaults))
+	maps.Copy(result, defaults)
+
+	for lang, override := range overrides {
+		base, exists := result[lang]
+		if !exists {
+			result[lang] = override
+			continue
+		}
+
+		if len(override.Extensions) > 0 {
+			base.Extensions = dedup(append(slices.Clone(base.Extensions), override.Extensions...))
+		}
+		if len(override.SpecialPatterns) > 0 {
+			base.SpecialPatterns = dedup(append(slices.Clone(base.SpecialPatterns), override.SpecialPatterns...))
+		}
+		if len(override.VersionFiles) > 0 {
+			base.VersionFiles = mergeVersionFiles(base.VersionFiles, override.VersionFiles)
+		}
+
+		result[lang] = base
+	}
+
+	return result
+}
+
+// mergeVersionFiles merges override version files into base.
+// Files with a matching path replace the default; others are appended.
+func mergeVersionFiles(base, overrides []VersionFile) []VersionFile {
+	merged := slices.Clone(base)
+
+	for _, ov := range overrides {
+		found := false
+		for i, bv := range merged {
+			if bv.Path == ov.Path {
+				merged[i] = ov
+				found = true
+				break
+			}
+		}
+		if !found {
+			merged = append(merged, ov)
+		}
+	}
+	return merged
+}
+
+// dedup removes duplicate strings while preserving order.
+func dedup(s []string) []string {
+	seen := make(map[string]struct{}, len(s))
+	out := make([]string, 0, len(s))
+	for _, v := range s {
+		if _, ok := seen[v]; !ok {
+			seen[v] = struct{}{}
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // FindConfigOnMissing finds the config file if not manually set.
