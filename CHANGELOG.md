@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed changelog processing truncating older version history when an entry mentions `[Unreleased]` as text (e.g., comparison links or changelog validation entries)
+
 ## [2.23.0] - 2026-03-17
 
 ### Added
