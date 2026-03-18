@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.23.0] - 2026-03-17
+
 ### Added
 
 - added deep-merge for the `languages` configuration key, allowing project-level configs to extend defaults instead of replacing them
