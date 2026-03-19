@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -281,6 +282,44 @@ func dedup(s []string) []string {
 		}
 	}
 	return out
+}
+
+// FindProjectConfigFile searches for a per-project autobump config file in the given directory.
+// It checks for .autobump.yaml, .autobump.yml, autobump.yaml, autobump.yml in priority order.
+// Returns the path to the first file found, or empty string if none is found.
+func FindProjectConfigFile(projectDir string) string {
+	patterns := []string{".autobump.yaml", ".autobump.yml", "autobump.yaml", "autobump.yml"}
+	for _, pat := range patterns {
+		p := filepath.Join(projectDir, pat)
+		fi, err := os.Stat(p)
+		if err == nil && fi.Mode().IsRegular() {
+			return p
+		}
+	}
+	return ""
+}
+
+// ReadProjectConfig reads a per-project config file and returns a GlobalConfig.
+// Only the LanguagesConfig field is meaningful; other fields are ignored by the caller.
+// The file is decoded in non-strict mode to allow partial config files gracefully.
+func ReadProjectConfig(configPath string) (*GlobalConfig, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read project config file %s: %w", configPath, err)
+	}
+	return DecodeConfig(data, false)
+}
+
+// CopyGlobalConfigWithLanguageOverrides creates a shallow copy of the given GlobalConfig
+// and replaces its LanguagesConfig with the result of merging the original languages
+// with the provided overrides. The original config is not mutated.
+func CopyGlobalConfigWithLanguageOverrides(
+	original *GlobalConfig,
+	languageOverrides map[string]LanguageConfig,
+) *GlobalConfig {
+	copied := *original
+	copied.LanguagesConfig = MergeLanguagesConfig(original.LanguagesConfig, languageOverrides)
+	return &copied
 }
 
 // FindConfigOnMissing finds the config file if not manually set.

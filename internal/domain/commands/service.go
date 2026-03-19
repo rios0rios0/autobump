@@ -39,6 +39,35 @@ var (
 	ErrLanguageNotFoundInConfig     = errors.New("language not found in config")
 )
 
+// loadProjectConfigOverrides searches for a per-project .autobump.yaml in the given
+// project directory. If found, it reads the file and merges its languages section
+// into the provided globalConfig, returning a new GlobalConfig without mutating the original.
+// If no per-project config is found, the original globalConfig is returned unchanged.
+func loadProjectConfigOverrides(
+	globalConfig *entities.GlobalConfig,
+	projectPath string,
+) *entities.GlobalConfig {
+	configPath := entities.FindProjectConfigFile(projectPath)
+	if configPath == "" {
+		return globalConfig
+	}
+
+	logger.Infof("Found per-project config: %s", configPath)
+
+	projectOverrides, err := entities.ReadProjectConfig(configPath)
+	if err != nil {
+		logger.Warnf("Failed to read per-project config %s: %v, using global config", configPath, err)
+		return globalConfig
+	}
+
+	if len(projectOverrides.LanguagesConfig) == 0 {
+		return globalConfig
+	}
+
+	logger.Infof("Merging %d language override(s) from per-project config", len(projectOverrides.LanguagesConfig))
+	return entities.CopyGlobalConfigWithLanguageOverrides(globalConfig, projectOverrides.LanguagesConfig)
+}
+
 // providerRegistry is set by the application at startup via SetProviderRegistry.
 var providerRegistry *infraRepos.ProviderRegistry //nolint:gochecknoglobals // required for provider access
 
@@ -561,6 +590,9 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 		return err
 	}
 	defer os.RemoveAll(tmpDir)
+
+	// Load per-project config overrides (must happen after clone so files are available)
+	ctx.GlobalConfig = loadProjectConfigOverrides(ctx.GlobalConfig, ctx.ProjectConfig.Path)
 
 	projectPath := ctx.ProjectConfig.Path
 	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
