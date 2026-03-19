@@ -291,7 +291,8 @@ func FindProjectConfigFile(projectDir string) string {
 	patterns := []string{".autobump.yaml", ".autobump.yml", "autobump.yaml", "autobump.yml"}
 	for _, pat := range patterns {
 		p := filepath.Join(projectDir, pat)
-		if _, err := os.Stat(p); err == nil {
+		fi, err := os.Stat(p)
+		if err == nil && fi.Mode().IsRegular() {
 			return p
 		}
 	}
@@ -304,7 +305,7 @@ func FindProjectConfigFile(projectDir string) string {
 func ReadProjectConfig(configPath string) (*GlobalConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read project config file: %w", err)
+		return nil, fmt.Errorf("failed to read project config file %s: %w", configPath, err)
 	}
 	return DecodeConfig(data, false)
 }
