@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added per-project `.autobump.yaml` override support for batch mode (`autobump run`), allowing individual projects to customize language detection and version file patterns
+
 ## [2.23.1] - 2026-03-19
 
 ### Changed
