@@ -20,3 +20,6 @@ var GetForgeProvider = getForgeProvider //nolint:gochecknoglobals // test export
 
 // RepoToProjectConfig exports repoToProjectConfig for testing.
 var RepoToProjectConfig = repoToProjectConfig //nolint:gochecknoglobals // test export
+
+// LoadProjectConfigOverrides exports loadProjectConfigOverrides for testing.
+var LoadProjectConfigOverrides = loadProjectConfigOverrides //nolint:gochecknoglobals // test export
