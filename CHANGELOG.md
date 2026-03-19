@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed the Go module dependencies to their latest versions
+
 ### Fixed
 
 - fixed changelog processing truncating older version history when an entry mentions `[Unreleased]` as text (e.g., comparison links or changelog validation entries)
