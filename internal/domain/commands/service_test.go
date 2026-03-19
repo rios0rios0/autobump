@@ -445,6 +445,251 @@ func TestRepoToProjectConfig(t *testing.T) {
 	})
 }
 
+func TestLoadProjectConfigOverrides(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return original config when no per-project config exists", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {Extensions: []string{"go"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+
+		// then
+		assert.Equal(t, globalConfig, result)
+	})
+
+	t.Run("should merge per-project language overrides into global config", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configContent := "languages:\n  python:\n    extensions:\n      - 'py'\n    version_files:\n      - path: 'custom_version.py'\n        patterns:\n          - '(__version__\\s*=\\s*\")\\d+\\.\\d+\\.\\d+(\")'\n"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, ".autobump.yaml"),
+			[]byte(configContent),
+			0o644,
+		))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {Extensions: []string{"go"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+
+		// then
+		assert.Contains(t, result.LanguagesConfig, "golang")
+		assert.Contains(t, result.LanguagesConfig, "python")
+		assert.NotContains(t, globalConfig.LanguagesConfig, "python")
+	})
+
+	t.Run("should return original config when per-project config has no languages key", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configContent := "github_access_token: 'ignored-token'\n"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, ".autobump.yaml"),
+			[]byte(configContent),
+			0o644,
+		))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithGitHubAccessToken("original-token").
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {Extensions: []string{"go"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+
+		// then
+		assert.Equal(t, globalConfig, result)
+		assert.Equal(t, "original-token", result.GitHubAccessToken)
+	})
+
+	t.Run("should not mutate global config when per-project config is invalid YAML", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, ".autobump.yaml"),
+			[]byte("invalid: [yaml: {broken"),
+			0o644,
+		))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {Extensions: []string{"go"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+
+		// then
+		assert.Equal(t, globalConfig, result)
+	})
+
+	t.Run("should not mutate global config when merging overrides", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configContent := "languages:\n  ruby:\n    extensions:\n      - 'rb'\n"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, ".autobump.yaml"),
+			[]byte(configContent),
+			0o644,
+		))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {Extensions: []string{"go"}},
+			}).
+			BuildGlobalConfig()
+		originalLangsCount := len(globalConfig.LanguagesConfig)
+
+		// when
+		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+
+		// then
+		assert.Len(t, globalConfig.LanguagesConfig, originalLangsCount)
+		assert.NotContains(t, globalConfig.LanguagesConfig, "ruby")
+		assert.Contains(t, result.LanguagesConfig, "ruby")
+	})
+
+	t.Run("should override version file patterns for existing language", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configContent := "languages:\n  typescript:\n    version_files:\n      - path: 'opensearch_dashboards.json'\n        patterns:\n          - '(\"version\":\\s*\")\\d+\\.\\d+\\.\\d+(\")'  \n"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, ".autobump.yaml"),
+			[]byte(configContent),
+			0o644,
+		))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"typescript": {
+					Extensions: []string{"ts"},
+					VersionFiles: []entities.VersionFile{
+						{Path: "package.json", Patterns: []string{`("version":\s*")\d+\.\d+\.\d+(")`}},
+					},
+				},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+
+		// then
+		ts := result.LanguagesConfig["typescript"]
+		assert.Len(t, ts.VersionFiles, 2)
+		assert.Equal(t, []string{"ts"}, ts.Extensions)
+	})
+
+	t.Run("should add new language from per-project config while keeping global languages", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configContent := "languages:\n  java:\n    extensions:\n      - 'java'\n    special_patterns:\n      - 'pom.xml'\n"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, ".autobump.yaml"),
+			[]byte(configContent),
+			0o644,
+		))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {Extensions: []string{"go"}},
+				"python": {Extensions: []string{"py"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+
+		// then
+		assert.Contains(t, result.LanguagesConfig, "golang")
+		assert.Contains(t, result.LanguagesConfig, "python")
+		assert.Contains(t, result.LanguagesConfig, "java")
+	})
+
+	t.Run("should handle .autobump.yml variant", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configContent := "languages:\n  ruby:\n    extensions:\n      - 'rb'\n"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, ".autobump.yml"),
+			[]byte(configContent),
+			0o644,
+		))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {Extensions: []string{"go"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+
+		// then
+		assert.Contains(t, result.LanguagesConfig, "ruby")
+	})
+
+	t.Run("should handle autobump.yaml variant without dot prefix", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configContent := "languages:\n  ruby:\n    extensions:\n      - 'rb'\n"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, "autobump.yaml"),
+			[]byte(configContent),
+			0o644,
+		))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {Extensions: []string{"go"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+
+		// then
+		assert.Contains(t, result.LanguagesConfig, "ruby")
+	})
+
+	t.Run("should preserve global tokens even if per-project config contains tokens", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configContent := "github_access_token: 'project-token'\nlanguages:\n  ruby:\n    extensions:\n      - 'rb'\n"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, ".autobump.yaml"),
+			[]byte(configContent),
+			0o644,
+		))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithGitHubAccessToken("global-token").
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"golang": {Extensions: []string{"go"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+
+		// then
+		assert.Equal(t, "global-token", result.GitHubAccessToken)
+		assert.Contains(t, result.LanguagesConfig, "ruby")
+	})
+}
+
 func TestProcessRepo(t *testing.T) {
 	t.Parallel()
 
