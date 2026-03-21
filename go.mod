@@ -2,6 +2,8 @@ module github.com/rios0rios0/autobump
 
 go 1.26.1
 
+replace github.com/rios0rios0/gitforge => ../gitforge
+
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.4.0

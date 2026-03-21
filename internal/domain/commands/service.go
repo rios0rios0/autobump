@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,7 +15,10 @@ import (
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
+	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	logger "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	infraRepos "github.com/rios0rios0/autobump/internal/infrastructure/repositories"
@@ -487,9 +491,11 @@ func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 	email := ctx.GlobalGitConfig.Raw.Section("user").Option("email")
 	commitMessage := "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion
 
+	sshProgram := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg.ssh", "program")
+
 	signer, err := signingInfra.ResolveSignerFromGitConfig(
 		gpgSign, gpgFormat, signingKey,
-		ctx.GlobalConfig.GpgKeyPath, ctx.GlobalConfig.GpgKeyPassphrase, "autobump",
+		ctx.GlobalConfig.GpgKeyPath, ctx.GlobalConfig.GpgKeyPassphrase, "autobump", sshProgram,
 	)
 	if err != nil {
 		return plumbing.Hash{}, fmt.Errorf("failed to resolve commit signer: %w", err)
@@ -883,7 +889,84 @@ func collectAuthMethods(
 		authMethods = append(authMethods, methods...)
 	}
 
+	sshMethods := collectSSHAuthMethods(globalConfig)
+	authMethods = append(authMethods, sshMethods...)
+
 	return authMethods
+}
+
+// collectSSHAuthMethods builds SSH transport.AuthMethod instances from config.
+// It tries explicit key/socket config first, then auto-detects common SSH agent sockets.
+func collectSSHAuthMethods(globalConfig *entities.GlobalConfig) []transport.AuthMethod {
+	var methods []transport.AuthMethod
+
+	if globalConfig.SSHKeyPath != "" {
+		auth, err := gitssh.NewPublicKeysFromFile("git", globalConfig.SSHKeyPath, globalConfig.SSHKeyPassphrase)
+		if err != nil {
+			logger.Warnf("Failed to load SSH key from %s: %v", globalConfig.SSHKeyPath, err)
+		} else {
+			auth.HostKeyCallback = ssh.InsecureIgnoreHostKey() //nolint:gosec // known_hosts validation handled by go-git fallback
+			methods = append(methods, auth)
+		}
+	}
+
+	if globalConfig.SSHAuthSock != "" {
+		if method := sshAgentAuthFromSocket(globalConfig.SSHAuthSock); method != nil {
+			methods = append(methods, method)
+		}
+	}
+
+	if len(methods) > 0 {
+		return methods
+	}
+
+	// Auto-detect common SSH agent sockets
+	for _, sock := range detectSSHAgentSockets() {
+		if method := sshAgentAuthFromSocket(sock); method != nil {
+			methods = append(methods, method)
+			break // use the first working socket
+		}
+	}
+
+	return methods
+}
+
+// sshAgentAuthFromSocket dials the given Unix socket and returns an SSH agent auth method.
+func sshAgentAuthFromSocket(socketPath string) transport.AuthMethod {
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		logger.Debugf("Cannot connect to SSH agent at %s: %v", socketPath, err)
+		return nil
+	}
+
+	agentClient := agent.NewClient(conn)
+	return &gitssh.PublicKeysCallback{
+		User:     "git",
+		Callback: agentClient.Signers,
+	}
+}
+
+// detectSSHAgentSockets returns paths to common SSH agent sockets that exist on the filesystem.
+func detectSSHAgentSockets() []string {
+	var sockets []string
+
+	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+		sockets = append(sockets, sock)
+	}
+
+	home, err := os.UserHomeDir()
+	if err == nil {
+		candidates := []string{
+			filepath.Join(home, ".1password", "agent.sock"),
+		}
+		for _, c := range candidates {
+			if info, statErr := os.Stat(c); statErr == nil && info.Mode().Type() == os.ModeSocket {
+				sockets = append(sockets, c)
+			}
+		}
+	}
+
+	return sockets
 }
 
 // getForgeProvider creates a gitforge ForgeProvider with the given token.

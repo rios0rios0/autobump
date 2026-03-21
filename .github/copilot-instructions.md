@@ -162,6 +162,7 @@ autobump/
 - Config structs live in `internal/domain/entities/settings.go`: `GlobalConfig`, `ProjectConfig`, `ProviderConfig`, `LanguageConfig`, `VersionFile`
 - Supports `projects` list and/or `providers` list (both processed by `run` command)
 - Token resolution: inline string, `${ENV_VAR}` expansion, or file path auto-detection
+- SSH push auth: `ssh_key_path`, `ssh_key_passphrase`, `ssh_auth_sock` fields; auto-detects common SSH agent sockets (1Password, standard `ssh-agent`) when not explicitly set
 
 ### Provider Configuration (run mode with providers)
 
