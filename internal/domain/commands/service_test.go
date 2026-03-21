@@ -3,6 +3,8 @@
 package commands_test
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,6 +19,60 @@ import (
 	registryInfra "github.com/rios0rios0/gitforge/pkg/registry/infrastructure"
 	langEntities "github.com/rios0rios0/langforge/pkg/domain/entities"
 )
+
+// mockFileAccessProvider is a minimal FileAccessProvider for unit tests.
+type mockFileAccessProvider struct {
+	files map[string]string // path -> content; missing key means "not found"
+}
+
+func (m *mockFileAccessProvider) Name() string        { return "mock" }
+func (m *mockFileAccessProvider) MatchesURL(_ string) bool { return false }
+func (m *mockFileAccessProvider) AuthToken() string   { return "" }
+func (m *mockFileAccessProvider) CloneURL(_ gitforgeEntities.Repository) string { return "" }
+func (m *mockFileAccessProvider) DiscoverRepositories(
+	_ context.Context, _ string,
+) ([]gitforgeEntities.Repository, error) {
+	return nil, nil
+}
+func (m *mockFileAccessProvider) CreatePullRequest(
+	_ context.Context, _ gitforgeEntities.Repository, _ gitforgeEntities.PullRequestInput,
+) (*gitforgeEntities.PullRequest, error) {
+	return nil, nil
+}
+func (m *mockFileAccessProvider) PullRequestExists(
+	_ context.Context, _ gitforgeEntities.Repository, _ string,
+) (bool, error) {
+	return false, nil
+}
+func (m *mockFileAccessProvider) GetFileContent(
+	_ context.Context, _ gitforgeEntities.Repository, path string,
+) (string, error) {
+	if content, ok := m.files[path]; ok {
+		return content, nil
+	}
+	return "", errors.New("file not found")
+}
+func (m *mockFileAccessProvider) ListFiles(
+	_ context.Context, _ gitforgeEntities.Repository, _ string,
+) ([]gitforgeEntities.File, error) {
+	return nil, nil
+}
+func (m *mockFileAccessProvider) GetTags(
+	_ context.Context, _ gitforgeEntities.Repository,
+) ([]string, error) {
+	return nil, nil
+}
+func (m *mockFileAccessProvider) HasFile(
+	_ context.Context, _ gitforgeEntities.Repository, path string,
+) bool {
+	_, ok := m.files[path]
+	return ok
+}
+func (m *mockFileAccessProvider) CreateBranchWithChanges(
+	_ context.Context, _ gitforgeEntities.Repository, _ gitforgeEntities.BranchInput,
+) error {
+	return nil
+}
 
 func TestDetectProjectLanguage(t *testing.T) {
 	t.Parallel()
@@ -709,5 +765,136 @@ func TestProcessRepo(t *testing.T) {
 
 		// then
 		assert.Error(t, err)
+	})
+}
+
+func TestFetchPRTemplate(t *testing.T) {
+	t.Parallel()
+
+	repo := gitforgeEntities.Repository{Name: "test-repo", Organization: "test-org"}
+
+	t.Run("should return bump-specific template when it exists", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		provider := &mockFileAccessProvider{
+			files: map[string]string{
+				".github/pull_request_template/bump.md": "bump template content",
+				".github/pull_request_template.md":      "default template content",
+			},
+		}
+
+		// when
+		content, found := commands.FetchPRTemplate(context.Background(), provider, repo)
+
+		// then
+		assert.True(t, found)
+		assert.Equal(t, "bump template content", content)
+	})
+
+	t.Run("should fall back to default template when bump-specific template is missing", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		provider := &mockFileAccessProvider{
+			files: map[string]string{
+				".github/pull_request_template.md": "default template content",
+			},
+		}
+
+		// when
+		content, found := commands.FetchPRTemplate(context.Background(), provider, repo)
+
+		// then
+		assert.True(t, found)
+		assert.Equal(t, "default template content", content)
+	})
+
+	t.Run("should fall back to root-level template when .github templates are missing", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		provider := &mockFileAccessProvider{
+			files: map[string]string{
+				"PULL_REQUEST_TEMPLATE.md": "root template content",
+			},
+		}
+
+		// when
+		content, found := commands.FetchPRTemplate(context.Background(), provider, repo)
+
+		// then
+		assert.True(t, found)
+		assert.Equal(t, "root template content", content)
+	})
+
+	t.Run("should return not found when no template file exists", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		provider := &mockFileAccessProvider{files: map[string]string{}}
+
+		// when
+		content, found := commands.FetchPRTemplate(context.Background(), provider, repo)
+
+		// then
+		assert.False(t, found)
+		assert.Empty(t, content)
+	})
+}
+
+func TestApplyTemplateVars(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should replace version placeholder", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		template := "Version: {{version}}"
+
+		// when
+		result := commands.ApplyTemplateVars(template, "1.2.3", "my-project")
+
+		// then
+		assert.Equal(t, "Version: 1.2.3", result)
+	})
+
+	t.Run("should replace project placeholder", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		template := "Project: {{project}}"
+
+		// when
+		result := commands.ApplyTemplateVars(template, "1.2.3", "my-project")
+
+		// then
+		assert.Equal(t, "Project: my-project", result)
+	})
+
+	t.Run("should replace both version and project placeholders", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		template := "Bumping {{project}} to {{version}}"
+
+		// when
+		result := commands.ApplyTemplateVars(template, "2.0.0", "autobump")
+
+		// then
+		assert.Equal(t, "Bumping autobump to 2.0.0", result)
+	})
+
+	t.Run("should leave template unchanged when no placeholders are present", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		template := "No placeholders here"
+
+		// when
+		result := commands.ApplyTemplateVars(template, "1.0.0", "proj")
+
+		// then
+		assert.Equal(t, "No placeholders here", result)
 	})
 }

@@ -253,11 +253,22 @@ func createPullRequest(
 
 	targetBranch := resolveDefaultBranch(repo)
 	gitforgeRepo := buildGitforgeRepo(remoteURL, targetBranch)
+
+	var description string
+	if fileProvider, ok := provider.(globalEntities.FileAccessProvider); ok {
+		if tmpl, found := fetchPRTemplate(context.Background(), fileProvider, gitforgeRepo); found {
+			description = applyTemplateVars(tmpl, ctx.ProjectConfig.NewVersion, ctx.ProjectConfig.Name)
+		}
+	}
+	if description == "" {
+		description = generatePRDescription(ctx)
+	}
+
 	input := globalEntities.PullRequestInput{
 		SourceBranch: branchName,
 		TargetBranch: targetBranch,
 		Title:        "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion,
-		Description:  generatePRDescription(ctx),
+		Description:  description,
 	}
 
 	pr, err := provider.CreatePullRequest(context.Background(), gitforgeRepo, input)
@@ -295,6 +306,41 @@ func generatePRDescription(ctx *RepoContext) string {
 	sb.WriteString("\n---\n")
 	sb.WriteString("*This PR was automatically created by [AutoBump](https://github.com/rios0rios0/autobump)*\n")
 	return sb.String()
+}
+
+// prTemplatePaths lists the paths to look for a PR template, in priority order.
+//
+//nolint:gochecknoglobals // intentional read-only lookup table
+var prTemplatePaths = []string{
+	".github/pull_request_template/bump.md",
+	".github/pull_request_template.md",
+	"PULL_REQUEST_TEMPLATE.md",
+}
+
+// fetchPRTemplate tries to read a PR template from the remote repository.
+// It checks the paths in prTemplatePaths order, returning the first match.
+// The second return value is true when a template was found.
+func fetchPRTemplate(
+	ctx context.Context,
+	provider globalEntities.FileAccessProvider,
+	repo globalEntities.Repository,
+) (string, bool) {
+	for _, path := range prTemplatePaths {
+		content, err := provider.GetFileContent(ctx, repo, path)
+		if err == nil && content != "" {
+			logger.Infof("Using PR template from %s", path)
+			return content, true
+		}
+	}
+	return "", false
+}
+
+// applyTemplateVars replaces well-known placeholders in a PR template with
+// their runtime values.  Supported placeholders: {{version}}, {{project}}.
+func applyTemplateVars(template, version, project string) string {
+	result := strings.ReplaceAll(template, "{{version}}", version)
+	result = strings.ReplaceAll(result, "{{project}}", project)
+	return result
 }
 
 func cloneRepoIfNeeded(ctx *RepoContext) (string, error) {

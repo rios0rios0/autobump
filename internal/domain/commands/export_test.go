@@ -23,3 +23,12 @@ var RepoToProjectConfig = repoToProjectConfig //nolint:gochecknoglobals // test 
 
 // LoadProjectConfigOverrides exports loadProjectConfigOverrides for testing.
 var LoadProjectConfigOverrides = loadProjectConfigOverrides //nolint:gochecknoglobals // test export
+
+// FetchPRTemplate exports fetchPRTemplate for testing.
+var FetchPRTemplate = fetchPRTemplate //nolint:gochecknoglobals // test export
+
+// ApplyTemplateVars exports applyTemplateVars for testing.
+var ApplyTemplateVars = applyTemplateVars //nolint:gochecknoglobals // test export
+
+// PRTemplatePaths exports prTemplatePaths for testing.
+var PRTemplatePaths = prTemplatePaths //nolint:gochecknoglobals // test export
