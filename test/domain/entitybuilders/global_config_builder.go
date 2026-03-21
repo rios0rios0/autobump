@@ -15,6 +15,9 @@ type GlobalConfigBuilder struct {
 	languagesConfig        map[string]entities.LanguageConfig
 	gpgKeyPath             string
 	gpgKeyPassphrase       string
+	sshKeyPath             string
+	sshKeyPassphrase       string
+	sshAuthSock            string
 	gitLabAccessToken      string
 	azureDevOpsAccessToken string
 	gitHubAccessToken      string
@@ -68,6 +71,24 @@ func (b *GlobalConfigBuilder) WithGpgKeyPassphrase(passphrase string) *GlobalCon
 	return b
 }
 
+// WithSSHKeyPath sets the SSH key path.
+func (b *GlobalConfigBuilder) WithSSHKeyPath(path string) *GlobalConfigBuilder {
+	b.sshKeyPath = path
+	return b
+}
+
+// WithSSHKeyPassphrase sets the SSH key passphrase.
+func (b *GlobalConfigBuilder) WithSSHKeyPassphrase(passphrase string) *GlobalConfigBuilder {
+	b.sshKeyPassphrase = passphrase
+	return b
+}
+
+// WithSSHAuthSock sets the SSH auth socket path.
+func (b *GlobalConfigBuilder) WithSSHAuthSock(sock string) *GlobalConfigBuilder {
+	b.sshAuthSock = sock
+	return b
+}
+
 // WithGitLabAccessToken sets the GitLab access token.
 func (b *GlobalConfigBuilder) WithGitLabAccessToken(token string) *GlobalConfigBuilder {
 	b.gitLabAccessToken = token
@@ -105,6 +126,9 @@ func (b *GlobalConfigBuilder) BuildGlobalConfig() *entities.GlobalConfig {
 		LanguagesConfig:        b.languagesConfig,
 		GpgKeyPath:             b.gpgKeyPath,
 		GpgKeyPassphrase:       b.gpgKeyPassphrase,
+		SSHKeyPath:             b.sshKeyPath,
+		SSHKeyPassphrase:       b.sshKeyPassphrase,
+		SSHAuthSock:            b.sshAuthSock,
 		GitLabAccessToken:      b.gitLabAccessToken,
 		AzureDevOpsAccessToken: b.azureDevOpsAccessToken,
 		GitHubAccessToken:      b.gitHubAccessToken,
@@ -120,6 +144,9 @@ func (b *GlobalConfigBuilder) Reset() testkit.Builder {
 	b.languagesConfig = make(map[string]entities.LanguageConfig)
 	b.gpgKeyPath = ""
 	b.gpgKeyPassphrase = ""
+	b.sshKeyPath = ""
+	b.sshKeyPassphrase = ""
+	b.sshAuthSock = ""
 	b.gitLabAccessToken = ""
 	b.azureDevOpsAccessToken = ""
 	b.gitHubAccessToken = ""
@@ -153,6 +180,9 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 		languagesConfig:        languagesConfigCopy,
 		gpgKeyPath:             b.gpgKeyPath,
 		gpgKeyPassphrase:       b.gpgKeyPassphrase,
+		sshKeyPath:             b.sshKeyPath,
+		sshKeyPassphrase:       b.sshKeyPassphrase,
+		sshAuthSock:            b.sshAuthSock,
 		gitLabAccessToken:      b.gitLabAccessToken,
 		azureDevOpsAccessToken: b.azureDevOpsAccessToken,
 		gitHubAccessToken:      b.gitHubAccessToken,

@@ -96,6 +96,21 @@ To export your GPG key:
 gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobump.asc
 ```
 
+### Optional SSH Authentication
+
+When pushing to SSH remotes, AutoBump auto-detects the SSH agent from `SSH_AUTH_SOCK` and common socket paths (e.g., 1Password at `~/.1password/agent.sock`). For environments without an SSH agent, you can configure an explicit SSH key:
+
+```yaml
+# Path to SSH private key (supports ~ expansion)
+ssh_key_path: '~/.ssh/id_ed25519'
+
+# Passphrase for the key (optional, can be a file path)
+ssh_key_passphrase: ''
+
+# Or point to a custom SSH agent socket (e.g., 1Password)
+ssh_auth_sock: '~/.1password/agent.sock'
+```
+
 ## Usage
 
 AutoBump has two main modes: **local** (single repository) and **run** (batch engine).
