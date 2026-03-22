@@ -805,7 +805,7 @@ func TestProcessRepo(t *testing.T) {
 }
 
 // initTestRepo creates a minimal git repository with one commit in a temp dir.
-// It returns the repository, the working-tree directory, and a cleanup function.
+// It returns the repository and the working-tree directory; cleanup is handled by t.TempDir().
 func initTestRepo(t *testing.T) (*git.Repository, string) {
 	t.Helper()
 
@@ -948,6 +948,9 @@ func TestAddCurrentVersion(t *testing.T) {
 
 		// then
 		require.NoError(t, err)
+		content, readErr := os.ReadFile(changelogPath)
+		require.NoError(t, readErr)
+		assert.Equal(t, originalContent, string(content), "changelog should be unchanged when annotated tag cannot be dereferenced")
 	})
 }
 
