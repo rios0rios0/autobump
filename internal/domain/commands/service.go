@@ -972,7 +972,8 @@ func detectSSHAgentSockets() []string {
 	var sockets []string
 
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		if info, statErr := os.Stat(sock); statErr == nil && info.Mode().Type() == os.ModeSocket { //nolint:gosec // sock comes from SSH_AUTH_SOCK env var, trusted input
+		//nolint:gosec // sock comes from SSH_AUTH_SOCK env var, trusted input
+		if info, statErr := os.Stat(sock); statErr == nil && info.Mode().Type() == os.ModeSocket {
 			sockets = append(sockets, sock)
 		}
 	}
