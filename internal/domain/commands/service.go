@@ -361,7 +361,9 @@ func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error
 		return fmt.Errorf("failed to resolve commit signer: %w", err)
 	}
 
-	if _, err = gitInfra.CommitChanges(ctx.Repo, ctx.Worktree, "chore: add CHANGELOG.md", signer, name, email); err != nil {
+	if _, err = gitInfra.CommitChanges(
+		ctx.Repo, ctx.Worktree, "chore: add CHANGELOG.md", signer, name, email,
+	); err != nil {
 		return fmt.Errorf("failed to commit CHANGELOG.md: %w", err)
 	}
 
@@ -669,7 +671,7 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 		return err
 	}
 	if !changelogExisted {
-		logger.Infof("New CHANGELOG.md was created and committed for project '%s'; no unreleased content to bump", ctx.ProjectConfig.Name)
+		logger.Infof("New CHANGELOG.md was created for project '%s'; no unreleased content to bump", ctx.ProjectConfig.Name)
 		return nil
 	}
 
