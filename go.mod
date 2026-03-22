@@ -2,8 +2,6 @@ module github.com/rios0rios0/autobump
 
 go 1.26.1
 
-replace github.com/rios0rios0/gitforge => ../gitforge
-
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.4.0
@@ -44,7 +42,7 @@ require (
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/pjbgf/sha1cd v0.5.0 // indirect
-	github.com/rios0rios0/gitforge v0.7.1-0.20260318144921-5ce5dbdd0b5e
+	github.com/rios0rios0/gitforge v0.7.2
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/skeema/knownhosts v1.3.2
 	github.com/spf13/pflag v1.0.10 // indirect
