@@ -935,7 +935,8 @@ func collectSSHAuthMethods(globalConfig *entities.GlobalConfig) []transport.Auth
 // sshAgentAuthFromSocket returns an SSH agent auth method that dials the given Unix socket
 // on each use and closes the connection after retrieving the available signers.
 func sshAgentAuthFromSocket(socketPath string) transport.AuthMethod {
-	conn, err := net.Dial("unix", socketPath)
+	dialer := &net.Dialer{}
+	conn, err := dialer.DialContext(context.Background(), "unix", socketPath)
 	if err != nil {
 		logger.Debugf("Cannot connect to SSH agent at %s: %v", socketPath, err)
 		return nil
@@ -947,7 +948,7 @@ func sshAgentAuthFromSocket(socketPath string) transport.AuthMethod {
 	return &gitssh.PublicKeysCallback{
 		User: "git",
 		Callback: func() ([]ssh.Signer, error) {
-			c, dialErr := net.Dial("unix", socketPath)
+			c, dialErr := dialer.DialContext(context.Background(), "unix", socketPath)
 			if dialErr != nil {
 				return nil, dialErr
 			}
@@ -971,7 +972,7 @@ func detectSSHAgentSockets() []string {
 	var sockets []string
 
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		if info, statErr := os.Stat(sock); statErr == nil && info.Mode().Type() == os.ModeSocket {
+		if info, statErr := os.Stat(sock); statErr == nil && info.Mode().Type() == os.ModeSocket { //nolint:gosec // sock comes from SSH_AUTH_SOCK env var, trusted input
 			sockets = append(sockets, sock)
 		}
 	}
