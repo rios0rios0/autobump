@@ -129,7 +129,7 @@ func readData(configPath string) ([]byte, error) {
 	return downloadHelpers.DownloadFile(configPath)
 }
 
-// expandHome replaces a leading "~" with the user's home directory.
+// expandHome replaces a leading "~/" with the user's home directory.
 func expandHome(value *string) {
 	if strings.HasPrefix(*value, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {

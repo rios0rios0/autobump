@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -412,6 +413,7 @@ func TestCollectSSHAuthMethods(t *testing.T) { //nolint:paralleltest // t.Setenv
 	t.Run("should return empty slice when no SSH config and no agent", func(t *testing.T) {
 		// given
 		t.Setenv("SSH_AUTH_SOCK", "")
+		t.Setenv("HOME", t.TempDir())
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
 
 		// when
@@ -444,6 +446,7 @@ func TestCollectSSHAuthMethods(t *testing.T) { //nolint:paralleltest // t.Setenv
 	t.Run("should return empty slice when ssh_key_path points to nonexistent file", func(t *testing.T) {
 		// given
 		t.Setenv("SSH_AUTH_SOCK", "")
+		t.Setenv("HOME", t.TempDir())
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithSSHKeyPath("/nonexistent/path/key").
 			BuildGlobalConfig()
@@ -457,16 +460,26 @@ func TestCollectSSHAuthMethods(t *testing.T) { //nolint:paralleltest // t.Setenv
 }
 
 func TestDetectSSHAgentSockets(t *testing.T) { //nolint:paralleltest // t.Setenv is incompatible with t.Parallel
-	t.Run("should return SSH_AUTH_SOCK from environment when set", func(t *testing.T) {
+	t.Run("should return SSH_AUTH_SOCK from environment when set to a valid socket", func(t *testing.T) {
 		// given
-		t.Setenv("SSH_AUTH_SOCK", "/tmp/test-ssh-agent.sock")
+		sockDir, err := os.MkdirTemp("", "s-*")
+		require.NoError(t, err)
+		defer os.RemoveAll(sockDir) //nolint:errcheck // test cleanup
+
+		sockPath := filepath.Join(sockDir, "a.sock")
+		listener, err := net.Listen("unix", sockPath)
+		require.NoError(t, err)
+		defer listener.Close() //nolint:errcheck // test cleanup
+
+		t.Setenv("SSH_AUTH_SOCK", sockPath)
+		t.Setenv("HOME", t.TempDir())
 
 		// when
 		sockets := commands.DetectSSHAgentSockets()
 
 		// then
 		require.NotEmpty(t, sockets)
-		assert.Equal(t, "/tmp/test-ssh-agent.sock", sockets[0])
+		assert.Equal(t, sockPath, sockets[0])
 	})
 }
 
