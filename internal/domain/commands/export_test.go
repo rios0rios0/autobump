@@ -23,3 +23,9 @@ var RepoToProjectConfig = repoToProjectConfig //nolint:gochecknoglobals // test 
 
 // LoadProjectConfigOverrides exports loadProjectConfigOverrides for testing.
 var LoadProjectConfigOverrides = loadProjectConfigOverrides //nolint:gochecknoglobals // test export
+
+// CollectSSHAuthMethods exports collectSSHAuthMethods for testing.
+var CollectSSHAuthMethods = collectSSHAuthMethods //nolint:gochecknoglobals // test export
+
+// DetectSSHAgentSockets exports detectSSHAgentSockets for testing.
+var DetectSSHAgentSockets = detectSSHAgentSockets //nolint:gochecknoglobals // test export

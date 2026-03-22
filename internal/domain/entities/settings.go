@@ -26,6 +26,9 @@ type GlobalConfig struct {
 	LanguagesConfig        map[string]LanguageConfig       `yaml:"languages"`
 	GpgKeyPath             string                          `yaml:"gpg_key_path"`
 	GpgKeyPassphrase       string                          `yaml:"gpg_key_passphrase"`
+	SSHKeyPath             string                          `yaml:"ssh_key_path"`
+	SSHKeyPassphrase       string                          `yaml:"ssh_key_passphrase"`
+	SSHAuthSock            string                          `yaml:"ssh_auth_sock"`
 	GitLabAccessToken      string                          `yaml:"gitlab_access_token"`
 	AzureDevOpsAccessToken string                          `yaml:"azure_devops_access_token"`
 	GitHubAccessToken      string                          `yaml:"github_access_token"`
@@ -88,9 +91,13 @@ func ReadConfig(configPath string) (*GlobalConfig, error) {
 	}
 
 	handleTokenFile("GPG passphrase", &globalConfig.GpgKeyPassphrase)
+	handleTokenFile("SSH key passphrase", &globalConfig.SSHKeyPassphrase)
 	handleTokenFile("GitLab access token", &globalConfig.GitLabAccessToken)
 	handleTokenFile("Azure DevOps access token", &globalConfig.AzureDevOpsAccessToken)
 	handleTokenFile("GitHub access token", &globalConfig.GitHubAccessToken)
+
+	expandHome(&globalConfig.SSHKeyPath)
+	expandHome(&globalConfig.SSHAuthSock)
 
 	// Resolve provider tokens (env vars and file paths)
 	for i := range globalConfig.Providers {
@@ -120,6 +127,15 @@ func readData(configPath string) ([]byte, error) {
 	}
 	// It's a URL, so read the data from the URL
 	return downloadHelpers.DownloadFile(configPath)
+}
+
+// expandHome replaces a leading "~/" with the user's home directory.
+func expandHome(value *string) {
+	if strings.HasPrefix(*value, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			*value = filepath.Join(home, (*value)[2:])
+		}
+	}
 }
 
 // handleTokenFile reads the token from a file if it exists and replaces the token string.

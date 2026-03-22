@@ -3,12 +3,17 @@
 package commands_test
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/rios0rios0/autobump/internal/domain/commands"
 	"github.com/rios0rios0/autobump/internal/domain/entities"
@@ -17,6 +22,16 @@ import (
 	registryInfra "github.com/rios0rios0/gitforge/pkg/registry/infrastructure"
 	langEntities "github.com/rios0rios0/langforge/pkg/domain/entities"
 )
+
+// generateTestSSHKey creates a valid Ed25519 SSH private key in OpenSSH format for testing.
+func generateTestSSHKey(t *testing.T) []byte {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	pemBlock, err := gossh.MarshalPrivateKey(priv, "")
+	require.NoError(t, err)
+	return pem.EncodeToMemory(pemBlock)
+}
 
 func TestDetectProjectLanguage(t *testing.T) {
 	t.Parallel()
@@ -391,6 +406,80 @@ func TestCollectTokens(t *testing.T) {
 
 		// then
 		assert.Empty(t, tokens)
+	})
+}
+
+func TestCollectSSHAuthMethods(t *testing.T) { //nolint:paralleltest // t.Setenv is incompatible with t.Parallel
+	t.Run("should return empty slice when no SSH config and no agent", func(t *testing.T) {
+		// given
+		t.Setenv("SSH_AUTH_SOCK", "")
+		t.Setenv("HOME", t.TempDir())
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
+
+		// when
+		methods := commands.CollectSSHAuthMethods(globalConfig)
+
+		// then
+		assert.Empty(t, methods)
+	})
+
+	t.Run("should return SSH key auth when ssh_key_path is configured", func(t *testing.T) {
+		// given
+		t.Setenv("SSH_AUTH_SOCK", "")
+		keyDir := t.TempDir()
+		keyPath := filepath.Join(keyDir, "test_key")
+		keyContent := generateTestSSHKey(t)
+		require.NoError(t, os.WriteFile(keyPath, keyContent, 0o600))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithSSHKeyPath(keyPath).
+			BuildGlobalConfig()
+
+		// when
+		methods := commands.CollectSSHAuthMethods(globalConfig)
+
+		// then
+		require.Len(t, methods, 1)
+		assert.Equal(t, "ssh-public-keys", methods[0].Name())
+	})
+
+	t.Run("should return empty slice when ssh_key_path points to nonexistent file", func(t *testing.T) {
+		// given
+		t.Setenv("SSH_AUTH_SOCK", "")
+		t.Setenv("HOME", t.TempDir())
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithSSHKeyPath("/nonexistent/path/key").
+			BuildGlobalConfig()
+
+		// when
+		methods := commands.CollectSSHAuthMethods(globalConfig)
+
+		// then
+		assert.Empty(t, methods)
+	})
+}
+
+func TestDetectSSHAgentSockets(t *testing.T) { //nolint:paralleltest // t.Setenv is incompatible with t.Parallel
+	t.Run("should return SSH_AUTH_SOCK from environment when set to a valid socket", func(t *testing.T) {
+		// given
+		sockDir, err := os.MkdirTemp("", "s-*")
+		require.NoError(t, err)
+		defer os.RemoveAll(sockDir) //nolint:errcheck // test cleanup
+
+		sockPath := filepath.Join(sockDir, "a.sock")
+		listener, err := net.Listen("unix", sockPath)
+		require.NoError(t, err)
+		defer listener.Close() //nolint:errcheck // test cleanup
+
+		t.Setenv("SSH_AUTH_SOCK", sockPath)
+		t.Setenv("HOME", t.TempDir())
+
+		// when
+		sockets := commands.DetectSSHAgentSockets()
+
+		// then
+		require.NotEmpty(t, sockets)
+		assert.Equal(t, sockPath, sockets[0])
 	})
 }
 
