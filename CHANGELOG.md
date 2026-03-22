@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.25.0] - 2026-03-22
+
 ### Added
 
 - added SSH authentication configuration with `ssh_key_path`, `ssh_key_passphrase`, and `ssh_auth_sock` fields for push operations
