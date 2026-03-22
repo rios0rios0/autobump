@@ -29,3 +29,9 @@ var CollectSSHAuthMethods = collectSSHAuthMethods //nolint:gochecknoglobals // t
 
 // DetectSSHAgentSockets exports detectSSHAgentSockets for testing.
 var DetectSSHAgentSockets = detectSSHAgentSockets //nolint:gochecknoglobals // test export
+
+// AddCurrentVersion exports addCurrentVersion for testing.
+var AddCurrentVersion = addCurrentVersion //nolint:gochecknoglobals // test export
+
+// SetupChangelog exports setupChangelog for testing.
+var SetupChangelog = setupChangelog //nolint:gochecknoglobals // test export

@@ -18,12 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
--
-
 ### Changed
-
--
 
 ### Removed
 
--

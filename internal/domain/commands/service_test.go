@@ -10,7 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gossh "golang.org/x/crypto/ssh"
@@ -798,5 +801,226 @@ func TestProcessRepo(t *testing.T) {
 
 		// then
 		assert.Error(t, err)
+	})
+}
+
+// initTestRepo creates a minimal git repository with one commit in a temp dir.
+// It returns the repository and the working-tree directory; cleanup is handled by t.TempDir().
+func initTestRepo(t *testing.T) (*git.Repository, string) {
+	t.Helper()
+
+	dir := t.TempDir()
+
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+
+	cfg, err := repo.Config()
+	require.NoError(t, err)
+	cfg.Raw.SetOption("user", "", "name", "Test User")
+	cfg.Raw.SetOption("user", "", "email", "test@example.com")
+	require.NoError(t, repo.SetConfig(cfg))
+
+	w, err := repo.Worktree()
+	require.NoError(t, err)
+
+	readmePath := filepath.Join(dir, "README.md")
+	require.NoError(t, os.WriteFile(readmePath, []byte("# Test"), 0o644))
+	_, err = w.Add("README.md")
+	require.NoError(t, err)
+
+	_, err = w.Commit("initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test User",
+			Email: "test@example.com",
+			When:  time.Now(),
+		},
+	})
+	require.NoError(t, err)
+
+	return repo, dir
+}
+
+// buildTestRepoContext creates a minimal RepoContext for unit testing.
+func buildTestRepoContext(t *testing.T, repo *git.Repository, dir string) *commands.RepoContext {
+	t.Helper()
+
+	w, err := repo.Worktree()
+	require.NoError(t, err)
+
+	head, err := repo.Head()
+	require.NoError(t, err)
+
+	// Reuse the repository's own config as the "global" config for tests.
+	globalGitConfig, err := repo.Config()
+	require.NoError(t, err)
+
+	globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
+	projectConfig := entitybuilders.NewProjectConfigBuilder().
+		WithPath(dir).
+		BuildProjectConfig()
+
+	return &commands.RepoContext{
+		GlobalConfig:    globalConfig,
+		ProjectConfig:   projectConfig,
+		GlobalGitConfig: globalGitConfig,
+		Repo:            repo,
+		Worktree:        w,
+		Head:            head,
+	}
+}
+
+func TestAddCurrentVersion(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return nil and leave changelog unchanged when no tags exist", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		repo, dir := initTestRepo(t)
+		ctx := buildTestRepoContext(t, repo, dir)
+
+		changelogPath := filepath.Join(dir, "CHANGELOG.md")
+		originalContent := "## [Unreleased]\n\n### Added\n\n### Changed\n\n### Removed\n"
+		require.NoError(t, os.WriteFile(changelogPath, []byte(originalContent), 0o644))
+
+		// when
+		err := commands.AddCurrentVersion(ctx, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		content, readErr := os.ReadFile(changelogPath)
+		require.NoError(t, readErr)
+		assert.Equal(t, originalContent, string(content), "changelog should be unchanged when no tags exist")
+	})
+
+	t.Run("should append current version section when lightweight tag exists", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		repo, dir := initTestRepo(t)
+		ctx := buildTestRepoContext(t, repo, dir)
+
+		head, err := repo.Head()
+		require.NoError(t, err)
+		_, err = repo.CreateTag("v0.1.0", head.Hash(), nil)
+		require.NoError(t, err)
+
+		changelogPath := filepath.Join(dir, "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelogPath, []byte("## [Unreleased]\n\n### Added\n\n"), 0o644))
+
+		// when
+		err = commands.AddCurrentVersion(ctx, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		content, readErr := os.ReadFile(changelogPath)
+		require.NoError(t, readErr)
+		assert.Contains(t, string(content), "## [0.1.0]", "changelog should contain the tag version")
+	})
+
+	t.Run("should return nil and leave changelog unchanged when annotated tag cannot be dereferenced", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		repo, dir := initTestRepo(t)
+		ctx := buildTestRepoContext(t, repo, dir)
+
+		head, err := repo.Head()
+		require.NoError(t, err)
+		_, err = repo.CreateTag("v0.1.0", head.Hash(), &git.CreateTagOptions{
+			Message: "Release v0.1.0",
+			Tagger: &object.Signature{
+				Name:  "Test User",
+				Email: "test@example.com",
+				When:  time.Now(),
+			},
+		})
+		require.NoError(t, err)
+
+		changelogPath := filepath.Join(dir, "CHANGELOG.md")
+		originalContent := "## [Unreleased]\n\n### Added\n\n"
+		require.NoError(t, os.WriteFile(changelogPath, []byte(originalContent), 0o644))
+
+		// when
+		// Note: gitforge's GetLatestTag may fail to dereference annotated tags via go-git.
+		// After our fix, addCurrentVersion() returns nil and leaves the changelog unchanged.
+		err = commands.AddCurrentVersion(ctx, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		content, readErr := os.ReadFile(changelogPath)
+		require.NoError(t, readErr)
+		assert.Equal(t, originalContent, string(content), "changelog should be unchanged when annotated tag cannot be dereferenced")
+	})
+}
+
+func TestSetupChangelog(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return true when CHANGELOG already exists", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		repo, dir := initTestRepo(t)
+		ctx := buildTestRepoContext(t, repo, dir)
+
+		changelogPath := filepath.Join(dir, "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelogPath, []byte("## [Unreleased]\n\n### Added\n\n- something\n"), 0o644))
+
+		// when
+		existed, err := commands.SetupChangelog(ctx, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, existed, "should report that changelog already existed")
+	})
+
+	t.Run("should return false and create CHANGELOG when it does not exist", func(t *testing.T) {
+		t.Parallel()
+
+		// given — we need a real git repo so that go-git operations in
+		// commitAndPushInitialChangelog do not panic, even though the push will fail.
+		repo, dir := initTestRepo(t)
+		ctx := buildTestRepoContext(t, repo, dir)
+
+		changelogPath := filepath.Join(dir, "CHANGELOG.md")
+
+		// when — the function downloads a template (or fails gracefully), then tries to
+		// commit+push (which will fail without a remote, but the error is only logged).
+		// Either way it must return false, nil.
+		existed, err := commands.SetupChangelog(ctx, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.False(t, existed, "should report that changelog was freshly created")
+		_, statErr := os.Stat(changelogPath)
+		assert.NoError(t, statErr, "CHANGELOG.md should have been created on disk")
+	})
+}
+
+func TestChangelogTemplate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should not treat empty-section template as having unreleased content", func(t *testing.T) {
+		t.Parallel()
+
+		// given — the template has empty sections (no bare '-' placeholder lines)
+		templateLines := []string{
+			"## [Unreleased]",
+			"",
+			"### Added",
+			"",
+			"### Changed",
+			"",
+			"### Removed",
+			"",
+		}
+
+		// when
+		empty, err := entities.IsChangelogUnreleasedEmpty(templateLines)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, empty, "empty-section template should be recognised as having no unreleased content")
 	})
 }
