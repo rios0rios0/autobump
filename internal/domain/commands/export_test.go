@@ -38,3 +38,6 @@ var GetLatestTagForChangelog = getLatestTagForChangelog //nolint:gochecknoglobal
 
 // ResolveLatestAnnotatedTag exports resolveLatestAnnotatedTag for testing.
 var ResolveLatestAnnotatedTag = resolveLatestAnnotatedTag //nolint:gochecknoglobals // test export
+
+// ResolveSignerAndCommit exports resolveSignerAndCommit for testing.
+var ResolveSignerAndCommit = resolveSignerAndCommit //nolint:gochecknoglobals // test export

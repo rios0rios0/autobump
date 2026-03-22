@@ -6,12 +6,14 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -829,7 +831,7 @@ func TestShouldBumpProject(t *testing.T) {
 ### Removed
 `
 
-	t.Run("should return false and log new-changelog message when NewChangelogCreated is true and unreleased is empty", func(t *testing.T) {
+	t.Run("should return false when NewChangelogCreated is true and unreleased is empty", func(t *testing.T) {
 		t.Parallel()
 
 		// given
@@ -853,7 +855,7 @@ func TestShouldBumpProject(t *testing.T) {
 		assert.False(t, result)
 	})
 
-	t.Run("should return false and log skip message when NewChangelogCreated is false and unreleased is empty", func(t *testing.T) {
+	t.Run("should return false when NewChangelogCreated is false and unreleased is empty", func(t *testing.T) {
 		t.Parallel()
 
 		// given
@@ -905,30 +907,52 @@ func TestShouldBumpProject(t *testing.T) {
 func TestGetLatestTagForChangelog(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return nil when repository has no tags", func(t *testing.T) {
-		t.Parallel()
+	testAuthor := &object.Signature{Name: "Test", Email: "test@test.com"}
 
-		// given — initialise a bare repo with a single commit but no tags
+	// initTestRepo creates a git repo with a single commit and returns the repo and commit hash.
+	initTestRepo := func(t *testing.T) (*git.Repository, plumbing.Hash) {
+		t.Helper()
 		tmpDir := t.TempDir()
 		repo, err := git.PlainInit(tmpDir, false)
 		require.NoError(t, err)
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("hello"), 0o644))
+		_, err = wt.Add("README.md")
+		require.NoError(t, err)
+		hash, err := wt.Commit("initial commit", &git.CommitOptions{Author: testAuthor})
+		require.NoError(t, err)
+		return repo, hash
+	}
 
-		worktree, err := repo.Worktree()
+	// addCommits appends n dummy commits to the repo and returns the last commit hash.
+	addCommits := func(t *testing.T, repo *git.Repository, n int) plumbing.Hash {
+		t.Helper()
+		wt, err := repo.Worktree()
 		require.NoError(t, err)
+		tmpDir := wt.Filesystem.Root()
+		var lastHash plumbing.Hash
+		for i := range n {
+			fName := fmt.Sprintf("file-%d.txt", i)
+			require.NoError(t, os.WriteFile(filepath.Join(tmpDir, fName), []byte(fName), 0o644))
+			_, err = wt.Add(fName)
+			require.NoError(t, err)
+			lastHash, err = wt.Commit(fmt.Sprintf("commit %d", i), &git.CommitOptions{Author: testAuthor})
+			require.NoError(t, err)
+		}
+		return lastHash
+	}
 
-		readmePath := filepath.Join(tmpDir, "README.md")
-		require.NoError(t, os.WriteFile(readmePath, []byte("hello"), 0o644))
-		_, err = worktree.Add("README.md")
-		require.NoError(t, err)
-		_, err = worktree.Commit("initial commit", &git.CommitOptions{
-			Author: &object.Signature{Name: "Test", Email: "test@test.com"},
-		})
-		require.NoError(t, err)
+	t.Run("should return nil when repository has no tags", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		repo, _ := initTestRepo(t)
 
 		// when
 		result, err := commands.GetLatestTagForChangelog(repo)
 
-		// then — no tags → nil result, no error
+		// then
 		require.NoError(t, err)
 		assert.Nil(t, result)
 	})
@@ -936,64 +960,32 @@ func TestGetLatestTagForChangelog(t *testing.T) {
 	t.Run("should return tag info when repository has a lightweight tag", func(t *testing.T) {
 		t.Parallel()
 
-		// given — repo with one commit and one lightweight tag
-		tmpDir := t.TempDir()
-		repo, err := git.PlainInit(tmpDir, false)
-		require.NoError(t, err)
-
-		worktree, err := repo.Worktree()
-		require.NoError(t, err)
-
-		readmePath := filepath.Join(tmpDir, "README.md")
-		require.NoError(t, os.WriteFile(readmePath, []byte("hello"), 0o644))
-		_, err = worktree.Add("README.md")
-		require.NoError(t, err)
-		commitHash, err := worktree.Commit("initial commit", &git.CommitOptions{
-			Author: &object.Signature{Name: "Test", Email: "test@test.com"},
-		})
-		require.NoError(t, err)
-
-		// Create a lightweight tag (no options → no tag object)
-		_, err = repo.CreateTag("v2.0.0", commitHash, nil)
+		// given
+		repo, commitHash := initTestRepo(t)
+		_, err := repo.CreateTag("v2.0.0", commitHash, nil)
 		require.NoError(t, err)
 
 		// when
 		result, err := commands.GetLatestTagForChangelog(repo)
 
-		// then — lightweight tag resolves through gitInfra.GetLatestTag
+		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "2.0.0", result.Tag.String())
 	})
 
-	t.Run("should dereference annotated tag and return tag info", func(t *testing.T) {
+	t.Run("should dereference annotated tag via ResolveLatestAnnotatedTag", func(t *testing.T) {
 		t.Parallel()
 
-		// given — repo with one commit and one annotated tag
-		tmpDir := t.TempDir()
-		repo, err := git.PlainInit(tmpDir, false)
-		require.NoError(t, err)
-
-		worktree, err := repo.Worktree()
-		require.NoError(t, err)
-
-		readmePath := filepath.Join(tmpDir, "README.md")
-		require.NoError(t, os.WriteFile(readmePath, []byte("hello"), 0o644))
-		_, err = worktree.Add("README.md")
-		require.NoError(t, err)
-		commitHash, err := worktree.Commit("initial commit", &git.CommitOptions{
-			Author: &object.Signature{Name: "Test", Email: "test@test.com"},
-		})
-		require.NoError(t, err)
-
-		// Create an annotated tag (tag object pointing at the commit)
-		_, err = repo.CreateTag("v1.2.3", commitHash, &git.CreateTagOptions{
+		// given
+		repo, commitHash := initTestRepo(t)
+		_, err := repo.CreateTag("v1.2.3", commitHash, &git.CreateTagOptions{
 			Message: "release v1.2.3",
-			Tagger:  &object.Signature{Name: "Test", Email: "test@test.com"},
+			Tagger:  testAuthor,
 		})
 		require.NoError(t, err)
 
-		// when — resolveLatestAnnotatedTag must dereference the tag object
+		// when
 		result, err := commands.ResolveLatestAnnotatedTag(repo)
 
 		// then
@@ -1002,34 +994,65 @@ func TestGetLatestTagForChangelog(t *testing.T) {
 		assert.Equal(t, "1.2.3", result.Tag.String())
 	})
 
-	t.Run("should return nil when resolveLatestAnnotatedTag is called on a repo with only lightweight tags", func(t *testing.T) {
+	t.Run("should return nil when ResolveLatestAnnotatedTag is called with only lightweight tags", func(t *testing.T) {
 		t.Parallel()
 
-		// given — repo with a lightweight tag (TagObject will fail on it)
-		tmpDir := t.TempDir()
-		repo, err := git.PlainInit(tmpDir, false)
+		// given
+		repo, commitHash := initTestRepo(t)
+		_, err := repo.CreateTag("v3.0.0", commitHash, nil)
 		require.NoError(t, err)
 
-		worktree, err := repo.Worktree()
-		require.NoError(t, err)
+		// when
+		result, err := commands.ResolveLatestAnnotatedTag(repo)
 
-		readmePath := filepath.Join(tmpDir, "README.md")
-		require.NoError(t, os.WriteFile(readmePath, []byte("hello"), 0o644))
-		_, err = worktree.Add("README.md")
+		// then
 		require.NoError(t, err)
-		commitHash, err := worktree.Commit("initial commit", &git.CommitOptions{
-			Author: &object.Signature{Name: "Test", Email: "test@test.com"},
+		assert.Nil(t, result)
+	})
+
+	t.Run("should resolve annotated tag through GetLatestTagForChangelog fallback", func(t *testing.T) {
+		t.Parallel()
+
+		// given — repo needs 5+ commits so GetLatestTag doesn't return ErrNoTagsFound early
+		repo, _ := initTestRepo(t)
+		lastHash := addCommits(t, repo, 5)
+		_, err := repo.CreateTag("v4.0.0", lastHash, &git.CreateTagOptions{
+			Message: "release v4.0.0",
+			Tagger:  testAuthor,
 		})
 		require.NoError(t, err)
 
-		_, err = repo.CreateTag("v3.0.0", commitHash, nil) // lightweight tag
+		// when — GetLatestTag will fail on annotated tag (CommitObject on tag hash),
+		// then fall back to resolveLatestAnnotatedTag
+		result, err := commands.GetLatestTagForChangelog(repo)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "4.0.0", result.Tag.String())
+	})
+
+	t.Run("should return highest annotated tag when repo has mixed lightweight and annotated tags", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		repo, commitHash := initTestRepo(t)
+		// v3.0.0 as lightweight (highest semver but NOT annotated)
+		_, err := repo.CreateTag("v3.0.0", commitHash, nil)
+		require.NoError(t, err)
+		// v2.0.0 as annotated (lower semver but annotated)
+		_, err = repo.CreateTag("v2.0.0", commitHash, &git.CreateTagOptions{
+			Message: "release v2.0.0",
+			Tagger:  testAuthor,
+		})
 		require.NoError(t, err)
 
-		// when — call resolveLatestAnnotatedTag directly (bypasses gitInfra.GetLatestTag)
+		// when
 		result, err := commands.ResolveLatestAnnotatedTag(repo)
 
-		// then — TagObject() fails for lightweight tags, so nil is returned gracefully
+		// then — should return v2.0.0 (the highest annotated tag), not nil
 		require.NoError(t, err)
-		assert.Nil(t, result)
+		require.NotNil(t, result)
+		assert.Equal(t, "2.0.0", result.Tag.String())
 	})
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	logger "github.com/sirupsen/logrus"
@@ -491,8 +492,10 @@ func commitAndPushChanges(ctx *RepoContext, branchName string) error {
 	return nil
 }
 
-// commitChanges commits the staged changes with optional GPG or SSH signing.
-func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
+// resolveSignerAndCommit reads the GPG/SSH signing configuration from the repo
+// and global git config, resolves the appropriate signer, and commits with the
+// given message. This is the single source of truth for signed commits.
+func resolveSignerAndCommit(ctx *RepoContext, commitMessage string) (plumbing.Hash, error) {
 	cfg, err := ctx.Repo.Config()
 	if err != nil {
 		return plumbing.Hash{}, fmt.Errorf("failed to get repo config: %w", err)
@@ -501,12 +504,10 @@ func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 	gpgSign := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "commit", "gpgsign")
 	gpgFormat := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg", "format")
 	signingKey := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
+	sshProgram := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg.ssh", "program")
 
 	name := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
 	email := ctx.GlobalGitConfig.Raw.Section("user").Option("email")
-	commitMessage := "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion
-
-	sshProgram := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg.ssh", "program")
 
 	signer, err := signingInfra.ResolveSignerFromGitConfig(
 		gpgSign, gpgFormat, signingKey,
@@ -517,6 +518,11 @@ func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 	}
 
 	return gitInfra.CommitChanges(ctx.Repo, ctx.Worktree, commitMessage, signer, name, email)
+}
+
+// commitChanges commits the staged changes with optional GPG or SSH signing.
+func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
+	return resolveSignerAndCommit(ctx, "chore(bump): bumped version to "+ctx.ProjectConfig.NewVersion)
 }
 
 func pushChanges(ctx *RepoContext, branchName string) error {
@@ -607,10 +613,12 @@ func getLatestTagForChangelog(repo *git.Repository) (*globalEntities.LatestTag, 
 	return resolveLatestAnnotatedTag(repo)
 }
 
-// resolveLatestAnnotatedTag walks the repository's tags, picks the one with the
-// highest semantic version, and dereferences the annotated tag object to reach
-// the underlying commit.
-// Returns (nil, nil) when no valid semver tags are found.
+// resolveLatestAnnotatedTag walks the repository's tags, dereferences each
+// annotated tag object to reach the underlying commit, and returns the one with
+// the highest semantic version.
+// Lightweight tags are skipped because this function is only called as a fallback
+// when GetLatestTag fails on annotated tags.
+// Returns (nil, nil) when no valid annotated semver tags are found.
 func resolveLatestAnnotatedTag(repo *git.Repository) (*globalEntities.LatestTag, error) {
 	tags, err := repo.Tags()
 	if err != nil {
@@ -618,46 +626,42 @@ func resolveLatestAnnotatedTag(repo *git.Repository) (*globalEntities.LatestTag,
 	}
 
 	var bestVersion *semver.Version
-	var bestRef *plumbing.Reference
-	_ = tags.ForEach(func(ref *plumbing.Reference) error {
+	var bestCommit *object.Commit
+	forEachErr := tags.ForEach(func(ref *plumbing.Reference) error {
 		v, parseErr := semver.NewVersion(ref.Name().Short())
 		if parseErr != nil {
 			return nil // skip non-semver tags
 		}
+
+		// Only consider annotated tags (TagObject succeeds).
+		tagObj, tagErr := repo.TagObject(ref.Hash())
+		if tagErr != nil {
+			return nil // skip lightweight tags
+		}
+
+		commit, commitErr := repo.CommitObject(tagObj.Target)
+		if commitErr != nil {
+			return nil // skip unresolvable tags
+		}
+
 		if bestVersion == nil || v.GreaterThan(bestVersion) {
 			bestVersion = v
-			bestRef = ref
+			bestCommit = commit
 		}
 		return nil
 	})
-
-	if bestRef == nil {
-		logger.Warn("No semver tags found; skipping current version annotation in new CHANGELOG")
-		return nil, nil
+	if forEachErr != nil {
+		return nil, fmt.Errorf("error iterating tags: %w", forEachErr)
 	}
 
-	// Try to dereference as an annotated tag object.
-	tagObj, tagErr := repo.TagObject(bestRef.Hash())
-	if tagErr != nil {
-		logger.Warnf(
-			"Could not resolve tag %s as annotated tag: %v; skipping version annotation",
-			bestRef.Name().Short(), tagErr,
-		)
-		return nil, nil
-	}
-
-	commit, commitErr := repo.CommitObject(tagObj.Target)
-	if commitErr != nil {
-		logger.Warnf(
-			"Could not get commit for annotated tag %s: %v; skipping version annotation",
-			bestRef.Name().Short(), commitErr,
-		)
+	if bestVersion == nil {
+		logger.Warn("No semver annotated tags found; skipping current version annotation in new CHANGELOG")
 		return nil, nil
 	}
 
 	return &globalEntities.LatestTag{
 		Tag:  bestVersion,
-		Date: commit.Committer.When,
+		Date: bestCommit.Committer.When,
 	}, nil
 }
 
@@ -667,8 +671,7 @@ func resolveLatestAnnotatedTag(repo *git.Repository) (*globalEntities.LatestTag,
 // branch creation starts from the new commit.
 // Push errors are only logged as warnings because a local repo may have no remote.
 func commitInitialChangelog(ctx *RepoContext, changelogPath string) error {
-	projectPath := ctx.ProjectConfig.Path
-	changelogRelativePath, err := filepath.Rel(projectPath, changelogPath)
+	changelogRelativePath, err := filepath.Rel(ctx.ProjectConfig.Path, changelogPath)
 	if err != nil {
 		return fmt.Errorf("failed to get relative path for initial CHANGELOG: %w", err)
 	}
@@ -678,32 +681,7 @@ func commitInitialChangelog(ctx *RepoContext, changelogPath string) error {
 		return fmt.Errorf("failed to stage initial CHANGELOG: %w", err)
 	}
 
-	cfg, err := ctx.Repo.Config()
-	if err != nil {
-		return fmt.Errorf("failed to get repo config: %w", err)
-	}
-
-	gpgSign := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "commit", "gpgsign")
-	gpgFormat := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg", "format")
-	signingKey := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
-	sshProgram := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg.ssh", "program")
-
-	name := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
-	email := ctx.GlobalGitConfig.Raw.Section("user").Option("email")
-
-	signer, err := signingInfra.ResolveSignerFromGitConfig(
-		gpgSign, gpgFormat, signingKey,
-		ctx.GlobalConfig.GpgKeyPath, ctx.GlobalConfig.GpgKeyPassphrase, "autobump", sshProgram,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to resolve commit signer for initial CHANGELOG: %w", err)
-	}
-
-	_, err = gitInfra.CommitChanges(
-		ctx.Repo, ctx.Worktree,
-		"chore: create initial CHANGELOG.md",
-		signer, name, email,
-	)
+	_, err = resolveSignerAndCommit(ctx, "chore: create initial CHANGELOG.md")
 	if err != nil {
 		return fmt.Errorf("failed to commit initial CHANGELOG: %w", err)
 	}
