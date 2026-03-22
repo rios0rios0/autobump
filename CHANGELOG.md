@@ -16,6 +16,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- handle missing `CHANGELOG.md` gracefully across all tag scenarios (no tags, lightweight tags, annotated tags) without crashing
+- `setupChangelog()` commits and pushes a newly created `CHANGELOG.md` before continuing, then exits cleanly for that run
+- template no longer has bare `-` placeholder lines that confused `IsUnreleasedEmpty()`
+
 ### Added
 
 - added SSH authentication configuration with `ssh_key_path`, `ssh_key_passphrase`, and `ssh_auth_sock` fields for push operations

@@ -309,19 +309,76 @@ func cloneRepoIfNeeded(ctx *RepoContext) (string, error) {
 	return "", nil
 }
 
-func setupChangelog(ctx *RepoContext, changelogPath string) error {
+// setupChangelog ensures the CHANGELOG file exists, creating and committing it when missing.
+// It returns true when the changelog already existed, or false when it was freshly created.
+func setupChangelog(ctx *RepoContext, changelogPath string) (bool, error) {
 	exists, err := createChangelogIfNotExists(changelogPath)
+	if err != nil {
+		return false, err
+	}
+	if !exists {
+		if err = addCurrentVersion(ctx, changelogPath); err != nil {
+			return false, err
+		}
+		if err = commitAndPushInitialChangelog(ctx, changelogPath); err != nil {
+			logger.Warnf("Failed to commit and push newly created CHANGELOG.md: %v", err)
+		}
+		return false, nil
+	}
+	return true, nil
+}
+
+// commitAndPushInitialChangelog stages, commits, and pushes the freshly created CHANGELOG.md
+// on the current branch (typically main/master) so that it is persisted before the bump flow runs.
+func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error {
+	changelogRelPath, err := filepath.Rel(ctx.ProjectConfig.Path, changelogPath)
+	if err != nil {
+		return fmt.Errorf("failed to get relative changelog path: %w", err)
+	}
+
+	if _, err = ctx.Worktree.Add(changelogRelPath); err != nil {
+		return fmt.Errorf("failed to stage CHANGELOG.md: %w", err)
+	}
+
+	cfg, err := ctx.Repo.Config()
+	if err != nil {
+		return fmt.Errorf("failed to get repo config: %w", err)
+	}
+
+	gpgSign := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "commit", "gpgsign")
+	gpgFormat := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg", "format")
+	signingKey := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
+	sshProgram := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg.ssh", "program")
+
+	name := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
+	email := ctx.GlobalGitConfig.Raw.Section("user").Option("email")
+
+	signer, err := signingInfra.ResolveSignerFromGitConfig(
+		gpgSign, gpgFormat, signingKey,
+		ctx.GlobalConfig.GpgKeyPath, ctx.GlobalConfig.GpgKeyPassphrase, "autobump", sshProgram,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to resolve commit signer: %w", err)
+	}
+
+	if _, err = gitInfra.CommitChanges(
+		ctx.Repo, ctx.Worktree, "chore: add CHANGELOG.md", signer, name, email,
+	); err != nil {
+		return fmt.Errorf("failed to commit CHANGELOG.md: %w", err)
+	}
+
+	branchName := ctx.Head.Name().Short()
+	refSpec := gitconfig.RefSpec("refs/heads/" + branchName + ":refs/heads/" + branchName)
+
+	serviceType, err := gitOps.GetRemoteServiceType(ctx.Repo)
 	if err != nil {
 		return err
 	}
-	if !exists {
-		err = addCurrentVersion(ctx, changelogPath)
-		if err != nil {
-			return err
-		}
-		// TODO: commit and push the newly created file
-	}
-	return nil
+
+	username := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
+	authMethods := collectAuthMethods(serviceType, username, ctx.GlobalConfig, ctx.ProjectConfig)
+
+	return gitInfra.PushWithTransportDetection(ctx.Repo, refSpec, authMethods)
 }
 
 func shouldBumpProject(ctx *RepoContext, changelogPath string) (bool, error) {
@@ -542,6 +599,8 @@ func checkoutToMainBranch(ctx *RepoContext) error {
 }
 
 // addCurrentVersion adds the current version to the CHANGELOG file.
+// If the repository has no tags or the tag cannot be resolved (e.g. annotated tags),
+// the function logs a warning and returns nil so that the CHANGELOG creation still succeeds.
 func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 	lines, err := support.ReadLines(changelogPath)
 	if err != nil {
@@ -550,7 +609,8 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 
 	latestTag, err := gitInfra.GetLatestTag(ctx.Repo)
 	if err != nil {
-		return err
+		logger.Warnf("Could not determine latest tag, skipping historical version in CHANGELOG: %v", err)
+		return nil
 	}
 
 	// TODO: we should replace <LINK TO THE PLATFORM TO OPEN THE PULL REQUEST> with the actual link
@@ -560,12 +620,7 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 		fmt.Sprintf("\n## [%s] - %s\n", latestTag.Tag, latestTag.Date.Format("2006-01-02")),
 		"The changes weren't tracked until this version.",
 	}...)
-	err = support.WriteLines(changelogPath, lines)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return support.WriteLines(changelogPath, lines)
 }
 
 // ProcessRepo processes a repository:
@@ -611,9 +666,16 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 	}
 
 	// Set up the changelog
-	err = setupChangelog(ctx, changelogPath)
+	changelogExisted, err := setupChangelog(ctx, changelogPath)
 	if err != nil {
 		return err
+	}
+	if !changelogExisted {
+		logger.Infof(
+			"New CHANGELOG.md was created for project '%s'; no unreleased content to bump",
+			ctx.ProjectConfig.Name,
+		)
+		return nil
 	}
 
 	// Determine if bump is needed
