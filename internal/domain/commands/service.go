@@ -671,7 +671,10 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 		return err
 	}
 	if !changelogExisted {
-		logger.Infof("New CHANGELOG.md was created for project '%s'; no unreleased content to bump", ctx.ProjectConfig.Name)
+		logger.Infof(
+			"New CHANGELOG.md was created for project '%s'; no unreleased content to bump",
+			ctx.ProjectConfig.Name,
+		)
 		return nil
 	}
 
