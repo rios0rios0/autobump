@@ -17,6 +17,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	logger "github.com/sirupsen/logrus"
+	"github.com/skeema/knownhosts"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
@@ -905,7 +906,7 @@ func collectSSHAuthMethods(globalConfig *entities.GlobalConfig) []transport.Auth
 		if err != nil {
 			logger.Warnf("Failed to load SSH key from %s: %v", globalConfig.SSHKeyPath, err)
 		} else {
-			auth.HostKeyCallback = ssh.InsecureIgnoreHostKey() //nolint:gosec // known_hosts validation handled by go-git fallback
+			auth.HostKeyCallback = hostKeyCallback()
 			methods = append(methods, auth)
 		}
 	}
@@ -931,18 +932,37 @@ func collectSSHAuthMethods(globalConfig *entities.GlobalConfig) []transport.Auth
 	return methods
 }
 
-// sshAgentAuthFromSocket dials the given Unix socket and returns an SSH agent auth method.
+// sshAgentAuthFromSocket returns an SSH agent auth method that dials the given Unix socket
+// on each use and closes the connection after retrieving the available signers.
 func sshAgentAuthFromSocket(socketPath string) transport.AuthMethod {
 	conn, err := net.Dial("unix", socketPath)
 	if err != nil {
 		logger.Debugf("Cannot connect to SSH agent at %s: %v", socketPath, err)
 		return nil
 	}
+	if closeErr := conn.Close(); closeErr != nil {
+		logger.Debugf("Failed to close SSH agent probe connection for %s: %v", socketPath, closeErr)
+	}
 
-	agentClient := agent.NewClient(conn)
 	return &gitssh.PublicKeysCallback{
-		User:     "git",
-		Callback: agentClient.Signers,
+		User: "git",
+		Callback: func() ([]ssh.Signer, error) {
+			c, dialErr := net.Dial("unix", socketPath)
+			if dialErr != nil {
+				return nil, dialErr
+			}
+			defer func() {
+				if closeErr := c.Close(); closeErr != nil {
+					logger.Debugf("Failed to close SSH agent connection for %s: %v", socketPath, closeErr)
+				}
+			}()
+
+			agentClient := agent.NewClient(c)
+			return agentClient.Signers()
+		},
+		HostKeyCallbackHelper: gitssh.HostKeyCallbackHelper{
+			HostKeyCallback: hostKeyCallback(),
+		},
 	}
 }
 
@@ -951,7 +971,9 @@ func detectSSHAgentSockets() []string {
 	var sockets []string
 
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		sockets = append(sockets, sock)
+		if info, statErr := os.Stat(sock); statErr == nil && info.Mode().Type() == os.ModeSocket {
+			sockets = append(sockets, sock)
+		}
 	}
 
 	home, err := os.UserHomeDir()
@@ -967,6 +989,25 @@ func detectSSHAgentSockets() []string {
 	}
 
 	return sockets
+}
+
+// hostKeyCallback returns an ssh.HostKeyCallback that validates against the user's
+// known_hosts file. Falls back to InsecureIgnoreHostKey if no known_hosts is available.
+func hostKeyCallback() ssh.HostKeyCallback {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		logger.Warn("Cannot determine home directory, using insecure host key verification")
+		return ssh.InsecureIgnoreHostKey() //nolint:gosec // fallback when home dir unavailable
+	}
+
+	knownHostsPath := filepath.Join(home, ".ssh", "known_hosts")
+	cb, err := knownhosts.New(knownHostsPath)
+	if err != nil {
+		logger.Warnf("Cannot load known_hosts from %s: %v, using insecure host key verification", knownHostsPath, err)
+		return ssh.InsecureIgnoreHostKey() //nolint:gosec // fallback when known_hosts unavailable
+	}
+
+	return ssh.HostKeyCallback(cb)
 }
 
 // getForgeProvider creates a gitforge ForgeProvider with the given token.
