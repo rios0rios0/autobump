@@ -994,19 +994,23 @@ func detectSSHAgentSockets() []string {
 }
 
 // hostKeyCallback returns an ssh.HostKeyCallback that validates against the user's
-// known_hosts file. Falls back to InsecureIgnoreHostKey if no known_hosts is available.
+// known_hosts file. Returns nil if no known_hosts is available, letting go-git
+// fall back to its own default knownhosts verification.
 func hostKeyCallback() ssh.HostKeyCallback {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		logger.Warn("Cannot determine home directory, using insecure host key verification")
-		return ssh.InsecureIgnoreHostKey() //nolint:gosec // fallback when home dir unavailable
+		logger.Warn("Cannot determine home directory, deferring to go-git default host key verification")
+		return nil
 	}
 
 	knownHostsPath := filepath.Join(home, ".ssh", "known_hosts")
 	cb, err := knownhosts.New(knownHostsPath)
 	if err != nil {
-		logger.Warnf("Cannot load known_hosts from %s: %v, using insecure host key verification", knownHostsPath, err)
-		return ssh.InsecureIgnoreHostKey() //nolint:gosec // fallback when known_hosts unavailable
+		logger.Warnf(
+			"Cannot load known_hosts from %s: %v, deferring to go-git default host key verification",
+			knownHostsPath, err,
+		)
+		return nil
 	}
 
 	return ssh.HostKeyCallback(cb)
