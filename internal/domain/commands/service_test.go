@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gossh "golang.org/x/crypto/ssh"
@@ -798,5 +800,236 @@ func TestProcessRepo(t *testing.T) {
 
 		// then
 		assert.Error(t, err)
+	})
+}
+
+func TestShouldBumpProject(t *testing.T) {
+	t.Parallel()
+
+	emptyChangelog := `# Changelog
+
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Removed
+`
+	populatedChangelog := `# Changelog
+
+## [Unreleased]
+
+### Added
+
+- added new feature
+
+### Changed
+
+### Removed
+`
+
+	t.Run("should return false and log new-changelog message when NewChangelogCreated is true and unreleased is empty", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		changelogPath := filepath.Join(tmpDir, "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelogPath, []byte(emptyChangelog), 0o644))
+
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath(tmpDir).
+			BuildProjectConfig()
+		ctx := &commands.RepoContext{
+			ProjectConfig:       projectConfig,
+			NewChangelogCreated: true,
+		}
+
+		// when
+		result, err := commands.ShouldBumpProject(ctx, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("should return false and log skip message when NewChangelogCreated is false and unreleased is empty", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		changelogPath := filepath.Join(tmpDir, "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelogPath, []byte(emptyChangelog), 0o644))
+
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath(tmpDir).
+			BuildProjectConfig()
+		ctx := &commands.RepoContext{
+			ProjectConfig:       projectConfig,
+			NewChangelogCreated: false,
+		}
+
+		// when
+		result, err := commands.ShouldBumpProject(ctx, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("should return true when unreleased section has real entries", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		changelogPath := filepath.Join(tmpDir, "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelogPath, []byte(populatedChangelog), 0o644))
+
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath(tmpDir).
+			BuildProjectConfig()
+		ctx := &commands.RepoContext{
+			ProjectConfig:       projectConfig,
+			NewChangelogCreated: false,
+		}
+
+		// when
+		result, err := commands.ShouldBumpProject(ctx, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, result)
+	})
+}
+
+func TestGetLatestTagForChangelog(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return nil when repository has no tags", func(t *testing.T) {
+		t.Parallel()
+
+		// given — initialise a bare repo with a single commit but no tags
+		tmpDir := t.TempDir()
+		repo, err := git.PlainInit(tmpDir, false)
+		require.NoError(t, err)
+
+		worktree, err := repo.Worktree()
+		require.NoError(t, err)
+
+		readmePath := filepath.Join(tmpDir, "README.md")
+		require.NoError(t, os.WriteFile(readmePath, []byte("hello"), 0o644))
+		_, err = worktree.Add("README.md")
+		require.NoError(t, err)
+		_, err = worktree.Commit("initial commit", &git.CommitOptions{
+			Author: &object.Signature{Name: "Test", Email: "test@test.com"},
+		})
+		require.NoError(t, err)
+
+		// when
+		result, err := commands.GetLatestTagForChangelog(repo)
+
+		// then — no tags → nil result, no error
+		require.NoError(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("should return tag info when repository has a lightweight tag", func(t *testing.T) {
+		t.Parallel()
+
+		// given — repo with one commit and one lightweight tag
+		tmpDir := t.TempDir()
+		repo, err := git.PlainInit(tmpDir, false)
+		require.NoError(t, err)
+
+		worktree, err := repo.Worktree()
+		require.NoError(t, err)
+
+		readmePath := filepath.Join(tmpDir, "README.md")
+		require.NoError(t, os.WriteFile(readmePath, []byte("hello"), 0o644))
+		_, err = worktree.Add("README.md")
+		require.NoError(t, err)
+		commitHash, err := worktree.Commit("initial commit", &git.CommitOptions{
+			Author: &object.Signature{Name: "Test", Email: "test@test.com"},
+		})
+		require.NoError(t, err)
+
+		// Create a lightweight tag (no options → no tag object)
+		_, err = repo.CreateTag("v2.0.0", commitHash, nil)
+		require.NoError(t, err)
+
+		// when
+		result, err := commands.GetLatestTagForChangelog(repo)
+
+		// then — lightweight tag resolves through gitInfra.GetLatestTag
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "2.0.0", result.Tag.String())
+	})
+
+	t.Run("should dereference annotated tag and return tag info", func(t *testing.T) {
+		t.Parallel()
+
+		// given — repo with one commit and one annotated tag
+		tmpDir := t.TempDir()
+		repo, err := git.PlainInit(tmpDir, false)
+		require.NoError(t, err)
+
+		worktree, err := repo.Worktree()
+		require.NoError(t, err)
+
+		readmePath := filepath.Join(tmpDir, "README.md")
+		require.NoError(t, os.WriteFile(readmePath, []byte("hello"), 0o644))
+		_, err = worktree.Add("README.md")
+		require.NoError(t, err)
+		commitHash, err := worktree.Commit("initial commit", &git.CommitOptions{
+			Author: &object.Signature{Name: "Test", Email: "test@test.com"},
+		})
+		require.NoError(t, err)
+
+		// Create an annotated tag (tag object pointing at the commit)
+		_, err = repo.CreateTag("v1.2.3", commitHash, &git.CreateTagOptions{
+			Message: "release v1.2.3",
+			Tagger:  &object.Signature{Name: "Test", Email: "test@test.com"},
+		})
+		require.NoError(t, err)
+
+		// when — resolveLatestAnnotatedTag must dereference the tag object
+		result, err := commands.ResolveLatestAnnotatedTag(repo)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "1.2.3", result.Tag.String())
+	})
+
+	t.Run("should return nil when resolveLatestAnnotatedTag is called on a repo with only lightweight tags", func(t *testing.T) {
+		t.Parallel()
+
+		// given — repo with a lightweight tag (TagObject will fail on it)
+		tmpDir := t.TempDir()
+		repo, err := git.PlainInit(tmpDir, false)
+		require.NoError(t, err)
+
+		worktree, err := repo.Worktree()
+		require.NoError(t, err)
+
+		readmePath := filepath.Join(tmpDir, "README.md")
+		require.NoError(t, os.WriteFile(readmePath, []byte("hello"), 0o644))
+		_, err = worktree.Add("README.md")
+		require.NoError(t, err)
+		commitHash, err := worktree.Commit("initial commit", &git.CommitOptions{
+			Author: &object.Signature{Name: "Test", Email: "test@test.com"},
+		})
+		require.NoError(t, err)
+
+		_, err = repo.CreateTag("v3.0.0", commitHash, nil) // lightweight tag
+		require.NoError(t, err)
+
+		// when — call resolveLatestAnnotatedTag directly (bypasses gitInfra.GetLatestTag)
+		result, err := commands.ResolveLatestAnnotatedTag(repo)
+
+		// then — TagObject() fails for lightweight tags, so nil is returned gracefully
+		require.NoError(t, err)
+		assert.Nil(t, result)
 	})
 }

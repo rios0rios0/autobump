@@ -29,3 +29,12 @@ var CollectSSHAuthMethods = collectSSHAuthMethods //nolint:gochecknoglobals // t
 
 // DetectSSHAgentSockets exports detectSSHAgentSockets for testing.
 var DetectSSHAgentSockets = detectSSHAgentSockets //nolint:gochecknoglobals // test export
+
+// ShouldBumpProject exports shouldBumpProject for testing.
+var ShouldBumpProject = shouldBumpProject //nolint:gochecknoglobals // test export
+
+// GetLatestTagForChangelog exports getLatestTagForChangelog for testing.
+var GetLatestTagForChangelog = getLatestTagForChangelog //nolint:gochecknoglobals // test export
+
+// ResolveLatestAnnotatedTag exports resolveLatestAnnotatedTag for testing.
+var ResolveLatestAnnotatedTag = resolveLatestAnnotatedTag //nolint:gochecknoglobals // test export

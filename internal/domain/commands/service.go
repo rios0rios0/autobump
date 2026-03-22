@@ -91,12 +91,13 @@ func SetGitOperations(ops *gitInfra.GitOperations) {
 
 // RepoContext holds the context for processing a repository.
 type RepoContext struct {
-	GlobalConfig    *entities.GlobalConfig
-	ProjectConfig   *entities.ProjectConfig
-	GlobalGitConfig *gitconfig.Config
-	Repo            *git.Repository
-	Worktree        *git.Worktree
-	Head            *plumbing.Reference
+	GlobalConfig       *entities.GlobalConfig
+	ProjectConfig      *entities.ProjectConfig
+	GlobalGitConfig    *gitconfig.Config
+	Repo               *git.Repository
+	Worktree           *git.Worktree
+	Head               *plumbing.Reference
+	NewChangelogCreated bool // true when CHANGELOG.md was created by this run
 }
 
 //nolint:gochecknoglobals // read-only lookup table mapping langforge Language constants to common config key aliases
@@ -315,11 +316,17 @@ func setupChangelog(ctx *RepoContext, changelogPath string) error {
 		return err
 	}
 	if !exists {
+		ctx.NewChangelogCreated = true
 		err = addCurrentVersion(ctx, changelogPath)
 		if err != nil {
 			return err
 		}
-		// TODO: commit and push the newly created file
+		// Commit and push the newly created CHANGELOG so that it lands on the
+		// default branch before the bump branch is forked off it.
+		err = commitInitialChangelog(ctx, changelogPath)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -335,7 +342,14 @@ func shouldBumpProject(ctx *RepoContext, changelogPath string) (bool, error) {
 		return false, err
 	}
 	if bumpEmpty {
-		logger.Infof("Bump is empty, skipping project %s", ctx.ProjectConfig.Name)
+		if ctx.NewChangelogCreated {
+			logger.Infof(
+				"New CHANGELOG created for project %s; add unreleased entries and re-run autobump to create a release PR",
+				ctx.ProjectConfig.Name,
+			)
+		} else {
+			logger.Infof("Bump is empty, skipping project %s", ctx.ProjectConfig.Name)
+		}
 		return false, nil
 	}
 	return true, nil
@@ -542,15 +556,22 @@ func checkoutToMainBranch(ctx *RepoContext) error {
 }
 
 // addCurrentVersion adds the current version to the CHANGELOG file.
+// If no tags exist or the tag cannot be resolved, the function logs a warning
+// and returns nil so that the caller can proceed without a version anchor.
 func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 	lines, err := support.ReadLines(changelogPath)
 	if err != nil {
 		return err
 	}
 
-	latestTag, err := gitInfra.GetLatestTag(ctx.Repo)
+	latestTag, err := getLatestTagForChangelog(ctx.Repo)
 	if err != nil {
-		return err
+		logger.Warnf("Could not determine latest tag: %v; skipping current version annotation in new CHANGELOG", err)
+		return nil
+	}
+	if latestTag == nil {
+		// No tags at all – skip adding the version anchor gracefully.
+		return nil
 	}
 
 	// TODO: we should replace <LINK TO THE PLATFORM TO OPEN THE PULL REQUEST> with the actual link
@@ -563,6 +584,139 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 	err = support.WriteLines(changelogPath, lines)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// getLatestTagForChangelog tries to obtain the latest Git tag, handling both
+// lightweight and annotated tags. Returns (nil, nil) when the repository has
+// no tags yet so that the caller can skip the version annotation gracefully.
+func getLatestTagForChangelog(repo *git.Repository) (*globalEntities.LatestTag, error) {
+	latestTag, err := gitInfra.GetLatestTag(repo)
+	if err == nil {
+		return latestTag, nil
+	}
+	if errors.Is(err, gitInfra.ErrNoTagsFound) {
+		logger.Warn("No tags found; skipping current version annotation in new CHANGELOG")
+		return nil, nil
+	}
+	// GetLatestTag failed (likely because the latest tag is annotated and
+	// go-git cannot resolve the tag-object hash directly to a commit).
+	// Fall back to a manual dereference that handles annotated tags.
+	return resolveLatestAnnotatedTag(repo)
+}
+
+// resolveLatestAnnotatedTag walks the repository's tags, picks the one with the
+// highest semantic version, and dereferences the annotated tag object to reach
+// the underlying commit.
+// Returns (nil, nil) when no valid semver tags are found.
+func resolveLatestAnnotatedTag(repo *git.Repository) (*globalEntities.LatestTag, error) {
+	tags, err := repo.Tags()
+	if err != nil {
+		return nil, fmt.Errorf("could not list tags: %w", err)
+	}
+
+	var bestVersion *semver.Version
+	var bestRef *plumbing.Reference
+	_ = tags.ForEach(func(ref *plumbing.Reference) error {
+		v, parseErr := semver.NewVersion(ref.Name().Short())
+		if parseErr != nil {
+			return nil // skip non-semver tags
+		}
+		if bestVersion == nil || v.GreaterThan(bestVersion) {
+			bestVersion = v
+			bestRef = ref
+		}
+		return nil
+	})
+
+	if bestRef == nil {
+		logger.Warn("No semver tags found; skipping current version annotation in new CHANGELOG")
+		return nil, nil
+	}
+
+	// Try to dereference as an annotated tag object.
+	tagObj, tagErr := repo.TagObject(bestRef.Hash())
+	if tagErr != nil {
+		logger.Warnf(
+			"Could not resolve tag %s as annotated tag: %v; skipping version annotation",
+			bestRef.Name().Short(), tagErr,
+		)
+		return nil, nil
+	}
+
+	commit, commitErr := repo.CommitObject(tagObj.Target)
+	if commitErr != nil {
+		logger.Warnf(
+			"Could not get commit for annotated tag %s: %v; skipping version annotation",
+			bestRef.Name().Short(), commitErr,
+		)
+		return nil, nil
+	}
+
+	return &globalEntities.LatestTag{
+		Tag:  bestVersion,
+		Date: commit.Committer.When,
+	}, nil
+}
+
+// commitInitialChangelog stages, commits, and (best-effort) pushes the freshly
+// created CHANGELOG.md on the current branch (typically main or master).
+// After a successful commit, ctx.Head is refreshed so that any subsequent
+// branch creation starts from the new commit.
+// Push errors are only logged as warnings because a local repo may have no remote.
+func commitInitialChangelog(ctx *RepoContext, changelogPath string) error {
+	projectPath := ctx.ProjectConfig.Path
+	changelogRelativePath, err := filepath.Rel(projectPath, changelogPath)
+	if err != nil {
+		return fmt.Errorf("failed to get relative path for initial CHANGELOG: %w", err)
+	}
+
+	_, err = ctx.Worktree.Add(changelogRelativePath)
+	if err != nil {
+		return fmt.Errorf("failed to stage initial CHANGELOG: %w", err)
+	}
+
+	cfg, err := ctx.Repo.Config()
+	if err != nil {
+		return fmt.Errorf("failed to get repo config: %w", err)
+	}
+
+	gpgSign := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "commit", "gpgsign")
+	gpgFormat := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg", "format")
+	signingKey := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
+	sshProgram := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg.ssh", "program")
+
+	name := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
+	email := ctx.GlobalGitConfig.Raw.Section("user").Option("email")
+
+	signer, err := signingInfra.ResolveSignerFromGitConfig(
+		gpgSign, gpgFormat, signingKey,
+		ctx.GlobalConfig.GpgKeyPath, ctx.GlobalConfig.GpgKeyPassphrase, "autobump", sshProgram,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to resolve commit signer for initial CHANGELOG: %w", err)
+	}
+
+	_, err = gitInfra.CommitChanges(
+		ctx.Repo, ctx.Worktree,
+		"chore: create initial CHANGELOG.md",
+		signer, name, email,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to commit initial CHANGELOG: %w", err)
+	}
+
+	// Refresh HEAD so that subsequent bump-branch creation starts from this commit.
+	ctx.Head, err = ctx.Repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to refresh HEAD after initial CHANGELOG commit: %w", err)
+	}
+
+	// Push is best-effort — local repos or repos with no configured remote are fine.
+	if pushErr := pushChanges(ctx, ctx.Head.Name().Short()); pushErr != nil {
+		logger.Warnf("Could not push initial CHANGELOG to remote (%v); continuing", pushErr)
 	}
 
 	return nil
