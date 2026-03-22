@@ -6,6 +6,18 @@
 # can be a literal string, a file path, or resolved from the GPG_PASSPHRASE env var
 #gpg_key_passphrase: '/home/user/.gnupg/autobump-passphrase.txt'
 
+# (optional) path to SSH private key for push authentication
+# used when SSH agent is not available (e.g., CI environments)
+#ssh_key_path: '~/.ssh/id_ed25519'
+
+# (optional) passphrase for the SSH key above
+# can be a literal string or a file path
+#ssh_key_passphrase: ''
+
+# (optional) custom SSH agent socket path (e.g., for 1Password)
+# auto-detected from common locations if not set
+#ssh_auth_sock: '~/.1password/agent.sock'
+
 # GitLab/Azure DevOps/GitHub personal access token used to create MRs/PRs
 # set it to a path to read the token from a file
 gitlab_access_token: "glpat-TOKEN"

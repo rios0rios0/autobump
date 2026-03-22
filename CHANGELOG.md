@@ -16,6 +16,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added SSH authentication configuration with `ssh_key_path`, `ssh_key_passphrase`, and `ssh_auth_sock` fields for push operations
+- added auto-detection of common SSH agent sockets (1Password, standard `ssh-agent`) when `SSH_AUTH_SOCK` is not set
+
 ## [2.24.0] - 2026-03-20
 
 ### Added
