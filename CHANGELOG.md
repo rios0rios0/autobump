@@ -25,9 +25,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
-- handle missing `CHANGELOG.md` gracefully across all tag scenarios (no tags, lightweight tags, annotated tags) without crashing
-- `setupChangelog()` commits and pushes a newly created `CHANGELOG.md` before continuing, then exits cleanly for that run
-- template no longer has bare `-` placeholder lines that confused `IsUnreleasedEmpty()`
+- fixed `setupChangelog()` so that it commits and pushes a newly created `CHANGELOG.md` before continuing, then exits cleanly for that run
+- fixed changelog template to remove bare `-` placeholder lines that previously confused `IsUnreleasedEmpty()`
+- fixed handling of missing `CHANGELOG.md` across all tag scenarios (no tags, lightweight tags, annotated tags) to avoid crashes
 
 ## [2.24.0] - 2026-03-20
 
