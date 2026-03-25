@@ -35,3 +35,6 @@ var AddCurrentVersion = addCurrentVersion //nolint:gochecknoglobals // test expo
 
 // SetupChangelog exports setupChangelog for testing.
 var SetupChangelog = setupChangelog //nolint:gochecknoglobals // test export
+
+// UpdateVersion exports updateVersion for testing.
+var UpdateVersion = updateVersion //nolint:gochecknoglobals // test export

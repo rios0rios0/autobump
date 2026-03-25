@@ -62,11 +62,11 @@ languages:
       - "settings.gradle"
     version_files:
       - path: "build.gradle"
-        patterns: [ "(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')" ]
+        patterns: [ "(?m)(^\\s*version\\s*[=:]?\\s*[\"'])[^\"']+([\"'])" ]
       - path: "lib/build.gradle"
-        patterns: [ "(version\\s*=\\s*')\\d+\\.\\d+\\.\\d+(')" ]
+        patterns: [ "(?m)(^\\s*version\\s*[=:]?\\s*[\"'])[^\"']+([\"'])" ]
       - path: "pom.xml"
-        patterns: [ "(\\s*<version>)\\d+\\.\\d+\\.\\d+(</version>)" ]
+        patterns: [ "(\\s*<version>)[^<]+(</version>)" ]
       - path: "src/main/resources/application.yaml"
         patterns: [ "(\\s*version:\\s*')\\d+\\.\\d+\\.\\d+(')" ]
 
