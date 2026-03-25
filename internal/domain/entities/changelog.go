@@ -1,6 +1,9 @@
 package entities
 
 import (
+	"slices"
+	"strings"
+
 	"github.com/Masterminds/semver/v3"
 	changelogEntities "github.com/rios0rios0/gitforge/pkg/changelog/domain/entities"
 )
@@ -28,12 +31,47 @@ func FindLatestVersion(lines []string) (*semver.Version, error) {
 	return changelogEntities.NewChangelog(lines).FindLatestVersion()
 }
 
-// ProcessChangelog delegates to gitforge's Changelog.Process.
+// ProcessChangelog delegates to gitforge's Changelog.Process and sorts entries alphabetically.
 func ProcessChangelog(lines []string) (*semver.Version, []string, error) {
-	return changelogEntities.NewChangelog(lines).Process()
+	version, content, err := changelogEntities.NewChangelog(lines).Process()
+	if err != nil {
+		return nil, nil, err
+	}
+	return version, SortChangelogEntries(content), nil
 }
 
-// ProcessNewChangelog delegates to gitforge's Changelog.ProcessNew.
+// ProcessNewChangelog delegates to gitforge's Changelog.ProcessNew and sorts entries alphabetically.
 func ProcessNewChangelog(lines []string) (*semver.Version, []string, error) {
-	return changelogEntities.NewChangelog(lines).ProcessNew()
+	version, content, err := changelogEntities.NewChangelog(lines).ProcessNew()
+	if err != nil {
+		return nil, nil, err
+	}
+	return version, SortChangelogEntries(content), nil
+}
+
+// SortChangelogEntries sorts bullet entries (lines starting with "- ")
+// alphabetically (case-insensitive) within each contiguous run.
+func SortChangelogEntries(lines []string) []string {
+	result := make([]string, 0, len(lines))
+	i := 0
+	for i < len(lines) {
+		if !strings.HasPrefix(strings.TrimSpace(lines[i]), "- ") {
+			result = append(result, lines[i])
+			i++
+			continue
+		}
+
+		var bullets []string
+		for i < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i]), "- ") {
+			bullets = append(bullets, lines[i])
+			i++
+		}
+
+		slices.SortStableFunc(bullets, func(a, b string) int {
+			return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+		})
+
+		result = append(result, bullets...)
+	}
+	return result
 }
