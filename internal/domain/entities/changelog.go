@@ -55,14 +55,14 @@ func SortChangelogEntries(lines []string) []string {
 	result := make([]string, 0, len(lines))
 	i := 0
 	for i < len(lines) {
-		if !strings.HasPrefix(strings.TrimSpace(lines[i]), "- ") {
+		if !strings.HasPrefix(lines[i], "- ") {
 			result = append(result, lines[i])
 			i++
 			continue
 		}
 
 		var bullets []string
-		for i < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i]), "- ") {
+		for i < len(lines) && strings.HasPrefix(lines[i], "- ") {
 			bullets = append(bullets, lines[i])
 			i++
 		}

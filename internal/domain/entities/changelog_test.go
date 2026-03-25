@@ -434,6 +434,43 @@ func TestProcessChangelog(t *testing.T) {
 			"comparison link for oldest version should be preserved")
 	})
 
+	t.Run("should return sorted entries after processing new changelog", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		lines := []string{
+			"# Changelog",
+			"",
+			"## [Unreleased]",
+			"",
+			"### Added",
+			"",
+			"- added zulu feature",
+			"- added alpha feature",
+			"- added mike feature",
+			"",
+		}
+
+		// when
+		version, content, err := entities.ProcessNewChangelog(lines)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "0.1.0", version.String())
+
+		joined := strings.Join(content, "\n")
+		addedAlphaIdx := strings.Index(joined, "- added alpha feature")
+		addedMikeIdx := strings.Index(joined, "- added mike feature")
+		addedZuluIdx := strings.Index(joined, "- added zulu feature")
+		require.NotEqual(t, -1, addedAlphaIdx, "alpha entry should exist")
+		require.NotEqual(t, -1, addedMikeIdx, "mike entry should exist")
+		require.NotEqual(t, -1, addedZuluIdx, "zulu entry should exist")
+		assert.Less(t, addedAlphaIdx, addedMikeIdx,
+			"alpha should appear before mike (sorted)")
+		assert.Less(t, addedMikeIdx, addedZuluIdx,
+			"mike should appear before zulu (sorted)")
+	})
+
 	t.Run("should return sorted entries after processing changelog", func(t *testing.T) {
 		t.Parallel()
 
