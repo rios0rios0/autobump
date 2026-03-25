@@ -13,6 +13,7 @@ type GlobalConfigBuilder struct {
 	providers              []entities.ProviderConfig
 	projects               []entities.ProjectConfig
 	languagesConfig        map[string]entities.LanguageConfig
+	changelogPath          string
 	gpgKeyPath             string
 	gpgKeyPassphrase       string
 	sshKeyPath             string
@@ -56,6 +57,12 @@ func (b *GlobalConfigBuilder) WithLanguagesConfig(
 	languagesConfig map[string]entities.LanguageConfig,
 ) *GlobalConfigBuilder {
 	b.languagesConfig = languagesConfig
+	return b
+}
+
+// WithChangelogPath sets the changelog file path.
+func (b *GlobalConfigBuilder) WithChangelogPath(path string) *GlobalConfigBuilder {
+	b.changelogPath = path
 	return b
 }
 
@@ -124,6 +131,7 @@ func (b *GlobalConfigBuilder) BuildGlobalConfig() *entities.GlobalConfig {
 		Providers:              b.providers,
 		Projects:               b.projects,
 		LanguagesConfig:        b.languagesConfig,
+		ChangelogPath:          b.changelogPath,
 		GpgKeyPath:             b.gpgKeyPath,
 		GpgKeyPassphrase:       b.gpgKeyPassphrase,
 		SSHKeyPath:             b.sshKeyPath,
@@ -142,6 +150,7 @@ func (b *GlobalConfigBuilder) Reset() testkit.Builder {
 	b.providers = nil
 	b.projects = nil
 	b.languagesConfig = make(map[string]entities.LanguageConfig)
+	b.changelogPath = ""
 	b.gpgKeyPath = ""
 	b.gpgKeyPassphrase = ""
 	b.sshKeyPath = ""
@@ -178,6 +187,7 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 		providers:              providersCopy,
 		projects:               projectsCopy,
 		languagesConfig:        languagesConfigCopy,
+		changelogPath:          b.changelogPath,
 		gpgKeyPath:             b.gpgKeyPath,
 		gpgKeyPassphrase:       b.gpgKeyPassphrase,
 		sshKeyPath:             b.sshKeyPath,

@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added configurable changelog file path via `changelog_path` in project config and per-project `.autobump.yaml`
+
 ## [2.25.1] - 2026-03-24
 
 ### Changed
