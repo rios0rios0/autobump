@@ -70,7 +70,7 @@ func TestUpdateVersion(t *testing.T) {
 		assert.Contains(t, content, "<version>4.13.2</version>")
 	})
 
-	t.Run("should update project version and not parent version in pom.xml with parent block", func(t *testing.T) {
+	t.Run("should update project version and not parent version in pom.xml when parent block exists", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		pomContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -223,7 +223,7 @@ repositories {
 		assert.Contains(t, content, "id 'com.example.plugin' version '1.0.0'")
 	})
 
-	t.Run("should update version in build.gradle with single quotes and no equals sign", func(t *testing.T) {
+	t.Run("should update version in build.gradle when using single quotes and no equals sign", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		gradleContent := `plugins {
@@ -266,7 +266,7 @@ repositories {
 		assert.Contains(t, content, "version '0.1.0'")
 	})
 
-	t.Run("should update version in build.gradle with double quotes and no equals sign", func(t *testing.T) {
+	t.Run("should update version in build.gradle when using double quotes and no equals sign", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		gradleContent := `plugins {
@@ -308,7 +308,7 @@ repositories {
 		assert.Contains(t, content, `version "0.1.0"`)
 	})
 
-	t.Run("should update version in build.gradle with equals sign and single quotes", func(t *testing.T) {
+	t.Run("should update version in build.gradle when using equals sign and single quotes", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		gradleContent := `plugins {
