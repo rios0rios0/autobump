@@ -46,10 +46,14 @@ var (
 
 // loadProjectConfigOverrides searches for a per-project .autobump.yaml in the given
 // project directory. If found, it reads the file and merges its languages section
-// into the provided globalConfig, returning a new GlobalConfig without mutating the original.
-// If no per-project config is found, the original globalConfig is returned unchanged.
+// into the provided globalConfig, returning a new GlobalConfig without mutating the
+// original globalConfig, but it may update the provided projectConfig.
+// It also merges the changelog_path from the per-project config into the projectConfig
+// when the projectConfig does not already specify one. If no per-project config is
+// found, the original globalConfig is returned unchanged.
 func loadProjectConfigOverrides(
 	globalConfig *entities.GlobalConfig,
+	projectConfig *entities.ProjectConfig,
 	projectPath string,
 ) *entities.GlobalConfig {
 	configPath := entities.FindProjectConfigFile(projectPath)
@@ -63,6 +67,10 @@ func loadProjectConfigOverrides(
 	if err != nil {
 		logger.Warnf("Failed to read per-project config %s: %v, using global config", configPath, err)
 		return globalConfig
+	}
+
+	if projectOverrides.ChangelogPath != "" && projectConfig.ChangelogPath == "" {
+		projectConfig.ChangelogPath = projectOverrides.ChangelogPath
 	}
 
 	if len(projectOverrides.LanguagesConfig) == 0 {
@@ -282,7 +290,11 @@ func generatePRDescription(ctx *RepoContext) string {
 	)
 
 	sb.WriteString("### Changes\n\n")
-	sb.WriteString("- Updated `CHANGELOG.md` with the new version and date\n")
+	changelogFile := ctx.ProjectConfig.ChangelogPath
+	if changelogFile == "" {
+		changelogFile = "CHANGELOG.md"
+	}
+	fmt.Fprintf(&sb, "- Updated `%s` with the new version and date\n", changelogFile)
 
 	versionFiles, _ := getVersionFiles(ctx.GlobalConfig, ctx.ProjectConfig)
 	for _, vf := range versionFiles {
@@ -321,14 +333,14 @@ func setupChangelog(ctx *RepoContext, changelogPath string) (bool, error) {
 			return false, err
 		}
 		if err = commitAndPushInitialChangelog(ctx, changelogPath); err != nil {
-			logger.Warnf("Failed to commit and push newly created CHANGELOG.md: %v", err)
+			logger.Warnf("Failed to commit and push newly created changelog: %v", err)
 		}
 		return false, nil
 	}
 	return true, nil
 }
 
-// commitAndPushInitialChangelog stages, commits, and pushes the freshly created CHANGELOG.md
+// commitAndPushInitialChangelog stages, commits, and pushes the freshly created changelog file
 // on the current branch (typically main/master) so that it is persisted before the bump flow runs.
 func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error {
 	changelogRelPath, err := filepath.Rel(ctx.ProjectConfig.Path, changelogPath)
@@ -337,7 +349,7 @@ func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error
 	}
 
 	if _, err = ctx.Worktree.Add(changelogRelPath); err != nil {
-		return fmt.Errorf("failed to stage CHANGELOG.md: %w", err)
+		return fmt.Errorf("failed to stage changelog: %w", err)
 	}
 
 	cfg, err := ctx.Repo.Config()
@@ -362,9 +374,9 @@ func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error
 	}
 
 	if _, err = gitInfra.CommitChanges(
-		ctx.Repo, ctx.Worktree, "chore: add CHANGELOG.md", signer, name, email,
+		ctx.Repo, ctx.Worktree, "chore: added "+changelogRelPath, signer, name, email,
 	); err != nil {
-		return fmt.Errorf("failed to commit CHANGELOG.md: %w", err)
+		return fmt.Errorf("failed to commit changelog: %w", err)
 	}
 
 	branchName := ctx.Head.Name().Short()
@@ -462,10 +474,10 @@ func createBumpBranch(ctx *RepoContext, changelogPath string) (string, entities.
 }
 
 func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) error {
-	logger.Info("Updating CHANGELOG.md file")
+	logger.Infof("Updating changelog file %s", changelogPath)
 	version, err := updateChangelogFile(changelogPath)
 	if err != nil {
-		logger.Errorf("No version found in CHANGELOG.md for project at %s\n", ctx.ProjectConfig.Path)
+		logger.Errorf("No version found in changelog for project at %s\n", ctx.ProjectConfig.Path)
 		return err
 	}
 
@@ -626,7 +638,7 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 // ProcessRepo processes a repository:
 // - clones the repository if it is a remote repository
 // - creates the chore/bump branch
-// - updates the CHANGELOG.md file
+// - updates the changelog file
 // - updates the version file
 // - commits the changes
 // - pushes the branch to the remote repository
@@ -654,10 +666,19 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 	defer os.RemoveAll(tmpDir)
 
 	// Load per-project config overrides (must happen after clone so files are available)
-	ctx.GlobalConfig = loadProjectConfigOverrides(ctx.GlobalConfig, ctx.ProjectConfig.Path)
+	ctx.GlobalConfig = loadProjectConfigOverrides(ctx.GlobalConfig, ctx.ProjectConfig, ctx.ProjectConfig.Path)
 
 	projectPath := ctx.ProjectConfig.Path
-	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
+	changelogFile := ctx.ProjectConfig.ChangelogPath
+	if changelogFile == "" {
+		changelogFile = "CHANGELOG.md"
+	}
+	cleanChangelogFile := filepath.Clean(changelogFile)
+	if filepath.IsAbs(changelogFile) || cleanChangelogFile == ".." ||
+		strings.HasPrefix(cleanChangelogFile, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("invalid changelog_path %q: must be relative to the project root", changelogFile)
+	}
+	changelogPath := filepath.Join(projectPath, cleanChangelogFile)
 
 	// Setup repository and worktree
 	err = setupRepo(ctx)
@@ -672,8 +693,8 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 	}
 	if !changelogExisted {
 		logger.Infof(
-			"New CHANGELOG.md was created for project '%s'; no unreleased content to bump",
-			ctx.ProjectConfig.Name,
+			"New %s was created for project '%s'; no unreleased content to bump",
+			changelogFile, ctx.ProjectConfig.Name,
 		)
 		return nil
 	}

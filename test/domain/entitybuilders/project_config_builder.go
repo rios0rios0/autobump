@@ -15,6 +15,7 @@ type ProjectConfigBuilder struct {
 	language           string
 	projectAccessToken string
 	newVersion         string
+	changelogPath      string
 }
 
 // NewProjectConfigBuilder creates a new ProjectConfig builder with sensible defaults.
@@ -26,6 +27,7 @@ func NewProjectConfigBuilder() *ProjectConfigBuilder {
 		language:           "",
 		projectAccessToken: "",
 		newVersion:         "",
+		changelogPath:      "",
 	}
 }
 
@@ -59,6 +61,12 @@ func (b *ProjectConfigBuilder) WithNewVersion(version string) *ProjectConfigBuil
 	return b
 }
 
+// WithChangelogPath sets the changelog file path.
+func (b *ProjectConfigBuilder) WithChangelogPath(path string) *ProjectConfigBuilder {
+	b.changelogPath = path
+	return b
+}
+
 // Build creates the ProjectConfig (satisfies testkit.Builder interface).
 func (b *ProjectConfigBuilder) Build() interface{} {
 	return b.BuildProjectConfig()
@@ -72,6 +80,7 @@ func (b *ProjectConfigBuilder) BuildProjectConfig() *entities.ProjectConfig {
 		Language:           b.language,
 		ProjectAccessToken: b.projectAccessToken,
 		NewVersion:         b.newVersion,
+		ChangelogPath:      b.changelogPath,
 	}
 }
 
@@ -83,6 +92,7 @@ func (b *ProjectConfigBuilder) Reset() testkit.Builder {
 	b.language = ""
 	b.projectAccessToken = ""
 	b.newVersion = ""
+	b.changelogPath = ""
 	return b
 }
 
@@ -95,5 +105,6 @@ func (b *ProjectConfigBuilder) Clone() testkit.Builder {
 		language:           b.language,
 		projectAccessToken: b.projectAccessToken,
 		newVersion:         b.newVersion,
+		changelogPath:      b.changelogPath,
 	}
 }

@@ -548,9 +548,10 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 				"golang": {Extensions: []string{"go"}},
 			}).
 			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+		result := commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
 		assert.Equal(t, globalConfig, result)
@@ -571,9 +572,10 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 				"golang": {Extensions: []string{"go"}},
 			}).
 			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+		result := commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
 		assert.Contains(t, result.LanguagesConfig, "golang")
@@ -597,9 +599,10 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 				"golang": {Extensions: []string{"go"}},
 			}).
 			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+		result := commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
 		assert.Equal(t, globalConfig, result)
@@ -620,9 +623,10 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 				"golang": {Extensions: []string{"go"}},
 			}).
 			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+		result := commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
 		assert.Equal(t, globalConfig, result)
@@ -643,10 +647,11 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 				"golang": {Extensions: []string{"go"}},
 			}).
 			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 		originalLangsCount := len(globalConfig.LanguagesConfig)
 
 		// when
-		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+		result := commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
 		assert.Len(t, globalConfig.LanguagesConfig, originalLangsCount)
@@ -674,9 +679,10 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 				},
 			}).
 			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+		result := commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
 		ts := result.LanguagesConfig["typescript"]
@@ -700,9 +706,10 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 				"python": {Extensions: []string{"py"}},
 			}).
 			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+		result := commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
 		assert.Contains(t, result.LanguagesConfig, "golang")
@@ -725,9 +732,10 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 				"golang": {Extensions: []string{"go"}},
 			}).
 			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+		result := commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
 		assert.Contains(t, result.LanguagesConfig, "ruby")
@@ -748,9 +756,10 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 				"golang": {Extensions: []string{"go"}},
 			}).
 			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+		result := commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
 		assert.Contains(t, result.LanguagesConfig, "ruby")
@@ -772,13 +781,56 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 				"golang": {Extensions: []string{"go"}},
 			}).
 			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		result := commands.LoadProjectConfigOverrides(globalConfig, tmpDir)
+		result := commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
 		assert.Equal(t, "global-token", result.GitHubAccessToken)
 		assert.Contains(t, result.LanguagesConfig, "ruby")
+	})
+
+	t.Run("should merge changelog_path from per-project config into project config", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configContent := "changelog_path: 'docs/CHANGELOG.md'\n"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, ".autobump.yaml"),
+			[]byte(configContent),
+			0o644,
+		))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
+
+		// when
+		commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
+
+		// then
+		assert.Equal(t, "docs/CHANGELOG.md", projectConfig.ChangelogPath)
+	})
+
+	t.Run("should not override project config changelog_path when already set", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configContent := "changelog_path: 'docs/CHANGELOG.md'\n"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, ".autobump.yaml"),
+			[]byte(configContent),
+			0o644,
+		))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithChangelogPath("custom/CHANGES.md").
+			BuildProjectConfig()
+
+		// when
+		commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
+
+		// then
+		assert.Equal(t, "custom/CHANGES.md", projectConfig.ChangelogPath)
 	})
 }
 

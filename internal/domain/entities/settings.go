@@ -24,6 +24,7 @@ type GlobalConfig struct {
 	Providers              []configEntities.ProviderConfig `yaml:"providers"`
 	Projects               []ProjectConfig                 `yaml:"projects"`
 	LanguagesConfig        map[string]LanguageConfig       `yaml:"languages"`
+	ChangelogPath          string                          `yaml:"changelog_path"`
 	GpgKeyPath             string                          `yaml:"gpg_key_path"`
 	GpgKeyPassphrase       string                          `yaml:"gpg_key_passphrase"`
 	SSHKeyPath             string                          `yaml:"ssh_key_path"`
@@ -58,6 +59,7 @@ type ProjectConfig struct {
 	Language           string `yaml:"language"`
 	ProjectAccessToken string `yaml:"project_access_token"`
 	NewVersion         string `yaml:"new_version"`
+	ChangelogPath      string `yaml:"changelog_path"`
 }
 
 // DefaultConfigURL is the URL of the default configuration file.
