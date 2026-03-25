@@ -20,6 +20,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added configurable changelog file path via `changelog_path` in project config and per-project `.autobump.yaml`
 
+### Fixed
+
+- fixed Maven pom.xml version updates: regex now matches versions with suffixes (e.g., `-SNAPSHOT`, `-RELEASE`), skips the `<parent>` block, and only replaces the first project-level `<version>` tag
+- fixed Gradle build.gradle version updates: regex is anchored to line start to avoid matching plugin version declarations, and handles both quote styles with or without `=` sign
+
 ## [2.25.1] - 2026-03-24
 
 ### Changed

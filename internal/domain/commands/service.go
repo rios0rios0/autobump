@@ -1242,39 +1242,12 @@ func updateVersion(globalConfig *entities.GlobalConfig, projectConfig *entities.
 
 	oneVersionFileExists := false
 	for _, versionFile := range versionFiles {
-		// check if the file exists
-		var info os.FileInfo
-		info, err = os.Stat(versionFile.Path)
-		if os.IsNotExist(err) {
-			logger.Warnf("Version file %s does not exist", versionFile.Path)
-			continue
+		exists, processErr := processVersionFile(versionFile, projectConfig.NewVersion)
+		if processErr != nil {
+			return processErr
 		}
-		logger.Infof("Updating version file %s", versionFile.Path)
-
-		originalFileMode := info.Mode()
-		oneVersionFileExists = true
-
-		var content []byte
-		content, err = os.ReadFile(versionFile.Path)
-		if err != nil {
-			return fmt.Errorf("failed to read file %s: %w", versionFile.Path, err)
-		}
-
-		updatedContent := string(content)
-		for _, pattern := range versionFile.Patterns {
-			re, compileErr := regexp.Compile(pattern)
-			if compileErr != nil {
-				return fmt.Errorf("invalid regex pattern %q in version file config: %w", pattern, compileErr)
-			}
-			updatedContent = re.ReplaceAllStringFunc(updatedContent, func(match string) string {
-				return re.ReplaceAllString(match, "${1}"+projectConfig.NewVersion+"${2}")
-			})
-		}
-
-		//nolint:gosec // G703 false positive: path originates from filepath.Glob and is validated by os.Stat above
-		err = os.WriteFile(versionFile.Path, []byte(updatedContent), originalFileMode)
-		if err != nil {
-			return fmt.Errorf("failed to write to file %s: %w", versionFile.Path, err)
+		if exists {
+			oneVersionFileExists = true
 		}
 	}
 
@@ -1284,6 +1257,66 @@ func updateVersion(globalConfig *entities.GlobalConfig, projectConfig *entities.
 	}
 
 	return nil
+}
+
+// processVersionFile updates a single version file, replacing only the first match of each pattern.
+func processVersionFile(versionFile entities.VersionFile, newVersion string) (bool, error) {
+	info, err := os.Stat(versionFile.Path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Warnf("Version file %s does not exist", versionFile.Path)
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to stat version file %s: %w", versionFile.Path, err)
+	}
+	logger.Infof("Updating version file %s", versionFile.Path)
+
+	content, err := os.ReadFile(versionFile.Path)
+	if err != nil {
+		return false, fmt.Errorf("failed to read file %s: %w", versionFile.Path, err)
+	}
+
+	updatedContent := string(content)
+
+	// For pom.xml, protect the <parent> block from replacement so the project version
+	// (which appears after </parent>) is matched instead of the parent version.
+	parentPlaceholder := "<!--AUTOBUMP_PARENT_PLACEHOLDER-->"
+	var parentBlock string
+	if strings.HasSuffix(versionFile.Path, "pom.xml") {
+		parentRe := regexp.MustCompile(`(?s)<parent>.*?</parent>`)
+		if loc := parentRe.FindStringIndex(updatedContent); loc != nil {
+			parentBlock = updatedContent[loc[0]:loc[1]]
+			updatedContent = updatedContent[:loc[0]] + parentPlaceholder + updatedContent[loc[1]:]
+		}
+	}
+
+	for _, pattern := range versionFile.Patterns {
+		re, compileErr := regexp.Compile(pattern)
+		if compileErr != nil {
+			return false, fmt.Errorf("invalid regex pattern %q in version file config: %w", pattern, compileErr)
+		}
+		updated := false
+		updatedContent = re.ReplaceAllStringFunc(updatedContent, func(match string) string {
+			if updated {
+				return match
+			}
+			updated = true
+			return re.ReplaceAllString(match, "${1}"+newVersion+"${2}")
+		})
+	}
+
+	// Restore the parent block after replacement
+	if parentBlock != "" {
+		updatedContent = strings.Replace(updatedContent, parentPlaceholder, parentBlock, 1)
+	}
+
+	//nolint:gosec // G703 false positive: path originates from filepath.Glob and is validated by os.Stat above
+	err = os.WriteFile(versionFile.Path, []byte(updatedContent), info.Mode())
+	if err != nil {
+		return false, fmt.Errorf("failed to write to file %s: %w", versionFile.Path, err)
+	}
+
+	return true, nil
 }
 
 // getVersionFiles returns the files in a project that contains the software's version number.
