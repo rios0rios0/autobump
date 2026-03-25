@@ -1262,9 +1262,12 @@ func updateVersion(globalConfig *entities.GlobalConfig, projectConfig *entities.
 // processVersionFile updates a single version file, replacing only the first match of each pattern.
 func processVersionFile(versionFile entities.VersionFile, newVersion string) (bool, error) {
 	info, err := os.Stat(versionFile.Path)
-	if os.IsNotExist(err) {
-		logger.Warnf("Version file %s does not exist", versionFile.Path)
-		return false, nil
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Warnf("Version file %s does not exist", versionFile.Path)
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to stat version file %s: %w", versionFile.Path, err)
 	}
 	logger.Infof("Updating version file %s", versionFile.Path)
 
@@ -1274,6 +1277,19 @@ func processVersionFile(versionFile entities.VersionFile, newVersion string) (bo
 	}
 
 	updatedContent := string(content)
+
+	// For pom.xml, protect the <parent> block from replacement so the project version
+	// (which appears after </parent>) is matched instead of the parent version.
+	parentPlaceholder := "<!--AUTOBUMP_PARENT_PLACEHOLDER-->"
+	var parentBlock string
+	if strings.HasSuffix(versionFile.Path, "pom.xml") {
+		parentRe := regexp.MustCompile(`(?s)<parent>.*?</parent>`)
+		if loc := parentRe.FindStringIndex(updatedContent); loc != nil {
+			parentBlock = updatedContent[loc[0]:loc[1]]
+			updatedContent = updatedContent[:loc[0]] + parentPlaceholder + updatedContent[loc[1]:]
+		}
+	}
+
 	for _, pattern := range versionFile.Patterns {
 		re, compileErr := regexp.Compile(pattern)
 		if compileErr != nil {
@@ -1287,6 +1303,11 @@ func processVersionFile(versionFile entities.VersionFile, newVersion string) (bo
 			updated = true
 			return re.ReplaceAllString(match, "${1}"+newVersion+"${2}")
 		})
+	}
+
+	// Restore the parent block after replacement
+	if parentBlock != "" {
+		updatedContent = strings.Replace(updatedContent, parentPlaceholder, parentBlock, 1)
 	}
 
 	//nolint:gosec // G703 false positive: path originates from filepath.Glob and is validated by os.Stat above
