@@ -47,9 +47,12 @@ var (
 // loadProjectConfigOverrides searches for a per-project .autobump.yaml in the given
 // project directory. If found, it reads the file and merges its languages section
 // into the provided globalConfig, returning a new GlobalConfig without mutating the original.
+// It also merges the changelog_path from the per-project config into the projectConfig
+// when the projectConfig does not already specify one.
 // If no per-project config is found, the original globalConfig is returned unchanged.
 func loadProjectConfigOverrides(
 	globalConfig *entities.GlobalConfig,
+	projectConfig *entities.ProjectConfig,
 	projectPath string,
 ) *entities.GlobalConfig {
 	configPath := entities.FindProjectConfigFile(projectPath)
@@ -63,6 +66,10 @@ func loadProjectConfigOverrides(
 	if err != nil {
 		logger.Warnf("Failed to read per-project config %s: %v, using global config", configPath, err)
 		return globalConfig
+	}
+
+	if projectOverrides.ChangelogPath != "" && projectConfig.ChangelogPath == "" {
+		projectConfig.ChangelogPath = projectOverrides.ChangelogPath
 	}
 
 	if len(projectOverrides.LanguagesConfig) == 0 {
@@ -654,10 +661,14 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 	defer os.RemoveAll(tmpDir)
 
 	// Load per-project config overrides (must happen after clone so files are available)
-	ctx.GlobalConfig = loadProjectConfigOverrides(ctx.GlobalConfig, ctx.ProjectConfig.Path)
+	ctx.GlobalConfig = loadProjectConfigOverrides(ctx.GlobalConfig, ctx.ProjectConfig, ctx.ProjectConfig.Path)
 
 	projectPath := ctx.ProjectConfig.Path
-	changelogPath := filepath.Join(projectPath, "CHANGELOG.md")
+	changelogFile := ctx.ProjectConfig.ChangelogPath
+	if changelogFile == "" {
+		changelogFile = "CHANGELOG.md"
+	}
+	changelogPath := filepath.Join(projectPath, changelogFile)
 
 	// Setup repository and worktree
 	err = setupRepo(ctx)

@@ -109,6 +109,11 @@ projects:
   # temporary directory, perform the bump, then delete the temporary directory
   - path: "git@github.com:example/repo3.git"
 
+  # (optional) custom changelog file path relative to the project root
+  # defaults to 'CHANGELOG.md' if not specified
+  #- path: "/home/user/repo3.5"
+  #  changelog_path: 'docs/CHANGELOG.md'
+
   # you can specify a project access token that will be used for this project
   # this token will be prioritized over the gitlab_access_token and the CI_JOB_TOKEN
   - path: "https://gitlab.com/user/repo4.git"
