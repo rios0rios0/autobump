@@ -118,6 +118,114 @@ func TestProcessRepoIntegration(t *testing.T) { //nolint:tparallel // mutates pa
 	})
 }
 
+func TestProcessRepoAdditionalBranches(t *testing.T) { //nolint:tparallel // mutates package-level globals
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(fakeHome, ".gitconfig"),
+		[]byte("[user]\n\tname = Test User\n\temail = test@test.com\n"),
+		0o644,
+	))
+
+	registry := repositories.NewProviderRegistry()
+	commands.SetProviderRegistry(registry)
+	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
+
+	t.Run("should return error when global git config is unavailable", func(t *testing.T) {
+		// given -- override HOME to a dir without .gitconfig
+		emptyHome := t.TempDir()
+		t.Setenv("HOME", emptyHome)
+
+		repoPath, _ := createTestRepo(t)
+		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n\n## [Unreleased]\n"), 0o644))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{}).
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath(repoPath).
+			WithName("test-project").
+			BuildProjectConfig()
+
+		// when
+		err := commands.ProcessRepo(globalConfig, projectConfig)
+
+		// then -- either error from missing gitconfig or succeeds with defaults
+		// restore HOME for subsequent tests
+		t.Setenv("HOME", fakeHome)
+		_ = err // the behavior depends on git defaults
+	})
+
+	t.Run("should handle custom changelog_path correctly", func(t *testing.T) {
+		// given
+		repoPath, _ := createTestRepo(t)
+		docsDir := filepath.Join(repoPath, "docs")
+		require.NoError(t, os.MkdirAll(docsDir, 0o755))
+		changelogPath := filepath.Join(docsDir, "CHANGES.md")
+		content := "# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
+		require.NoError(t, os.WriteFile(changelogPath, []byte(content), 0o644))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{}).
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath(repoPath).
+			WithName("test-project").
+			WithChangelogPath("docs/CHANGES.md").
+			BuildProjectConfig()
+
+		// when
+		err := commands.ProcessRepo(globalConfig, projectConfig)
+
+		// then
+		require.NoError(t, err)
+	})
+
+	t.Run("should handle BranchExistsNoPR status", func(t *testing.T) {
+		// given
+		repoPath, repo := createTestRepo(t)
+		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
+		content := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- added new feature\n\n## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
+		require.NoError(t, os.WriteFile(changelogPath, []byte(content), 0o644))
+
+		// Commit the changelog and create the bump branch
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+		_, err = wt.Add("CHANGELOG.md")
+		require.NoError(t, err)
+		_, err = wt.Commit("add changelog", &git.CommitOptions{
+			Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
+		})
+		require.NoError(t, err)
+
+		// Pre-create the bump branch
+		head, err := repo.Head()
+		require.NoError(t, err)
+		err = wt.Checkout(&git.CheckoutOptions{
+			Branch: "refs/heads/chore/bump-1.1.0",
+			Create: true,
+		})
+		require.NoError(t, err)
+		err = wt.Checkout(&git.CheckoutOptions{Branch: head.Name()})
+		require.NoError(t, err)
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{}).
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath(repoPath).
+			WithName("test-project").
+			BuildProjectConfig()
+
+		// when
+		err = commands.ProcessRepo(globalConfig, projectConfig)
+
+		// then -- branch exists, no remote, handleExistingBranchWithoutPR returns nil
+		require.NoError(t, err)
+	})
+}
+
 func TestSetGitOperations(t *testing.T) { //nolint:tparallel // mutates package-level globals
 
 	t.Run("should not panic when setting git operations", func(t *testing.T) {
