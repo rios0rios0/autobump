@@ -526,3 +526,132 @@ func TestProcessChangelog(t *testing.T) {
 			"fixed alpha should appear before fixed zulu (sorted)")
 	})
 }
+
+func TestFindLatestVersion(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return latest version when changelog has multiple versions", func(t *testing.T) {
+		// given
+		lines := []string{
+			"# Changelog",
+			"",
+			"## [Unreleased]",
+			"",
+			"## [2.5.0] - 2026-03-20",
+			"",
+			"### Added",
+			"",
+			"- added feature X",
+			"",
+			"## [2.4.0] - 2026-03-10",
+			"",
+			"### Fixed",
+			"",
+			"- fixed bug Y",
+			"",
+		}
+
+		// when
+		version, err := entities.FindLatestVersion(lines)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "2.5.0", version.String())
+	})
+
+	t.Run("should return error when changelog has no versions", func(t *testing.T) {
+		// given
+		lines := []string{
+			"# Changelog",
+			"",
+			"## [Unreleased]",
+			"",
+			"### Added",
+			"",
+			"- added something",
+			"",
+		}
+
+		// when
+		version, err := entities.FindLatestVersion(lines)
+
+		// then
+		require.Error(t, err)
+		assert.Nil(t, version)
+	})
+
+	t.Run("should return single version when changelog has only one release", func(t *testing.T) {
+		// given
+		lines := []string{
+			"# Changelog",
+			"",
+			"## [Unreleased]",
+			"",
+			"## [1.0.0] - 2026-01-01",
+			"",
+			"### Added",
+			"",
+			"- added initial release",
+			"",
+		}
+
+		// when
+		version, err := entities.FindLatestVersion(lines)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "1.0.0", version.String())
+	})
+}
+
+func TestIsChangelogUnreleasedEmpty(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return true when unreleased section is empty", func(t *testing.T) {
+		// given
+		lines := []string{
+			"# Changelog",
+			"",
+			"## [Unreleased]",
+			"",
+			"## [1.0.0] - 2026-01-01",
+			"",
+			"### Added",
+			"",
+			"- added initial release",
+		}
+
+		// when
+		empty, err := entities.IsChangelogUnreleasedEmpty(lines)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, empty)
+	})
+
+	t.Run("should return false when unreleased section has entries", func(t *testing.T) {
+		// given
+		lines := []string{
+			"# Changelog",
+			"",
+			"## [Unreleased]",
+			"",
+			"### Added",
+			"",
+			"- added new feature",
+			"",
+			"## [1.0.0] - 2026-01-01",
+			"",
+			"### Added",
+			"",
+			"- added initial release",
+		}
+
+		// when
+		empty, err := entities.IsChangelogUnreleasedEmpty(lines)
+
+		// then
+		require.NoError(t, err)
+		assert.False(t, empty)
+	})
+}
