@@ -21,6 +21,14 @@ import (
 )
 
 func TestProcessRepoIntegration(t *testing.T) { //nolint:tparallel // mutates package-level globals
+	// Create a minimal .gitconfig so GetGlobalGitConfig() succeeds on CI where ~/.gitconfig doesn't exist
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(fakeHome, ".gitconfig"),
+		[]byte("[user]\n\tname = Test User\n\temail = test@test.com\n"),
+		0o644,
+	))
 
 	t.Run("should return error when changelog_path escapes project root", func(t *testing.T) {
 		// given
