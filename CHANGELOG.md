@@ -22,8 +22,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
-- fixed Maven pom.xml version updates: regex now matches versions with suffixes (e.g., `-SNAPSHOT`, `-RELEASE`), skips the `<parent>` block, and only replaces the first project-level `<version>` tag
+- fixed alphabetical sorting of changelog entries within each section
 - fixed Gradle build.gradle version updates: regex is anchored to line start to avoid matching plugin version declarations, and handles both quote styles with or without `=` sign
+- fixed Maven pom.xml version updates: regex now matches versions with suffixes (e.g., `-SNAPSHOT`, `-RELEASE`), skips the `<parent>` block, and only replaces the first project-level `<version>` tag
 
 ## [2.25.1] - 2026-03-24
 
