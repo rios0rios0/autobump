@@ -85,3 +85,45 @@ var ProcessVersionFile = processVersionFile //nolint:gochecknoglobals // test ex
 
 // GetVersionFiles exports getVersionFiles for testing.
 var GetVersionFiles = getVersionFiles //nolint:gochecknoglobals // test export
+
+// CloneRepo exports cloneRepo for testing.
+var CloneRepo = cloneRepo //nolint:gochecknoglobals // test export
+
+// CloneRepoIfNeeded exports cloneRepoIfNeeded for testing.
+var CloneRepoIfNeeded = cloneRepoIfNeeded //nolint:gochecknoglobals // test export
+
+// PushChanges exports pushChanges for testing.
+var PushChanges = pushChanges //nolint:gochecknoglobals // test export
+
+// CommitAndPushChanges exports commitAndPushChanges for testing.
+var CommitAndPushChanges = commitAndPushChanges //nolint:gochecknoglobals // test export
+
+// CreatePullRequest exports createPullRequest for testing.
+var CreatePullRequest = createPullRequest //nolint:gochecknoglobals // test export
+
+// CreateAndCheckoutPullRequest exports createAndCheckoutPullRequest for testing.
+var CreateAndCheckoutPullRequest = createAndCheckoutPullRequest //nolint:gochecknoglobals // test export
+
+// HandleExistingBranchWithoutPR exports handleExistingBranchWithoutPR for testing.
+var HandleExistingBranchWithoutPR = handleExistingBranchWithoutPR //nolint:gochecknoglobals // test export
+
+// CheckPullRequestExists exports checkPullRequestExists for testing.
+var CheckPullRequestExists = checkPullRequestExists //nolint:gochecknoglobals // test export
+
+// CollectAuthMethods exports collectAuthMethods for testing.
+var CollectAuthMethods = collectAuthMethods //nolint:gochecknoglobals // test export
+
+// SSHAgentAuthFromSocket exports sshAgentAuthFromSocket for testing.
+var SSHAgentAuthFromSocket = sshAgentAuthFromSocket //nolint:gochecknoglobals // test export
+
+// CommitAndPushInitialChangelog exports commitAndPushInitialChangelog for testing.
+var CommitAndPushInitialChangelog = commitAndPushInitialChangelog //nolint:gochecknoglobals // test export
+
+// DetectBySpecialPatterns exports detectBySpecialPatterns for testing.
+var DetectBySpecialPatterns = detectBySpecialPatterns //nolint:gochecknoglobals // test export
+
+// DetectByExtensions exports detectByExtensions for testing.
+var DetectByExtensions = detectByExtensions //nolint:gochecknoglobals // test export
+
+// GetLanguageInterface exports getLanguageInterface for testing.
+var GetLanguageInterface = getLanguageInterface //nolint:gochecknoglobals // test export
