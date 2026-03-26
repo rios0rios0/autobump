@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added comprehensive unit test suite covering domain commands, entities, support utilities, infrastructure repositories, controllers, and DI wiring (276 tests, 64% coverage)
+- added extended test coverage for controllers, repositories, commands, and CLI packages (57.7% to 74.9% overall coverage)
 - added configurable changelog file path via `changelog_path` in project config and per-project `.autobump.yaml`
 
 ### Fixed
