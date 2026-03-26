@@ -16,17 +16,19 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.26.0] - 2026-03-26
+
 ### Added
 
 - added comprehensive unit test suite covering domain commands, entities, support utilities, infrastructure repositories, controllers, and DI wiring (276 tests, 64% coverage)
-- added extended test coverage for controllers, repositories, commands, and CLI packages (57.7% to 74.9% overall coverage)
 - added configurable changelog file path via `changelog_path` in project config and per-project `.autobump.yaml`
+- added extended test coverage for controllers, repositories, commands, and CLI packages (57.7% to 74.9% overall coverage)
 
 ### Fixed
 
+- fixed Gradle `build.gradle` version updates: `regex` is anchored to line start to avoid matching plugin version declarations, and handles both quote styles with or without `=` sign
+- fixed Maven `pom.xml` version updates: regex now matches versions with suffixes (e.g., `-SNAPSHOT`, `-RELEASE`), skips the `<parent>` block, and only replaces the first project-level `<version>` tag
 - fixed alphabetical sorting of changelog entries within each section
-- fixed Gradle build.gradle version updates: regex is anchored to line start to avoid matching plugin version declarations, and handles both quote styles with or without `=` sign
-- fixed Maven pom.xml version updates: regex now matches versions with suffixes (e.g., `-SNAPSHOT`, `-RELEASE`), skips the `<parent>` block, and only replaces the first project-level `<version>` tag
 
 ## [2.25.1] - 2026-03-24
 
@@ -38,8 +40,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added SSH authentication configuration with `ssh_key_path`, `ssh_key_passphrase`, and `ssh_auth_sock` fields for push operations
 - added auto-detection of common SSH agent sockets (1Password, standard `ssh-agent`) when `SSH_AUTH_SOCK` is not set
+- added SSH authentication configuration with `ssh_key_path`, `ssh_key_passphrase`, and `ssh_auth_sock` fields for push operations
 
 ### Fixed
 
@@ -101,12 +103,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
-- changed CLI structure to match `autoupdate` pattern: `local` for single-repo, `run` for batch/discover
-- changed PR creation logging to include PR ID and URL
-- changed PR description from plain text to structured Markdown with Summary, Changes, and Review Checklist sections
 - changed `logrus` import alias from `log` to `logger` across all files to follow Go logging conventions
 - changed `serviceTypeName()` to use `gitforge`'s shared `ServiceTypeToProviderName()`, eliminating duplicated provider name mapping
+- changed CLI structure to match `autoupdate` pattern: `local` for single-repo, `run` for batch/discover
 - changed commit signing resolution to use `gitforge`'s shared `ResolveSignerFromGitConfig()`, eliminating duplicated GPG/SSH signer logic
+- changed PR creation logging to include PR ID and URL
+- changed PR description from plain text to structured Markdown with Summary, Changes, and Review Checklist sections
 - changed push logic to use `gitforge`'s shared `PushWithTransportDetection()`, eliminating duplicated SSH/HTTPS detection and auth retry loop
 - changed root command to show help by default (use `autobump local` or `autobump .` for single-repo)
 - changed the Go version to `1.26.1` and updated all module dependencies
@@ -174,14 +176,14 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added Azure DevOps discoverer that lists all projects then all repositories per project via REST API
-- added GitHub discoverer with `ListByOrg` pagination and `ListByUser` fallback
-- added GitLab discoverer with `ListGroupProjects` pagination (including subgroups) and user projects fallback
-- added `RepositoryDiscoverer` domain interface and factory-based `DiscovererRegistry` for provider-agnostic repository discovery
 - added `discover` CLI command that automatically queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations, removing the need to manually list projects in the YAML file
 - added `providers` configuration section with support for `type`, `token` (inline, `${ENV_VAR}`, or file path), and `organizations` fields
+- added `RepositoryDiscoverer` domain interface and factory-based `DiscovererRegistry` for provider-agnostic repository discovery
+- added Azure DevOps discoverer that lists all projects then all repositories per project via REST API
 - added changelog entry deduplication that removes exact duplicates and merges semantically overlapping entries using token-based similarity
 - added comprehensive unit tests for changelog processing and deduplication logic following BDD standards
+- added GitHub discoverer with `ListByOrg` pagination and `ListByUser` fallback
+- added GitLab discoverer with `ListGroupProjects` pagination (including subgroups) and user projects fallback
 
 ### Changed
 
@@ -249,8 +251,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Fixed
 
 - fixed Azure DevOps URL parsing to correctly extract repository name from `/_git/{repo}` path
-- fixed GPG key file handling that caused the "file already closed" error by reading the entire file into memory
 - fixed context timeout in Azure DevOps API calls (was using nanoseconds instead of seconds)
+- fixed GPG key file handling that caused the "file already closed" error by reading the entire file into memory
 - fixed shallow clone issue by removing `Depth: 1` option that caused "object not found" push errors
 
 ## [2.15.1] - 2025-12-16
@@ -268,8 +270,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
-- updated code to satisfy `golangci-lint` linters and improve code style
 - changed the configuration merging method to correctly merge nested fields and avoid unintended overwrites
+- updated code to satisfy `golangci-lint` linters and improve code style
 
 ### Fixed
 
@@ -369,8 +371,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added the `.editorconfig` file to handle the file formatting
 - added the `CHANGELOG.md` file to clarify the releases
 - added the feature to download the default configuration when the language detection is not present
-- added the feature to read the GPG keys from the default keyring
 - added the feature to read the configuration from the default repository URL
+- added the feature to read the GPG keys from the default keyring
 
 ### Changed
 
@@ -482,13 +484,13 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added CI token reading, auto cloning, and a release pipeline for use in the scheduled pipeline
-- added Java support and fixed package version update
 - added configuration validation
 - added documentation in the configuration file and `README.md`
+- added Java support and fixed package version update
 - added language detection and batch processing mode
-- added the Git commit and push functions
 - added the feature to allow GPG signing
 - added the feature to create GitLab Merge Request
+- added the Git commit and push functions
 
 ### Changed
 
