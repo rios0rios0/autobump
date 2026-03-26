@@ -20,8 +20,7 @@ import (
 	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 )
 
-func TestProcessRepoIntegration(t *testing.T) {
-	t.Parallel()
+func TestProcessRepoIntegration(t *testing.T) { //nolint:tparallel // mutates package-level globals
 
 	t.Run("should return error when changelog_path escapes project root", func(t *testing.T) {
 		// given
@@ -111,8 +110,7 @@ func TestProcessRepoIntegration(t *testing.T) {
 	})
 }
 
-func TestSetGitOperations(t *testing.T) {
-	t.Parallel()
+func TestSetGitOperations(t *testing.T) { //nolint:tparallel // mutates package-level globals
 
 	t.Run("should not panic when setting git operations", func(t *testing.T) {
 		// given
