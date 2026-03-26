@@ -162,7 +162,7 @@ func TestProcessRepoAdditionalBranches(t *testing.T) { //nolint:tparallel // mut
 		// given
 		repoPath, _ := createTestRepo(t)
 		docsDir := filepath.Join(repoPath, "docs")
-		require.NoError(t, os.MkdirAll(docsDir, 0o755))
+		require.NoError(t, os.MkdirAll(docsDir, 0o700)) //nolint:gosec // test directory needs execute bit for traversal
 		changelogPath := filepath.Join(docsDir, "CHANGES.md")
 		content := "# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
 		require.NoError(t, os.WriteFile(changelogPath, []byte(content), 0o644))
