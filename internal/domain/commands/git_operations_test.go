@@ -880,14 +880,10 @@ func TestCheckPullRequestExistsWithToken(t *testing.T) { //nolint:tparallel // m
 		}
 
 		// when -- service type can't be detected from local bare URL
-		exists, err := commands.CheckPullRequestExists(ctx, "chore/bump-1.0.0")
+		exists, _ := commands.CheckPullRequestExists(ctx, "chore/bump-1.0.0")
 
 		// then -- returns false because local bare remote has unsupported URL scheme
-		if err != nil {
-			assert.False(t, exists)
-		} else {
-			assert.False(t, exists)
-		}
+		assert.False(t, exists)
 	})
 }
 
