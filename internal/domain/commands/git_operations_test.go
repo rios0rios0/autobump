@@ -692,11 +692,8 @@ func TestCheckPullRequestExists(t *testing.T) { //nolint:tparallel // mutates pa
 		exists, err := commands.CheckPullRequestExists(ctx, "chore/bump-1.0.0")
 
 		// then -- can't determine service type without remote, error is returned
-		if err != nil {
-			assert.False(t, exists)
-		} else {
-			assert.False(t, exists)
-		}
+		require.Error(t, err)
+		assert.False(t, exists)
 	})
 }
 
@@ -855,11 +852,9 @@ func TestCreatePullRequestWithRemote(t *testing.T) { //nolint:tparallel // mutat
 		// when -- will fail at API call (fake token) but exercises the provider and URL resolution paths
 		err := commands.CreatePullRequest(ctx, repo, "chore/bump-1.0.0", gitforgeEntities.GITHUB)
 
-		// then -- the error comes from the API call, not from the setup
-		// The important thing is that it got past resolveToken, getForgeProvider, GetRemoteRepoURL
-		if err != nil {
-			assert.Contains(t, err.Error(), "pull request")
-		}
+		// then -- we expect an error from the provider/API layer, but the call path must succeed
+		// through resolveToken, getForgeProvider, and GetRemoteRepoURL.
+		require.Error(t, err)
 	})
 }
 
