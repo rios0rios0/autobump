@@ -536,19 +536,18 @@ func TestCopyGlobalConfigWithLanguageOverrides(t *testing.T) {
 	})
 }
 
-func TestExpandHome(t *testing.T) {
-	t.Parallel()
-
+func TestExpandHome(t *testing.T) { //nolint:tparallel // t.Setenv requires non-parallel test
 	t.Run("should expand tilde prefix when path starts with ~/", func(t *testing.T) {
 		// given
+		t.Setenv("HOME", filepath.Join(string(os.PathSeparator), "home", "testuser"))
 		value := "~/some/path"
 
 		// when
 		entities.ExpandHome(&value)
 
 		// then
-		home, _ := os.UserHomeDir()
-		assert.Equal(t, filepath.Join(home, "some/path"), value)
+		expected := filepath.Join(os.Getenv("HOME"), "some/path")
+		assert.Equal(t, expected, value)
 	})
 
 	t.Run("should not modify path when it does not start with ~/", func(t *testing.T) {

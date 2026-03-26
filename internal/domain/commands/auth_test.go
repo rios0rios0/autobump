@@ -72,8 +72,7 @@ func TestDetectSSHAgentSocketsExtended(t *testing.T) {
 	})
 }
 
-func TestDiscoverAndProcess(t *testing.T) {
-	t.Parallel()
+func TestDiscoverAndProcess(t *testing.T) { //nolint:tparallel // mutates package-level globals
 
 	t.Run("should complete without error when no providers are configured", func(t *testing.T) {
 		// given
@@ -100,8 +99,8 @@ func TestDiscoverAndProcess(t *testing.T) {
 		// when
 		err := commands.DiscoverAndProcess(context.Background(), globalConfig, registry)
 
-		// then — it logs errors but continues (returns error count based)
-		// The function returns nil for individual errors but reports them
-		_ = err
+		// then — it logs/errors internally and continues processing
+		// DiscoverAndProcess currently always returns nil; errors are only logged/counted internally
+		require.NoError(t, err)
 	})
 }
