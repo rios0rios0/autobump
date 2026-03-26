@@ -308,6 +308,86 @@ repositories {
 		assert.Contains(t, content, `version "0.1.0"`)
 	})
 
+	t.Run("should skip version file updates when language is empty", func(t *testing.T) {
+		// given
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{}).
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithLanguage("").
+			WithNewVersion("1.0.0").
+			BuildProjectConfig()
+
+		// when
+		err := commands.UpdateVersion(globalConfig, projectConfig)
+
+		// then
+		require.NoError(t, err)
+	})
+
+	t.Run("should warn and continue when language not found in config", func(t *testing.T) {
+		// given
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{}).
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithLanguage("unknown_language").
+			WithNewVersion("1.0.0").
+			BuildProjectConfig()
+
+		// when
+		err := commands.UpdateVersion(globalConfig, projectConfig)
+
+		// then
+		require.NoError(t, err)
+	})
+
+	t.Run("should warn when no version files configured for language", func(t *testing.T) {
+		// given
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"ruby": {
+					Extensions:   []string{"rb"},
+					VersionFiles: []entities.VersionFile{},
+				},
+			}).BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithLanguage("ruby").
+			WithNewVersion("1.0.0").
+			BuildProjectConfig()
+
+		// when
+		err := commands.UpdateVersion(globalConfig, projectConfig)
+
+		// then
+		require.NoError(t, err)
+	})
+
+	t.Run("should warn when version files do not exist", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"ruby": {
+					Extensions: []string{"rb"},
+					VersionFiles: []entities.VersionFile{
+						{Path: "nonexistent.rb", Patterns: []string{`(version\s*=\s*')\d+\.\d+\.\d+(')`}},
+					},
+				},
+			}).BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath(tmpDir).
+			WithLanguage("ruby").
+			WithNewVersion("1.0.0").
+			BuildProjectConfig()
+
+		// when
+		err := commands.UpdateVersion(globalConfig, projectConfig)
+
+		// then
+		require.NoError(t, err)
+	})
+
 	t.Run("should update version in build.gradle when using equals sign and single quotes", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
