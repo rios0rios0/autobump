@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.26.0] - 2026-03-26
+
 ### Added
 
 - added comprehensive unit test suite covering domain commands, entities, support utilities, infrastructure repositories, controllers, and DI wiring (276 tests, 64% coverage)
