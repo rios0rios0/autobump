@@ -3,6 +3,7 @@
 package entities_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
+	configEntities "github.com/rios0rios0/gitforge/pkg/config/domain/entities"
 )
 
 func TestMergeLanguagesConfig(t *testing.T) {
@@ -531,5 +533,393 @@ func TestCopyGlobalConfigWithLanguageOverrides(t *testing.T) {
 		assert.Len(t, original.LanguagesConfig, originalLangsCount)
 		assert.NotContains(t, original.LanguagesConfig, "python")
 		assert.Empty(t, original.LanguagesConfig["golang"].SpecialPatterns)
+	})
+}
+
+func TestExpandHome(t *testing.T) { //nolint:tparallel // t.Setenv requires non-parallel test
+	t.Run("should expand tilde prefix when path starts with ~/", func(t *testing.T) {
+		// given
+		t.Setenv("HOME", filepath.Join(string(os.PathSeparator), "home", "testuser"))
+		value := "~/some/path"
+
+		// when
+		entities.ExpandHome(&value)
+
+		// then
+		expected := filepath.Join(os.Getenv("HOME"), "some/path")
+		assert.Equal(t, expected, value)
+	})
+
+	t.Run("should not modify path when it does not start with ~/", func(t *testing.T) {
+		// given
+		value := "/absolute/path"
+
+		// when
+		entities.ExpandHome(&value)
+
+		// then
+		assert.Equal(t, "/absolute/path", value)
+	})
+
+	t.Run("should not modify empty string", func(t *testing.T) {
+		// given
+		value := ""
+
+		// when
+		entities.ExpandHome(&value)
+
+		// then
+		assert.Equal(t, "", value)
+	})
+}
+
+func TestHandleTokenFile(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should read token from file when path exists", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		tokenFile := filepath.Join(tmpDir, "token.txt")
+		require.NoError(t, os.WriteFile(tokenFile, []byte("secret-token\n"), 0o644))
+		token := tokenFile
+
+		// when
+		entities.HandleTokenFile("test token", &token)
+
+		// then
+		assert.Equal(t, "secret-token", token)
+	})
+
+	t.Run("should keep inline token when path does not exist as file", func(t *testing.T) {
+		// given
+		token := "inline-token-value"
+
+		// when
+		entities.HandleTokenFile("test token", &token)
+
+		// then
+		assert.Equal(t, "inline-token-value", token)
+	})
+
+	t.Run("should not modify empty token", func(t *testing.T) {
+		// given
+		token := ""
+
+		// when
+		entities.HandleTokenFile("test token", &token)
+
+		// then
+		assert.Equal(t, "", token)
+	})
+}
+
+func TestValidateGlobalConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return nil when config has languages and valid projects", func(t *testing.T) {
+		// given
+		cfg := &entities.GlobalConfig{
+			LanguagesConfig: map[string]entities.LanguageConfig{"go": {}},
+			Projects: []entities.ProjectConfig{
+				{Path: "/some/path"},
+			},
+		}
+
+		// when
+		err := entities.ValidateGlobalConfig(cfg, false)
+
+		// then
+		assert.NoError(t, err)
+	})
+
+	t.Run("should return error when languages config is nil", func(t *testing.T) {
+		// given
+		cfg := &entities.GlobalConfig{
+			LanguagesConfig: nil,
+		}
+
+		// when
+		err := entities.ValidateGlobalConfig(cfg, false)
+
+		// then
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, entities.ErrLanguagesKeyMissingError))
+	})
+
+	t.Run("should return error when project path is empty", func(t *testing.T) {
+		// given
+		cfg := &entities.GlobalConfig{
+			LanguagesConfig: map[string]entities.LanguageConfig{"go": {}},
+			Projects:        []entities.ProjectConfig{{Path: ""}},
+		}
+
+		// when
+		err := entities.ValidateGlobalConfig(cfg, false)
+
+		// then
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "projects[0].path")
+	})
+
+	t.Run("should return error when batch mode has no projects", func(t *testing.T) {
+		// given
+		cfg := &entities.GlobalConfig{
+			LanguagesConfig: map[string]entities.LanguageConfig{"go": {}},
+			Projects:        []entities.ProjectConfig{},
+		}
+
+		// when
+		err := entities.ValidateGlobalConfig(cfg, true)
+
+		// then
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "projects")
+	})
+
+	t.Run("should return error when batch mode has no access token", func(t *testing.T) {
+		// given
+		cfg := &entities.GlobalConfig{
+			LanguagesConfig: map[string]entities.LanguageConfig{"go": {}},
+			Projects:        []entities.ProjectConfig{{Path: "/path"}},
+		}
+
+		// when
+		err := entities.ValidateGlobalConfig(cfg, true)
+
+		// then
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "project_access_token")
+	})
+
+	t.Run("should pass batch validation when global token is set", func(t *testing.T) {
+		// given
+		cfg := &entities.GlobalConfig{
+			LanguagesConfig:   map[string]entities.LanguageConfig{"go": {}},
+			GitHubAccessToken: "ghp_token",
+			Projects:          []entities.ProjectConfig{{Path: "/path"}},
+		}
+
+		// when
+		err := entities.ValidateGlobalConfig(cfg, true)
+
+		// then
+		assert.NoError(t, err)
+	})
+}
+
+func TestValidateProviders(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return nil when all providers are valid", func(t *testing.T) {
+		// given
+		providers := []configEntities.ProviderConfig{
+			{Type: "github", Token: "ghp_token", Organizations: []string{"org1"}},
+		}
+
+		// when
+		err := entities.ValidateProviders(providers)
+
+		// then
+		assert.NoError(t, err)
+	})
+
+	t.Run("should return error when provider type is empty", func(t *testing.T) {
+		// given
+		providers := []configEntities.ProviderConfig{
+			{Type: "", Token: "token", Organizations: []string{"org1"}},
+		}
+
+		// when
+		err := entities.ValidateProviders(providers)
+
+		// then
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "providers[0].type")
+	})
+
+	t.Run("should return error when provider token is empty", func(t *testing.T) {
+		// given
+		providers := []configEntities.ProviderConfig{
+			{Type: "github", Token: "", Organizations: []string{"org1"}},
+		}
+
+		// when
+		err := entities.ValidateProviders(providers)
+
+		// then
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "providers[0].token")
+	})
+
+	t.Run("should return error when provider has no organizations", func(t *testing.T) {
+		// given
+		providers := []configEntities.ProviderConfig{
+			{Type: "github", Token: "token", Organizations: []string{}},
+		}
+
+		// when
+		err := entities.ValidateProviders(providers)
+
+		// then
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "organizations")
+	})
+
+	t.Run("should return nil when providers list is empty", func(t *testing.T) {
+		// given
+		providers := []configEntities.ProviderConfig{}
+
+		// when
+		err := entities.ValidateProviders(providers)
+
+		// then
+		assert.NoError(t, err)
+	})
+}
+
+func TestReadConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should read and parse a valid config file", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "autobump.yaml")
+		content := `languages:
+  go:
+    extensions:
+      - 'go'
+    special_patterns:
+      - 'go.mod'
+projects:
+  - path: '/home/user/repo1'
+github_access_token: 'ghp_test123'
+`
+		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
+
+		// when
+		cfg, err := entities.ReadConfig(configPath)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Contains(t, cfg.LanguagesConfig, "go")
+		assert.Equal(t, "ghp_test123", cfg.GitHubAccessToken)
+		require.Len(t, cfg.Projects, 1)
+		assert.Equal(t, "/home/user/repo1", cfg.Projects[0].Path)
+		assert.Equal(t, "repo1", cfg.Projects[0].Name)
+	})
+
+	t.Run("should return error when config file does not exist", func(t *testing.T) {
+		// given
+		configPath := filepath.Join(t.TempDir(), "nonexistent.yaml")
+
+		// when
+		cfg, err := entities.ReadConfig(configPath)
+
+		// then
+		require.Error(t, err)
+		assert.Nil(t, cfg)
+	})
+
+	t.Run("should derive project name from path when name is empty", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "autobump.yaml")
+		content := `languages:
+  go:
+    extensions:
+      - 'go'
+projects:
+  - path: 'git@github.com:org/my-repo.git'
+`
+		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
+
+		// when
+		cfg, err := entities.ReadConfig(configPath)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "my-repo", cfg.Projects[0].Name)
+	})
+
+	t.Run("should read token from file when token value is a file path", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		tokenFile := filepath.Join(tmpDir, "token.txt")
+		require.NoError(t, os.WriteFile(tokenFile, []byte("file-token-value"), 0o644))
+		configPath := filepath.Join(tmpDir, "autobump.yaml")
+		content := "languages:\n  go:\n    extensions:\n      - 'go'\ngithub_access_token: '" + tokenFile + "'\n"
+		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
+
+		// when
+		cfg, err := entities.ReadConfig(configPath)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "file-token-value", cfg.GitHubAccessToken)
+	})
+}
+
+func TestDecodeConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return error when YAML is invalid", func(t *testing.T) {
+		// given
+		data := []byte("invalid: [yaml: {broken")
+
+		// when
+		cfg, err := entities.DecodeConfig(data, false)
+
+		// then
+		require.Error(t, err)
+		assert.Nil(t, cfg)
+	})
+
+	t.Run("should reject unknown fields when strict is true", func(t *testing.T) {
+		// given
+		data := []byte("unknown_field: 'value'\nlanguages:\n  go:\n    extensions:\n      - 'go'\n")
+
+		// when
+		cfg, err := entities.DecodeConfig(data, true)
+
+		// then
+		require.Error(t, err)
+		assert.Nil(t, cfg)
+	})
+
+	t.Run("should accept unknown fields when strict is false", func(t *testing.T) {
+		// given
+		data := []byte("unknown_field: 'value'\nlanguages:\n  go:\n    extensions:\n      - 'go'\n")
+
+		// when
+		cfg, err := entities.DecodeConfig(data, false)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Contains(t, cfg.LanguagesConfig, "go")
+	})
+}
+
+func TestFindConfigOnMissing(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return provided path when not empty", func(t *testing.T) {
+		// given
+		configPath := "/some/explicit/path.yaml"
+
+		// when
+		result := entities.FindConfigOnMissing(configPath)
+
+		// then
+		assert.Equal(t, configPath, result)
+	})
+
+	t.Run("should search default locations when path is empty", func(t *testing.T) {
+		// given / when
+		result := entities.FindConfigOnMissing("")
+
+		// then
+		assert.NotEmpty(t, result)
 	})
 }
