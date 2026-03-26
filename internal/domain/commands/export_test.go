@@ -38,3 +38,50 @@ var SetupChangelog = setupChangelog //nolint:gochecknoglobals // test export
 
 // UpdateVersion exports updateVersion for testing.
 var UpdateVersion = updateVersion //nolint:gochecknoglobals // test export
+
+// GeneratePRDescription exports generatePRDescription for testing.
+var GeneratePRDescription = generatePRDescription //nolint:gochecknoglobals // test export
+
+// ShouldBumpProject exports shouldBumpProject for testing.
+var ShouldBumpProject = shouldBumpProject //nolint:gochecknoglobals // test export
+
+// EnsureProjectLanguage exports ensureProjectLanguage for testing.
+var EnsureProjectLanguage = ensureProjectLanguage //nolint:gochecknoglobals // test export
+
+// UpdateChangelogFile exports updateChangelogFile for testing.
+var UpdateChangelogFile = updateChangelogFile //nolint:gochecknoglobals // test export
+
+// GetNextVersion exports getNextVersion for testing.
+var GetNextVersion = getNextVersion //nolint:gochecknoglobals // test export
+
+// CreateChangelogIfNotExists exports createChangelogIfNotExists for testing.
+var CreateChangelogIfNotExists = createChangelogIfNotExists //nolint:gochecknoglobals // test export
+
+// SetupRepo exports setupRepo for testing.
+var SetupRepo = setupRepo //nolint:gochecknoglobals // test export
+
+// CreateBumpBranch exports createBumpBranch for testing.
+var CreateBumpBranch = createBumpBranch //nolint:gochecknoglobals // test export
+
+// AddFilesToWorktree exports addFilesToWorktree for testing.
+var AddFilesToWorktree = addFilesToWorktree //nolint:gochecknoglobals // test export
+
+// CheckoutToMainBranch exports checkoutToMainBranch for testing.
+var CheckoutToMainBranch = checkoutToMainBranch //nolint:gochecknoglobals // test export
+
+// ResolveDefaultBranch exports resolveDefaultBranch for testing.
+var ResolveDefaultBranch = resolveDefaultBranch //nolint:gochecknoglobals // test export
+
+// UpdateChangelogAndVersionFiles exports updateChangelogAndVersionFiles for testing.
+var UpdateChangelogAndVersionFiles = updateChangelogAndVersionFiles //nolint:gochecknoglobals // test export
+
+// HostKeyCallback exports hostKeyCallback for testing.
+var HostKeyCallback = hostKeyCallback //nolint:gochecknoglobals // test export
+
+// IterateProjects is already exported (public), no need to re-export.
+
+// ProcessVersionFile exports processVersionFile for testing.
+var ProcessVersionFile = processVersionFile //nolint:gochecknoglobals // test export
+
+// GetVersionFiles exports getVersionFiles for testing.
+var GetVersionFiles = getVersionFiles //nolint:gochecknoglobals // test export
