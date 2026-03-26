@@ -257,33 +257,21 @@ func TestDiscoverAndProcess(t *testing.T) { //nolint:tparallel // mutates packag
 		require.NoError(t, err)
 	})
 
-	t.Run("should discover and attempt to process repos from valid provider", func(t *testing.T) {
+	t.Run("should handle multiple providers with mixed valid and invalid types", func(t *testing.T) {
 		// given
-		fakeHome := t.TempDir()
-		t.Setenv("HOME", fakeHome)
-		require.NoError(t, os.WriteFile(
-			filepath.Join(fakeHome, ".gitconfig"),
-			[]byte("[user]\n\tname = Test User\n\temail = test@test.com\n"),
-			0o644,
-		))
-
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
 		globalConfig.Providers = []entities.ProviderConfig{
-			{Type: "github", Token: "fake-token", Organizations: []string{"nonexistent-org-xyz"}},
+			{Type: "nonexistent", Token: "tok1", Organizations: []string{"org1"}},
+			{Type: "also-invalid", Token: "tok2", Organizations: []string{"org2"}},
 		}
-		container := dig.New()
-		require.NoError(t, repositories.RegisterProviders(container))
-		var registry *repositories.ProviderRegistry
-		require.NoError(t, container.Invoke(func(r *repositories.ProviderRegistry) {
-			registry = r
-		}))
+		registry := repositories.NewProviderRegistry()
 		commands.SetProviderRegistry(registry)
 		commands.SetGitOperations(gitInfra.NewGitOperations(registry))
 
-		// when -- will fail at API call (invalid token/org) but exercises the discovery path
+		// when
 		err := commands.DiscoverAndProcess(context.Background(), globalConfig, registry)
 
-		// then
+		// then -- errors are logged internally, function always returns nil
 		require.NoError(t, err)
 	})
 }

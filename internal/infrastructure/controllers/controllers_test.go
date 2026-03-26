@@ -310,11 +310,9 @@ projects:
 		cfg, err := controllers.FindReadAndValidateConfig(configPath)
 
 		// then -- should succeed by falling back to default config languages
-		// (may fail if network is unavailable, but the path is exercised)
-		if err == nil {
-			require.NotNil(t, cfg)
-			assert.NotEmpty(t, cfg.LanguagesConfig)
-		}
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.NotEmpty(t, cfg.LanguagesConfig)
 	})
 
 	t.Run("should handle config with providers section", func(t *testing.T) {

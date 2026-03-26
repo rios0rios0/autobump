@@ -151,10 +151,11 @@ func TestProcessRepoAdditionalBranches(t *testing.T) { //nolint:tparallel // mut
 		// when
 		err := commands.ProcessRepo(globalConfig, projectConfig)
 
-		// then -- either error from missing gitconfig or succeeds with defaults
+		// then -- expect error due to missing global git config
+		require.Error(t, err)
+
 		// restore HOME for subsequent tests
 		t.Setenv("HOME", fakeHome)
-		_ = err // the behavior depends on git defaults
 	})
 
 	t.Run("should handle custom changelog_path correctly", func(t *testing.T) {
