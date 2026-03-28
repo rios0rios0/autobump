@@ -1,5 +1,15 @@
 package commands
 
+import "github.com/rios0rios0/autobump/internal/domain/entities"
+
+// FilterRepositories exports filterRepositories for testing.
+func FilterRepositories(
+	repos []entities.Repository,
+	globalConfig *entities.GlobalConfig,
+) []entities.Repository {
+	return filterRepositories(repos, globalConfig)
+}
+
 // CommitChanges exports the commitChanges function for testing.
 var CommitChanges = commitChanges //nolint:gochecknoglobals // test export
 

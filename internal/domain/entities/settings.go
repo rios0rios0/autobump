@@ -24,6 +24,8 @@ type GlobalConfig struct {
 	Providers              []configEntities.ProviderConfig `yaml:"providers"`
 	Projects               []ProjectConfig                 `yaml:"projects"`
 	LanguagesConfig        map[string]LanguageConfig       `yaml:"languages"`
+	ExcludeForks           bool                            `yaml:"exclude_forks"`
+	ExcludeArchived        bool                            `yaml:"exclude_archived"`
 	ChangelogPath          string                          `yaml:"changelog_path"`
 	GpgKeyPath             string                          `yaml:"gpg_key_path"`
 	GpgKeyPassphrase       string                          `yaml:"gpg_key_passphrase"`
