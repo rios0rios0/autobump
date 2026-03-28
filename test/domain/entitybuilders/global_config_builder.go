@@ -13,6 +13,8 @@ type GlobalConfigBuilder struct {
 	providers              []entities.ProviderConfig
 	projects               []entities.ProjectConfig
 	languagesConfig        map[string]entities.LanguageConfig
+	excludeForks           bool
+	excludeArchived        bool
 	changelogPath          string
 	gpgKeyPath             string
 	gpgKeyPassphrase       string
@@ -63,6 +65,18 @@ func (b *GlobalConfigBuilder) WithLanguagesConfig(
 // WithChangelogPath sets the changelog file path.
 func (b *GlobalConfigBuilder) WithChangelogPath(path string) *GlobalConfigBuilder {
 	b.changelogPath = path
+	return b
+}
+
+// WithExcludeForks sets the exclude forks flag.
+func (b *GlobalConfigBuilder) WithExcludeForks(exclude bool) *GlobalConfigBuilder {
+	b.excludeForks = exclude
+	return b
+}
+
+// WithExcludeArchived sets the exclude archived flag.
+func (b *GlobalConfigBuilder) WithExcludeArchived(exclude bool) *GlobalConfigBuilder {
+	b.excludeArchived = exclude
 	return b
 }
 
@@ -131,6 +145,8 @@ func (b *GlobalConfigBuilder) BuildGlobalConfig() *entities.GlobalConfig {
 		Providers:              b.providers,
 		Projects:               b.projects,
 		LanguagesConfig:        b.languagesConfig,
+		ExcludeForks:           b.excludeForks,
+		ExcludeArchived:        b.excludeArchived,
 		ChangelogPath:          b.changelogPath,
 		GpgKeyPath:             b.gpgKeyPath,
 		GpgKeyPassphrase:       b.gpgKeyPassphrase,
@@ -150,6 +166,8 @@ func (b *GlobalConfigBuilder) Reset() testkit.Builder {
 	b.providers = nil
 	b.projects = nil
 	b.languagesConfig = make(map[string]entities.LanguageConfig)
+	b.excludeForks = false
+	b.excludeArchived = false
 	b.changelogPath = ""
 	b.gpgKeyPath = ""
 	b.gpgKeyPassphrase = ""
@@ -187,6 +205,8 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 		providers:              providersCopy,
 		projects:               projectsCopy,
 		languagesConfig:        languagesConfigCopy,
+		excludeForks:           b.excludeForks,
+		excludeArchived:        b.excludeArchived,
 		changelogPath:          b.changelogPath,
 		gpgKeyPath:             b.gpgKeyPath,
 		gpgKeyPassphrase:       b.gpgKeyPassphrase,
