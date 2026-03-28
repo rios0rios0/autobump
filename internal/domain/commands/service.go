@@ -821,6 +821,31 @@ func IterateProjects(globalConfig *entities.GlobalConfig) error {
 	return err
 }
 
+// filterRepositories removes repositories that match the exclusion criteria
+// defined in the settings (e.g. forks, archived repos).
+func filterRepositories(
+	repos []entities.Repository,
+	globalConfig *entities.GlobalConfig,
+) []entities.Repository {
+	if !globalConfig.ExcludeForks && !globalConfig.ExcludeArchived {
+		return repos
+	}
+
+	filtered := make([]entities.Repository, 0, len(repos))
+	for _, repo := range repos {
+		if globalConfig.ExcludeForks && repo.IsFork {
+			logger.Debugf("Skipping fork: %s/%s", repo.Organization, repo.Name)
+			continue
+		}
+		if globalConfig.ExcludeArchived && repo.IsArchived {
+			logger.Debugf("Skipping archived repo: %s/%s", repo.Organization, repo.Name)
+			continue
+		}
+		filtered = append(filtered, repo)
+	}
+	return filtered
+}
+
 // DiscoverAndProcess discovers repositories from configured providers and processes each one.
 func DiscoverAndProcess(
 	ctx context.Context,
@@ -850,6 +875,7 @@ func DiscoverAndProcess(
 				continue
 			}
 
+			repos = filterRepositories(repos, globalConfig)
 			logger.Infof("Found %d repositories in %q", len(repos), org)
 
 			for _, repo := range repos {
