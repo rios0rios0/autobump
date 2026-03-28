@@ -1076,3 +1076,100 @@ func TestChangelogTemplate(t *testing.T) {
 		assert.True(t, empty, "empty-section template should be recognised as having no unreleased content")
 	})
 }
+
+func TestFilterRepositories(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return all repos when no exclusions are set", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		repos := []entities.Repository{
+			entitybuilders.NewRepositoryBuilder().WithName("repo1").BuildRepository(),
+			entitybuilders.NewRepositoryBuilder().WithName("repo2").BuildRepository(),
+			entitybuilders.NewRepositoryBuilder().WithName("repo3").BuildRepository(),
+		}
+		config := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
+
+		// when
+		result := commands.FilterRepositories(repos, config)
+
+		// then
+		assert.Len(t, result, 3)
+	})
+
+	t.Run("should exclude forks when ExcludeForks is true", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		repos := []entities.Repository{
+			entitybuilders.NewRepositoryBuilder().WithName("fork-repo").WithIsFork(true).BuildRepository(),
+			entitybuilders.NewRepositoryBuilder().WithName("regular-repo").BuildRepository(),
+		}
+		config := entitybuilders.NewGlobalConfigBuilder().WithExcludeForks(true).BuildGlobalConfig()
+
+		// when
+		result := commands.FilterRepositories(repos, config)
+
+		// then
+		assert.Len(t, result, 1)
+		assert.Equal(t, "regular-repo", result[0].Name)
+	})
+
+	t.Run("should exclude archived repos when ExcludeArchived is true", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		repos := []entities.Repository{
+			entitybuilders.NewRepositoryBuilder().WithName("archived-repo").WithIsArchived(true).BuildRepository(),
+			entitybuilders.NewRepositoryBuilder().WithName("active-repo").BuildRepository(),
+		}
+		config := entitybuilders.NewGlobalConfigBuilder().WithExcludeArchived(true).BuildGlobalConfig()
+
+		// when
+		result := commands.FilterRepositories(repos, config)
+
+		// then
+		assert.Len(t, result, 1)
+		assert.Equal(t, "active-repo", result[0].Name)
+	})
+
+	t.Run("should exclude both forks and archived repos", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		repos := []entities.Repository{
+			entitybuilders.NewRepositoryBuilder().WithName("fork").WithIsFork(true).BuildRepository(),
+			entitybuilders.NewRepositoryBuilder().WithName("archived").WithIsArchived(true).BuildRepository(),
+			entitybuilders.NewRepositoryBuilder().WithName("both").WithIsFork(true).WithIsArchived(true).BuildRepository(),
+			entitybuilders.NewRepositoryBuilder().WithName("normal").BuildRepository(),
+		}
+		config := entitybuilders.NewGlobalConfigBuilder().
+			WithExcludeForks(true).
+			WithExcludeArchived(true).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.FilterRepositories(repos, config)
+
+		// then
+		assert.Len(t, result, 1)
+		assert.Equal(t, "normal", result[0].Name)
+	})
+
+	t.Run("should return empty when all repos are excluded", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		repos := []entities.Repository{
+			entitybuilders.NewRepositoryBuilder().WithName("fork").WithIsFork(true).BuildRepository(),
+		}
+		config := entitybuilders.NewGlobalConfigBuilder().WithExcludeForks(true).BuildGlobalConfig()
+
+		// when
+		result := commands.FilterRepositories(repos, config)
+
+		// then
+		assert.Empty(t, result)
+	})
+}

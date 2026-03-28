@@ -15,7 +15,9 @@ type RepositoryBuilder struct {
 	organization  string
 	project       string
 	defaultBranch string
-	remoteURL      string
+	remoteURL     string
+	isFork        bool
+	isArchived    bool
 }
 
 // NewRepositoryBuilder creates a new repository builder with sensible defaults.
@@ -67,6 +69,18 @@ func (b *RepositoryBuilder) WithRemoteURL(url string) *RepositoryBuilder {
 	return b
 }
 
+// WithIsFork sets whether the repository is a fork.
+func (b *RepositoryBuilder) WithIsFork(isFork bool) *RepositoryBuilder {
+	b.isFork = isFork
+	return b
+}
+
+// WithIsArchived sets whether the repository is archived.
+func (b *RepositoryBuilder) WithIsArchived(isArchived bool) *RepositoryBuilder {
+	b.isArchived = isArchived
+	return b
+}
+
 // Build creates the repository (satisfies testkit.Builder interface).
 func (b *RepositoryBuilder) Build() interface{} {
 	return b.BuildRepository()
@@ -81,6 +95,8 @@ func (b *RepositoryBuilder) BuildRepository() entities.Repository {
 		Project:       b.project,
 		DefaultBranch: b.defaultBranch,
 		RemoteURL:     b.remoteURL,
+		IsFork:        b.isFork,
+		IsArchived:    b.isArchived,
 	}
 }
 
@@ -93,6 +109,8 @@ func (b *RepositoryBuilder) Reset() testkit.Builder {
 	b.project = ""
 	b.defaultBranch = "main"
 	b.remoteURL = "https://github.com/test-org/test-repo.git"
+	b.isFork = false
+	b.isArchived = false
 	return b
 }
 
@@ -105,6 +123,8 @@ func (b *RepositoryBuilder) Clone() testkit.Builder {
 		organization:  b.organization,
 		project:       b.project,
 		defaultBranch: b.defaultBranch,
-		remoteURL:      b.remoteURL,
+		remoteURL:     b.remoteURL,
+		isFork:        b.isFork,
+		isArchived:    b.isArchived,
 	}
 }
