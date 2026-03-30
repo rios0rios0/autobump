@@ -324,7 +324,7 @@ appVersion: "1.0.0"
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
 				"helm": {
 					VersionFiles: []entities.VersionFile{
-						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)\d+\.\d+\.\d+(['"]?)`}},
+						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)[^\s'"]+(['"]?)`}},
 					},
 				},
 			}).BuildGlobalConfig()
@@ -364,7 +364,7 @@ appVersion: '1.0.0'
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
 				"helm": {
 					VersionFiles: []entities.VersionFile{
-						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)\d+\.\d+\.\d+(['"]?)`}},
+						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)[^\s'"]+(['"]?)`}},
 					},
 				},
 			}).BuildGlobalConfig()
@@ -385,6 +385,46 @@ appVersion: '1.0.0'
 		content := string(result)
 		assert.Contains(t, content, "version: '1.3.0'")
 		assert.Contains(t, content, "appVersion: '1.0.0'")
+	})
+
+	t.Run("should update pre-release version in Chart.yaml", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		chartContent := `apiVersion: v2
+name: my-chart
+description: A Helm chart for Kubernetes
+type: application
+version: 1.2.3-rc.1+build.5
+appVersion: "1.0.0-beta.2"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), []byte(chartContent), 0o644))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"helm": {
+					VersionFiles: []entities.VersionFile{
+						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)[^\s'"]+(['"]?)`}},
+					},
+				},
+			}).BuildGlobalConfig()
+
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath(tmpDir).
+			WithLanguage("helm").
+			WithNewVersion("1.3.0").
+			BuildProjectConfig()
+
+		// when
+		err := commands.UpdateVersion(globalConfig, projectConfig)
+
+		// then
+		require.NoError(t, err)
+		result, err := os.ReadFile(filepath.Join(tmpDir, "Chart.yaml"))
+		require.NoError(t, err)
+		content := string(result)
+		assert.Contains(t, content, "version: 1.3.0")
+		assert.NotContains(t, content, "1.2.3-rc.1")
+		assert.Contains(t, content, `appVersion: "1.0.0-beta.2"`)
 	})
 
 	t.Run("should skip version file updates when language is empty", func(t *testing.T) {

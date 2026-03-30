@@ -59,7 +59,7 @@ languages:
       - "Chart.yaml"
     version_files:
       - path: "Chart.yaml"
-        patterns: ["(?m)(^version:\\s*['\"]?)\\d+\\.\\d+\\.\\d+(['\"]?)"]
+        patterns: ["(?m)(^version:\\s*['\"]?)[^\\s'\"]+(['\"]?)"]
 
   java:
     extensions:
