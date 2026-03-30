@@ -77,6 +77,25 @@ func TestDetectProjectLanguage(t *testing.T) {
 		assert.Equal(t, "python", language)
 	})
 
+	t.Run("should detect helm by Chart.yaml special pattern", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), []byte("apiVersion: v2\nname: test\nversion: 1.0.0\n"), 0o644))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"helm": {SpecialPatterns: []string{"Chart.yaml"}, Extensions: []string{"yaml"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "helm", language)
+	})
+
 	t.Run("should return error when no language is detected", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()

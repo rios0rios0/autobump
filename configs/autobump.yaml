@@ -52,6 +52,15 @@ languages:
     # Go doesn't have a version file - versions are managed through git tags
     # version_files is intentionally omitted
 
+  helm:
+    extensions:
+      - "yaml"
+    special_patterns:
+      - "Chart.yaml"
+    version_files:
+      - path: "Chart.yaml"
+        patterns: ["(?m)(^version:\\s*['\"]?)\\d+\\.\\d+\\.\\d+(['\"]?)"]
+
   java:
     extensions:
       - "java"

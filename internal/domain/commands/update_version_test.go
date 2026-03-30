@@ -308,6 +308,85 @@ repositories {
 		assert.Contains(t, content, `version "0.1.0"`)
 	})
 
+	t.Run("should update version and not appVersion in Chart.yaml", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		chartContent := `apiVersion: v2
+name: my-chart
+description: A Helm chart for Kubernetes
+type: application
+version: 1.2.3
+appVersion: "1.0.0"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), []byte(chartContent), 0o644))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"helm": {
+					VersionFiles: []entities.VersionFile{
+						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)\d+\.\d+\.\d+(['"]?)`}},
+					},
+				},
+			}).BuildGlobalConfig()
+
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath(tmpDir).
+			WithLanguage("helm").
+			WithNewVersion("1.3.0").
+			BuildProjectConfig()
+
+		// when
+		err := commands.UpdateVersion(globalConfig, projectConfig)
+
+		// then
+		require.NoError(t, err)
+		result, err := os.ReadFile(filepath.Join(tmpDir, "Chart.yaml"))
+		require.NoError(t, err)
+		content := string(result)
+		assert.Contains(t, content, "version: 1.3.0")
+		assert.Contains(t, content, `appVersion: "1.0.0"`)
+		assert.NotContains(t, content, "version: 1.2.3")
+	})
+
+	t.Run("should update quoted version in Chart.yaml", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		chartContent := `apiVersion: v2
+name: my-chart
+description: A Helm chart for Kubernetes
+type: application
+version: '1.2.3'
+appVersion: '1.0.0'
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), []byte(chartContent), 0o644))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"helm": {
+					VersionFiles: []entities.VersionFile{
+						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)\d+\.\d+\.\d+(['"]?)`}},
+					},
+				},
+			}).BuildGlobalConfig()
+
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath(tmpDir).
+			WithLanguage("helm").
+			WithNewVersion("1.3.0").
+			BuildProjectConfig()
+
+		// when
+		err := commands.UpdateVersion(globalConfig, projectConfig)
+
+		// then
+		require.NoError(t, err)
+		result, err := os.ReadFile(filepath.Join(tmpDir, "Chart.yaml"))
+		require.NoError(t, err)
+		content := string(result)
+		assert.Contains(t, content, "version: '1.3.0'")
+		assert.Contains(t, content, "appVersion: '1.0.0'")
+	})
+
 	t.Run("should skip version file updates when language is empty", func(t *testing.T) {
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
