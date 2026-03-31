@@ -16,13 +16,14 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.28.0] - 2026-03-31
+
 ### Added
 
 - added Helm chart support for detecting `Chart.yaml` and updating the `version` field during release
 
 ### Changed
 
-- changed the Go module dependencies to their latest versions
 - changed the Go module dependencies to their latest versions
 
 ## [2.27.0] - 2026-03-30
