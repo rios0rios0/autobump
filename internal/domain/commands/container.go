@@ -1,19 +1,12 @@
 package commands
 
 import (
-	"github.com/rios0rios0/cliforge/selfupdate"
 	"go.uber.org/dig"
 )
 
 // RegisterProviders registers all command providers with the DIG container.
 func RegisterProviders(container *dig.Container) error {
 	if err := container.Provide(NewVersionCommand); err != nil {
-		return err
-	}
-	if err := container.Provide(func() SelfUpdateRunnerFunc {
-		cmd := selfupdate.NewSelfUpdateCommand("rios0rios0", "autobump", "autobump", AutobumpVersion)
-		return cmd.Execute
-	}); err != nil {
 		return err
 	}
 	if err := container.Provide(NewSelfUpdateCommand); err != nil {
