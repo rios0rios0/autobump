@@ -126,13 +126,17 @@ func TestNewControllers(t *testing.T) {
 		// given
 		local := controllers.NewLocalController()
 		run := controllers.NewRunController(repositories.NewProviderRegistry())
+		selfUpdate := controllers.NewSelfUpdateController(commands.NewSelfUpdateCommand(
+			func(_, _ bool) error { return nil },
+		))
+		version := controllers.NewVersionController(commands.NewVersionCommand())
 
 		// when
-		result := controllers.NewControllers(run, local)
+		result := controllers.NewControllers(run, local, selfUpdate, version)
 
 		// then
 		require.NotNil(t, result)
-		assert.Len(t, *result, 2)
+		assert.Len(t, *result, 4)
 		assert.IsType(t, (*[]entities.Controller)(nil), result)
 	})
 }
