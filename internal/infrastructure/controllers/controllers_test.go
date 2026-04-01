@@ -126,13 +126,17 @@ func TestNewControllers(t *testing.T) {
 		// given
 		local := controllers.NewLocalController()
 		run := controllers.NewRunController(repositories.NewProviderRegistry())
+		selfUpdate := controllers.NewSelfUpdateController(commands.NewSelfUpdateCommand(
+			func(_, _ bool) error { return nil },
+		))
+		version := controllers.NewVersionController(commands.NewVersionCommand())
 
 		// when
-		result := controllers.NewControllers(run, local)
+		result := controllers.NewControllers(run, local, selfUpdate, version)
 
 		// then
 		require.NotNil(t, result)
-		assert.Len(t, *result, 2)
+		assert.Len(t, *result, 4)
 		assert.IsType(t, (*[]entities.Controller)(nil), result)
 	})
 }
@@ -191,6 +195,10 @@ func TestRegisterProviders(t *testing.T) {
 	t.Run("should allow resolving controllers after registration", func(t *testing.T) {
 		// given
 		container := dig.New()
+		require.NoError(t, container.Provide(func() commands.SelfUpdateRunnerFunc {
+			return func(_, _ bool) error { return nil }
+		}))
+		require.NoError(t, commands.RegisterProviders(container))
 		require.NoError(t, repositories.RegisterProviders(container))
 		require.NoError(t, controllers.RegisterProviders(container))
 
@@ -203,7 +211,7 @@ func TestRegisterProviders(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		assert.Len(t, *result, 2)
+		assert.Len(t, *result, 4)
 	})
 
 	t.Run("should return error when dependency is missing", func(t *testing.T) {

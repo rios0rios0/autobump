@@ -16,6 +16,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `version` command that prints the build-time version to stdout
+- added `self-update` command that downloads and installs the latest release from GitHub
+
 ### Changed
 
 - changed the Go module dependencies to their latest versions

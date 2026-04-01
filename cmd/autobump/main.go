@@ -12,6 +12,11 @@ import (
 	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 )
 
+// version is set at build time via ldflags.
+//
+
+var version = "dev"
+
 func buildRootCommand(localController *controllers.LocalController) *cobra.Command {
 	//nolint:exhaustruct // Minimal Command initialization with required fields only
 	cmd := &cobra.Command{
@@ -76,6 +81,12 @@ func addSubcommands(rootCmd *cobra.Command, appContext *internal.AppInternal) {
 		if lc, ok := ctrl.(*controllers.LocalController); ok {
 			lc.AddFlags(subCmd)
 		}
+		if sc, ok := ctrl.(*controllers.SelfUpdateController); ok {
+			sc.AddFlags(subCmd)
+		}
+		if vc, ok := ctrl.(*controllers.VersionController); ok {
+			vc.AddFlags(subCmd)
+		}
 
 		rootCmd.AddCommand(subCmd)
 	}
@@ -113,6 +124,9 @@ func main() {
 	if os.Getenv("DEBUG") == "true" {
 		logger.SetLevel(logger.DebugLevel)
 	}
+
+	// Bridge the build-time version to the domain package
+	commands.AutobumpVersion = version //nolint:reassign // build-time version must be bridged to domain
 
 	// Initialize the provider registry via DIG and create GitOperations with it
 	providerRegistry := injectProviderRegistry()
