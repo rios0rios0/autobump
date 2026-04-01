@@ -25,3 +25,8 @@ func (it *VersionController) GetBind() entities.ControllerBind {
 func (it *VersionController) Execute(_ *cobra.Command, _ []string) {
 	it.command.Execute()
 }
+
+// AddFlags adds version-specific flags to the given Cobra command.
+func (it *VersionController) AddFlags(cmd *cobra.Command) {
+	cmd.Args = cobra.NoArgs
+}

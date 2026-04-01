@@ -1,14 +1,13 @@
 package commands
 
-import "github.com/rios0rios0/cliforge/selfupdate"
+type SelfUpdateCommand struct {
+	runnerFn SelfUpdateRunnerFunc
+}
 
-type SelfUpdateCommand struct{}
-
-func NewSelfUpdateCommand() *SelfUpdateCommand {
-	return &SelfUpdateCommand{}
+func NewSelfUpdateCommand(runnerFn SelfUpdateRunnerFunc) *SelfUpdateCommand {
+	return &SelfUpdateCommand{runnerFn: runnerFn}
 }
 
 func (c *SelfUpdateCommand) Execute(dryRun, force bool) error {
-	cmd := selfupdate.NewSelfUpdateCommand("rios0rios0", "autobump", "autobump", AutobumpVersion)
-	return cmd.Execute(dryRun, force)
+	return c.runnerFn(dryRun, force)
 }

@@ -24,11 +24,28 @@ func (it *SelfUpdateController) GetBind() entities.ControllerBind {
 }
 
 func (it *SelfUpdateController) Execute(cmd *cobra.Command, _ []string) {
-	dryRun, _ := cmd.Flags().GetBool("dry-run")
-	force, _ := cmd.Flags().GetBool("force")
-
-	err := it.command.Execute(dryRun, force)
+	dryRun, err := cmd.Flags().GetBool("dry-run")
 	if err != nil {
-		logger.Fatalf("Self-update failed: %s", err)
+		logger.Errorf("failed to read --dry-run flag: %v", err)
+		return
 	}
+
+	force, err := cmd.Flags().GetBool("force")
+	if err != nil {
+		logger.Errorf("failed to read --force flag: %v", err)
+		return
+	}
+
+	err = it.command.Execute(dryRun, force)
+	if err != nil {
+		logger.Errorf("Self-update failed: %s", err)
+		return
+	}
+}
+
+// AddFlags adds self-update-specific flags to the given Cobra command.
+func (it *SelfUpdateController) AddFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("dry-run", false, "Show what would be updated without performing it")
+	cmd.Flags().Bool("force", false, "Skip confirmation prompts")
+	cmd.Args = cobra.NoArgs
 }

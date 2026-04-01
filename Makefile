@@ -2,7 +2,7 @@ SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 -include $(SCRIPTS_DIR)/makefiles/common.mk
 -include $(SCRIPTS_DIR)/makefiles/golang.mk
 
-VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "dev")
+VERSION ?= $(shell { git describe --tags --abbrev=0 2>/dev/null || echo "dev"; } | sed 's/^v//')
 LDFLAGS := -X main.version=$(VERSION)
 
 .PHONY: debug build build-musl install run

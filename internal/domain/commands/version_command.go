@@ -1,6 +1,9 @@
 package commands
 
-import logger "github.com/sirupsen/logrus"
+import (
+	"fmt"
+	"os"
+)
 
 // AutobumpVersion is set at build time via ldflags through the main package bridge.
 // During development (`go run`), it defaults to "dev".
@@ -15,5 +18,5 @@ func NewVersionCommand() *VersionCommand {
 }
 
 func (c *VersionCommand) Execute() {
-	logger.Infof("autobump version: %s", AutobumpVersion)
+	fmt.Fprintf(os.Stdout, "autobump version: %s\n", AutobumpVersion)
 }
