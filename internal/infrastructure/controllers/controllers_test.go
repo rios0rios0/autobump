@@ -195,6 +195,10 @@ func TestRegisterProviders(t *testing.T) {
 	t.Run("should allow resolving controllers after registration", func(t *testing.T) {
 		// given
 		container := dig.New()
+		require.NoError(t, container.Provide(func() commands.SelfUpdateRunnerFunc {
+			return func(_, _ bool) error { return nil }
+		}))
+		require.NoError(t, commands.RegisterProviders(container))
 		require.NoError(t, repositories.RegisterProviders(container))
 		require.NoError(t, controllers.RegisterProviders(container))
 
@@ -207,7 +211,7 @@ func TestRegisterProviders(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		assert.Len(t, *result, 2)
+		assert.Len(t, *result, 4)
 	})
 
 	t.Run("should return error when dependency is missing", func(t *testing.T) {
