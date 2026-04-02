@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"github.com/rios0rios0/cliforge/selfupdate"
+	"github.com/rios0rios0/cliforge/pkg/selfupdate"
 
 	"github.com/rios0rios0/autobump/internal/domain/commands"
 	"github.com/rios0rios0/autobump/internal/domain/entities"
@@ -20,7 +20,7 @@ func RegisterProviders(container *dig.Container) error {
 	}
 	// Provide the self-update runner (infrastructure adapter) before commands registration
 	if err := container.Provide(func() commands.SelfUpdateRunnerFunc {
-		cmd := selfupdate.NewSelfUpdateCommand("rios0rios0", "autobump", "autobump", commands.AutobumpVersion)
+		cmd := selfupdate.NewCommand("rios0rios0", "autobump", "autobump", commands.AutobumpVersion)
 		return cmd.Execute
 	}); err != nil {
 		return err

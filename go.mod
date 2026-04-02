@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/go-git/go-git/v5 v5.17.2
-	github.com/rios0rios0/cliforge v0.1.0
+	github.com/rios0rios0/cliforge v0.1.1-0.20260402173400-cd7225c728db
 	github.com/rios0rios0/langforge v0.5.0
 	github.com/rios0rios0/testkit v0.1.1
 	github.com/sirupsen/logrus v1.9.4
