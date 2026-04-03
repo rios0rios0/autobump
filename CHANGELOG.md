@@ -16,16 +16,17 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.29.0] - 2026-04-03
+
 ### Added
 
-- added `version` command that prints the build-time version to stdout
 - added `self-update` command that downloads and installs the latest release from GitHub
+- added `version` command that prints the build-time version to stdout
 
 ### Changed
 
-- changed the Go module dependencies to their latest versions
-- changed the Go module dependencies to their latest versions
 - changed `cliforge` import paths to match the new `pkg/` restructured package layout
+- changed the Go module dependencies to their latest versions
 
 ## [2.28.0] - 2026-03-31
 
