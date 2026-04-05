@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/rios0rios0/cliforge/pkg/selfupdate"
 	logger "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -141,6 +142,8 @@ func main() {
 	// Add all subcommands (including deprecation aliases)
 	appContext := injectAppContext()
 	addSubcommands(rootCmd, appContext)
+
+	selfupdate.NewCommand("rios0rios0", "autobump", "autobump", commands.AutobumpVersion).CheckForUpdates()
 
 	if err := rootCmd.Execute(); err != nil {
 		logger.Errorf("Uncaught error: %v", err)
