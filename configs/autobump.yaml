@@ -94,6 +94,16 @@ languages:
       - path: "{project_name}/__init__.py"
         patterns: ["(__version__\\s*=\\s*\")\\d+\\.\\d+\\.\\d+(\")"]
 
+  terraform:
+    extensions:
+      - "tf"
+      - "hcl"
+    special_patterns:
+      - "*.tf"
+      - "versions.tf"
+    # Terraform modules don't have a version file - versions are managed through git tags
+    # version_files is intentionally omitted (same pattern as Go)
+
   typescript:
     extensions:
       - "ts"

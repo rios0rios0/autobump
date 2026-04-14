@@ -21,9 +21,10 @@ commit the changes, push the commits, and create a merge request/pull request on
 
 AutoBump supports automatic language detection and version updates for:
 
-- **Go**: Detects via `go.mod`, updates version in `go.mod`
+- **Go**: Detects via `go.mod`; versions managed through git tags (no version file)
 - **Java**: Detects via `build.gradle`, `pom.xml`, updates `build.gradle` and `application.yaml`
 - **Python**: Detects via `pyproject.toml`, `setup.py`, updates `__init__.py`
+- **Terraform**: Detects via `*.tf`, `versions.tf`; versions managed through git tags (no version file)
 - **TypeScript**: Detects via `package.json`, `tsconfig.json`, updates `package.json`
 - **C#**: Detects via `*.sln`, `*.csproj`, updates project files
 
@@ -133,7 +134,7 @@ You can manually specify the project language using the `-l` or `--language` fla
 autobump local -l java
 ```
 
-Available languages: `go`, `java`, `python`, `typescript`, `cs`
+Available languages: `go`, `java`, `python`, `terraform`, `typescript`, `cs`
 
 You can also specify a custom configuration file path:
 
