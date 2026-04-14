@@ -18,6 +18,19 @@ import (
 
 var version = "dev"
 
+// runUpdateCheck performs the update check unless the build is a local dev build
+// or the invoked subcommand is one that must not trigger it (self-update, version).
+func runUpdateCheck(command *cobra.Command) {
+	if commands.AutobumpVersion == "dev" {
+		return
+	}
+	switch command.Name() {
+	case "self-update", "version":
+		return
+	}
+	selfupdate.NewCommand("rios0rios0", "autobump", "autobump", commands.AutobumpVersion).CheckForUpdates()
+}
+
 func buildRootCommand(localController *controllers.LocalController) *cobra.Command {
 	//nolint:exhaustruct // Minimal Command initialization with required fields only
 	cmd := &cobra.Command{
@@ -33,6 +46,9 @@ Usage modes:
   autobump local /path       Bump version in a specific directory
   autobump run               Batch mode using a config file (cronjob)`,
 		Args: cobra.MaximumNArgs(1),
+		PersistentPreRun: func(command *cobra.Command, _ []string) {
+			runUpdateCheck(command)
+		},
 		RunE: func(command *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return command.Help()
@@ -142,8 +158,6 @@ func main() {
 	// Add all subcommands (including deprecation aliases)
 	appContext := injectAppContext()
 	addSubcommands(rootCmd, appContext)
-
-	selfupdate.NewCommand("rios0rios0", "autobump", "autobump", commands.AutobumpVersion).CheckForUpdates()
 
 	if err := rootCmd.Execute(); err != nil {
 		logger.Errorf("Uncaught error: %v", err)
