@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added Terraform support for detecting `*.tf` and `versions.tf` marker files; versions are managed through git tags (no version file update, same pattern as Go)
+
 ## [2.30.0] - 2026-04-14
 
 ### Added

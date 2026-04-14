@@ -96,6 +96,25 @@ func TestDetectProjectLanguage(t *testing.T) {
 		assert.Equal(t, "helm", language)
 	})
 
+	t.Run("should detect terraform by main.tf marker file", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("terraform {\n  required_version = \">=1.9.3\"\n}\n"), 0o644))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"terraform": {SpecialPatterns: []string{"*.tf", "versions.tf"}, Extensions: []string{"tf", "hcl"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "terraform", language)
+	})
+
 	t.Run("should return error when no language is detected", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
@@ -146,6 +165,21 @@ func TestResolveConfigKey(t *testing.T) {
 
 		// then
 		assert.Equal(t, "golang", result)
+	})
+
+	t.Run("should return direct match for terraform langforge constant", func(t *testing.T) {
+		// given
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"terraform": {Extensions: []string{"tf", "hcl"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.ResolveConfigKey(globalConfig, langEntities.LanguageTerraform)
+
+		// then
+		assert.Equal(t, "terraform", result)
 	})
 
 	t.Run("should return empty string when no match found", func(t *testing.T) {
