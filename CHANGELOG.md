@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed the Go version to `1.26.2` and updated all module dependencies
+
 ### Added
 
 - added Terraform support for detecting `*.tf` and `versions.tf` marker files; versions are managed through git tags (no version file update, same pattern as Go)
