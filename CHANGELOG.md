@@ -26,6 +26,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - changed the Go version to `1.26.2` and updated all module dependencies
 
+### Fixed
+
+- fixed `exhaustive` lint failure by adding the `LanguageRuby` key (introduced in langforge `v0.6.0`) to the `langforgeAliases` lookup map
+
 ## [2.30.0] - 2026-04-14
 
 ### Added
