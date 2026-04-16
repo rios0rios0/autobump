@@ -116,6 +116,7 @@ var langforgeAliases = map[langEntities.Language][]string{
 	langEntities.LanguageJavaMaven:  {"java"},
 	langEntities.LanguageCSharp:     {"cs"},
 	langEntities.LanguagePython:     {},
+	langEntities.LanguageRuby:       {},
 	langEntities.LanguageTerraform:  {},
 	langEntities.LanguageYAML:       {},
 	langEntities.LanguageDockerfile: {},
