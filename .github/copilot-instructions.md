@@ -44,7 +44,7 @@ Note: The CI/CD pipeline automatically uses these scripts via the reusable workf
 
 ## Architecture
 
-The project follows **Clean Architecture** with dependencies always pointing inward toward the domain layer. Dependency injection is handled by [go.uber.org/dig](https://github.com/uber-go/dig). Provider and Git forge abstractions are sourced from the [rios0rios0/gitforge](https://github.com/rios0rios0/gitforge) library.
+The project follows **Clean Architecture** with dependencies always pointing inward toward the domain layer. Dependency injection is handled by [go.uber.org/dig](https://github.com/uber-go/dig). Provider and Git forge abstractions are sourced from the [rios0rios0/gitforge](https://github.com/rios0rios0/gitforge) library. CLI utilities (self-update, version commands, startup update checks) come from [rios0rios0/cliforge](https://github.com/rios0rios0/cliforge).
 
 ### Repository Structure
 
@@ -63,7 +63,11 @@ autobump/
 │   │   ├── commands/
 │   │   │   ├── service.go               # Use cases: ProcessRepo, IterateProjects,
 │   │   │   │                            #   DiscoverAndProcess, DetectProjectLanguage
-│   │   │   ├── container.go             # No-op RegisterProviders (commands called directly)
+│   │   │   ├── self_update.go           # SelfUpdate interface and SelfUpdateRunnerFunc type
+│   │   │   ├── self_update_command.go   # SelfUpdateCommand implementation (via cliforge)
+│   │   │   ├── version.go              # Version interface
+│   │   │   ├── version_command.go      # VersionCommand implementation
+│   │   │   ├── container.go             # RegisterProviders for command implementations via DIG
 │   │   │   ├── export_test.go           # Exports unexported functions for white-box testing
 │   │   │   └── service_test.go          # BDD unit tests for command functions
 │   │   └── entities/
@@ -82,6 +86,8 @@ autobump/
 │   │   ├── controllers/
 │   │   │   ├── local_controller.go      # "local" subcommand (single repo mode)
 │   │   │   ├── run_controller.go        # "run" subcommand (batch + discover engine)
+│   │   │   ├── self_update_controller.go # "self-update" subcommand
+│   │   │   ├── version_controller.go    # "version" subcommand
 │   │   │   ├── config_helpers.go        # Shared config reading/validation helper
 │   │   │   └── container.go             # RegisterProviders for all controllers via DIG
 │   │   └── repositories/
@@ -95,12 +101,15 @@ autobump/
 ├── test/
 │   └── domain/
 │       └── entitybuilders/
+│           ├── global_config_builder.go  # Test builder for GlobalConfig
+│           ├── project_config_builder.go # Test builder for ProjectConfig
+│           ├── provider_config_builder.go # Test builder for ProviderConfig
 │           └── repository_builder.go    # Test builder for Repository entities
 ├── configs/
 │   ├── autobump.yaml                    # Default configuration template
 │   └── CHANGELOG.template.md           # Default CHANGELOG template
 ├── Makefile                             # Build: build, debug, build-musl, run, install
-├── go.mod                               # Module: github.com/rios0rios0/autobump (Go 1.26)
+├── go.mod                               # Module: github.com/rios0rios0/autobump (Go 1.26.2)
 └── .github/
     └── workflows/default.yaml           # CI/CD pipeline (go-binary reusable workflow)
 ```
@@ -148,6 +157,8 @@ autobump/
 | `autobump run` | Engine mode: auto-detects batch (static project list) and/or discover (provider APIs) from config |
 | `autobump batch` | **Deprecated**: hidden alias for `run` (shows deprecation warning) |
 | `autobump discover` | **Deprecated**: hidden alias for `run` (shows deprecation warning) |
+| `autobump version` | Prints the build-time version |
+| `autobump self-update` | Downloads and installs the latest release from GitHub |
 
 ### CLI Flags
 
@@ -178,9 +189,11 @@ providers:
 
 The tool auto-detects and supports:
 
-- **Go**: Detects via `go.mod`, updates version in `go.mod`
+- **Go**: Detects via `go.mod`; versions managed through git tags (no version file)
+- **Helm**: Detects via `Chart.yaml`, updates the `version` field in `Chart.yaml`
 - **Java**: Detects via `build.gradle`, `pom.xml`, updates `build.gradle` and `application.yaml`
 - **Python**: Detects via `pyproject.toml`, `setup.py`, updates `__init__.py`
+- **Terraform**: Detects via `*.tf`, `versions.tf`; versions managed through git tags (no version file)
 - **TypeScript**: Detects via `package.json`, `tsconfig.json`, updates `package.json`
 - **C#**: Detects via `*.sln`, `*.csproj`, updates project files
 
