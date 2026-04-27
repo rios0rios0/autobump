@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document `cliforge` dependency, `version`/`self-update` commands, Helm and Terraform language support, and corrected Go version-file handling
+
 ## [2.31.4] - 2026-04-24
 
 ### Changed

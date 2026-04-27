@@ -33,7 +33,7 @@ Clean Architecture with Hexagonal (Ports & Adapters) design using `go.uber.org/d
 
 - **`cmd/autobump/`** — Entry point (`main.go`) and DI wiring (`dig.go`)
 - **`internal/domain/`** — Business logic and contracts (no framework dependencies)
-  - `commands/service.go` — Core use cases: `ProcessRepo`, `IterateProjects`, `DiscoverAndProcess`, `DetectProjectLanguage`
+  - `commands/` — Core use cases in `service.go` (`ProcessRepo`, `IterateProjects`, `DiscoverAndProcess`, `DetectProjectLanguage`) plus `VersionCommand` and `SelfUpdateCommand`
   - `entities/` — Domain types: `GlobalConfig`, `ProjectConfig`, `LanguageConfig`, `Controller` interface
 - **`internal/infrastructure/`** — Implementations
   - `controllers/` — Cobra CLI handlers: `LocalController` (single-repo), `RunController` (batch + discover engine)
@@ -56,6 +56,7 @@ Dependencies always point inward: infrastructure → domain, never the reverse.
 
 - **`gitforge`** (`github.com/rios0rios0/gitforge`) — Git provider adapters, changelog processing, PR creation
 - **`langforge`** (`github.com/rios0rios0/langforge`) — Language detection via marker files
+- **`cliforge`** (`github.com/rios0rios0/cliforge`) — CLI framework: self-update, version commands, startup update checks
 - **`testkit`** (`github.com/rios0rios0/testkit`) — Test builder base classes
 
 ### CLI Modes
@@ -63,7 +64,9 @@ Dependencies always point inward: infrastructure → domain, never the reverse.
 | Command                          | Controller        | Use Case                                                    |
 |----------------------------------|-------------------|-------------------------------------------------------------|
 | `autobump local` or `autobump .` | `LocalController` | Process a single repository                                |
-| `autobump run`                   | `RunController`   | Process repos from config (auto-detects batch vs discover) |
+| `autobump run`                   | `RunController`        | Process repos from config (auto-detects batch vs discover) |
+| `autobump version`               | `VersionController`    | Print the build-time version                               |
+| `autobump self-update`           | `SelfUpdateController` | Download and install the latest release from GitHub         |
 
 The `run` command auto-detects the mode: if the config has a `providers` section, it discovers repos via APIs; if it has a `projects` section, it iterates the static list. Both can run together.
 
