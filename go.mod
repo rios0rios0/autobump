@@ -6,8 +6,8 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/go-git/go-git/v5 v5.18.0
-	github.com/rios0rios0/cliforge v0.3.4
-	github.com/rios0rios0/langforge v0.6.3
+	github.com/rios0rios0/cliforge v0.3.5
+	github.com/rios0rios0/langforge v0.6.4
 	github.com/rios0rios0/testkit v0.2.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
@@ -43,7 +43,7 @@ require (
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/pjbgf/sha1cd v0.5.0 // indirect
-	github.com/rios0rios0/gitforge v0.9.5
+	github.com/rios0rios0/gitforge v0.9.6
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/skeema/knownhosts v1.3.2
 	github.com/spf13/pflag v1.0.10 // indirect
