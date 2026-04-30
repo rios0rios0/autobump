@@ -15,9 +15,9 @@ import (
 // expected fork pattern (X.Y.Z.N or X.Y.Z-N) for the requested mode.
 var ErrInvalidForkVersion = errors.New("invalid fork version")
 
-// forkRewriteOverhead is the number of extra lines a fork-mode rewrite injects
-// into the changelog: an [Unreleased] header, a blank line, the new dated
-// header, and a trailing blank line.
+// forkRewriteOverhead is the maximum number of extra lines a fork-mode rewrite
+// may inject into the changelog: an [Unreleased] header, a blank line, the
+// new dated header, and, when another section follows, a trailing blank line.
 const forkRewriteOverhead = 4
 
 // forkVersionRegex matches the fork version forms supported by the bumper.
@@ -44,9 +44,9 @@ func (v ForkVersion) String() string {
 }
 
 // ParseForkVersion parses a fork version string into its components.
-// A trailing "v" prefix (e.g. v1.0.0.3) is tolerated but stripped from the
-// upstream part. The mode constrains which separator is accepted; pass an
-// empty mode to accept either.
+// A leading "v" prefix (e.g. v1.0.0.3) is tolerated but stripped before
+// parsing. The mode constrains which separator is accepted; pass an empty
+// mode to accept either.
 func ParseForkVersion(s, mode string) (*ForkVersion, error) {
 	trimmed := strings.TrimSpace(s)
 	trimmed = strings.TrimPrefix(trimmed, "v")

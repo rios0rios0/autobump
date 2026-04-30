@@ -50,7 +50,7 @@ var (
 // original globalConfig, but it may update the provided projectConfig.
 // It also merges the changelog_path and versioning fields from the per-project
 // config into the projectConfig when the projectConfig does not already specify
-// one. If no per-project config is found, the original globalConfig is returned
+// them. If no per-project config is found, the original globalConfig is returned
 // unchanged.
 func loadProjectConfigOverrides(
 	globalConfig *entities.GlobalConfig,
