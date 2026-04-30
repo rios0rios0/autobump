@@ -27,6 +27,14 @@ azure_devops_access_token: "azure-devops-token"
 github_access_token: "ghp_TOKEN"
 #github_access_token: ".secure_files/github_access_token.key"
 
+# (optional) global default versioning mode applied to every project that does
+# not specify its own. Accepted values: 'semver' (default), 'fork-dot', 'fork-dash'.
+# 'fork-dot' bumps X.Y.Z.N -> X.Y.Z.(N+1); 'fork-dash' bumps X.Y.Z-N -> X.Y.Z-(N+1).
+#versioning: 'semver'
+
+# (optional) global default changelog filename, relative to each project root.
+#changelog_path: 'CHANGELOG.md'
+
 # rules for automatically detecting project languages
 languages:
   # name of the language, this requires support in the code
@@ -130,8 +138,19 @@ projects:
 
   # (optional) custom changelog file path relative to the project root
   # defaults to 'CHANGELOG.md' if not specified
-  #- path: "/home/user/repo3.5"
+  #- path: '/home/user/repo3.5'
   #  changelog_path: 'docs/CHANGELOG.md'
+
+  # (optional) fork-style versioning for repositories that follow the Forking
+  # Technique (https://github.com/rios0rios0/guide/wiki/Forking-Technique).
+  # The upstream X.Y.Z is preserved; only the trailing fork digit is bumped.
+  # Use 'fork-dot' for X.Y.Z.N or 'fork-dash' for X.Y.Z-N.
+  #- path: '/home/user/forks/opensearch-dashboards'
+  #  changelog_path: 'CHANGELOG_PROPRIETARY.md'
+  #  versioning: 'fork-dot'
+  #- path: '/home/user/forks/oui'
+  #  changelog_path: 'CHANGELOG_PROPRIETARY.md'
+  #  versioning: 'fork-dash'
 
   # you can specify a project access token that will be used for this project
   # this token will be prioritized over the gitlab_access_token and the CI_JOB_TOKEN

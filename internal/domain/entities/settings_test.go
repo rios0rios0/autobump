@@ -369,6 +369,23 @@ func TestReadProjectConfig(t *testing.T) {
 		assert.Contains(t, cfg.LanguagesConfig, "go")
 	})
 
+	t.Run("should read versioning and changelog_path from per-project config", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, ".autobump.yaml")
+		content := "versioning: 'fork-dot'\nchangelog_path: 'CHANGELOG_PROPRIETARY.md'\n"
+		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
+
+		// when
+		cfg, err := entities.ReadProjectConfig(configPath)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, entities.VersioningForkDot, cfg.Versioning)
+		assert.Equal(t, "CHANGELOG_PROPRIETARY.md", cfg.ChangelogPath)
+	})
+
 	t.Run("should correctly parse version files with regex patterns", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
@@ -921,5 +938,65 @@ func TestFindConfigOnMissing(t *testing.T) {
 
 		// then
 		assert.NotEmpty(t, result)
+	})
+}
+
+func TestResolveVersioning(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should default to semver when both configs are nil", func(t *testing.T) {
+		// given / when
+		mode := entities.ResolveVersioning(nil, nil)
+
+		// then
+		assert.Equal(t, entities.VersioningSemver, mode)
+	})
+
+	t.Run("should return project versioning when set", func(t *testing.T) {
+		// given
+		globalConfig := &entities.GlobalConfig{Versioning: entities.VersioningSemver}
+		projectConfig := &entities.ProjectConfig{Versioning: entities.VersioningForkDot}
+
+		// when
+		mode := entities.ResolveVersioning(globalConfig, projectConfig)
+
+		// then
+		assert.Equal(t, entities.VersioningForkDot, mode)
+	})
+
+	t.Run("should fall back to global versioning when project is empty", func(t *testing.T) {
+		// given
+		globalConfig := &entities.GlobalConfig{Versioning: entities.VersioningForkDash}
+		projectConfig := &entities.ProjectConfig{}
+
+		// when
+		mode := entities.ResolveVersioning(globalConfig, projectConfig)
+
+		// then
+		assert.Equal(t, entities.VersioningForkDash, mode)
+	})
+
+	t.Run("should normalize unknown modes to semver", func(t *testing.T) {
+		// given
+		globalConfig := &entities.GlobalConfig{}
+		projectConfig := &entities.ProjectConfig{Versioning: "calver"}
+
+		// when
+		mode := entities.ResolveVersioning(globalConfig, projectConfig)
+
+		// then
+		assert.Equal(t, entities.VersioningSemver, mode)
+	})
+
+	t.Run("should ignore surrounding whitespace", func(t *testing.T) {
+		// given
+		globalConfig := &entities.GlobalConfig{Versioning: " fork-dot  "}
+		projectConfig := &entities.ProjectConfig{}
+
+		// when
+		mode := entities.ResolveVersioning(globalConfig, projectConfig)
+
+		// then
+		assert.Equal(t, entities.VersioningForkDot, mode)
 	})
 }
