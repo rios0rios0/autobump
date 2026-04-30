@@ -19,6 +19,18 @@ import (
 	downloadHelpers "github.com/rios0rios0/gitforge/pkg/config/infrastructure/helpers"
 )
 
+// Versioning modes supported by the bumper.
+//
+// VersioningSemver follows Semantic Versioning (default).
+// VersioningForkDot increments the trailing fork digit in X.Y.Z.N versions.
+// VersioningForkDash increments the trailing fork digit in X.Y.Z-N versions.
+// See the "Forking Technique" guide for the rationale behind the fork modes.
+const (
+	VersioningSemver   = "semver"
+	VersioningForkDot  = "fork-dot"
+	VersioningForkDash = "fork-dash"
+)
+
 // GlobalConfig represents the top-level configuration.
 type GlobalConfig struct {
 	Providers              []configEntities.ProviderConfig `yaml:"providers"`
@@ -27,6 +39,7 @@ type GlobalConfig struct {
 	ExcludeForks           bool                            `yaml:"exclude_forks"`
 	ExcludeArchived        bool                            `yaml:"exclude_archived"`
 	ChangelogPath          string                          `yaml:"changelog_path"`
+	Versioning             string                          `yaml:"versioning"`
 	GpgKeyPath             string                          `yaml:"gpg_key_path"`
 	GpgKeyPassphrase       string                          `yaml:"gpg_key_passphrase"`
 	SSHKeyPath             string                          `yaml:"ssh_key_path"`
@@ -62,6 +75,29 @@ type ProjectConfig struct {
 	ProjectAccessToken string `yaml:"project_access_token"`
 	NewVersion         string `yaml:"new_version"`
 	ChangelogPath      string `yaml:"changelog_path"`
+	Versioning         string `yaml:"versioning"`
+}
+
+// ResolveVersioning returns the effective versioning mode for a project.
+// Project-level setting wins over global, which wins over the semver default.
+// Unknown modes are normalized to the semver default to keep the bumper safe.
+func ResolveVersioning(globalConfig *GlobalConfig, projectConfig *ProjectConfig) string {
+	mode := ""
+	if projectConfig != nil {
+		mode = strings.TrimSpace(projectConfig.Versioning)
+	}
+	if mode == "" && globalConfig != nil {
+		mode = strings.TrimSpace(globalConfig.Versioning)
+	}
+	switch mode {
+	case VersioningForkDot, VersioningForkDash:
+		return mode
+	case "", VersioningSemver:
+		return VersioningSemver
+	default:
+		logger.Warnf("Unknown versioning mode %q, falling back to %q", mode, VersioningSemver)
+		return VersioningSemver
+	}
 }
 
 // DefaultConfigURL is the URL of the default configuration file.
