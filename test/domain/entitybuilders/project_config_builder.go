@@ -16,6 +16,7 @@ type ProjectConfigBuilder struct {
 	projectAccessToken string
 	newVersion         string
 	changelogPath      string
+	versioning         string
 }
 
 // NewProjectConfigBuilder creates a new ProjectConfig builder with sensible defaults.
@@ -28,6 +29,7 @@ func NewProjectConfigBuilder() *ProjectConfigBuilder {
 		projectAccessToken: "",
 		newVersion:         "",
 		changelogPath:      "",
+		versioning:         "",
 	}
 }
 
@@ -67,6 +69,12 @@ func (b *ProjectConfigBuilder) WithChangelogPath(path string) *ProjectConfigBuil
 	return b
 }
 
+// WithVersioning sets the versioning mode (semver, fork-dot, fork-dash).
+func (b *ProjectConfigBuilder) WithVersioning(mode string) *ProjectConfigBuilder {
+	b.versioning = mode
+	return b
+}
+
 // Build creates the ProjectConfig (satisfies testkit.Builder interface).
 func (b *ProjectConfigBuilder) Build() interface{} {
 	return b.BuildProjectConfig()
@@ -81,6 +89,7 @@ func (b *ProjectConfigBuilder) BuildProjectConfig() *entities.ProjectConfig {
 		ProjectAccessToken: b.projectAccessToken,
 		NewVersion:         b.newVersion,
 		ChangelogPath:      b.changelogPath,
+		Versioning:         b.versioning,
 	}
 }
 
@@ -93,6 +102,7 @@ func (b *ProjectConfigBuilder) Reset() testkit.Builder {
 	b.projectAccessToken = ""
 	b.newVersion = ""
 	b.changelogPath = ""
+	b.versioning = ""
 	return b
 }
 
@@ -106,5 +116,6 @@ func (b *ProjectConfigBuilder) Clone() testkit.Builder {
 		projectAccessToken: b.projectAccessToken,
 		newVersion:         b.newVersion,
 		changelogPath:      b.changelogPath,
+		versioning:         b.versioning,
 	}
 }

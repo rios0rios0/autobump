@@ -210,6 +210,72 @@ autobump run
 
 AutoBump will process all configured sources (static project list and/or provider API discovery).
 
+## Per-Project Configuration (`.autobump.yaml`)
+
+Drop a `.autobump.yaml` (or `.autobump.yml`, `autobump.yaml`, `autobump.yml`) at the
+root of any repository to override settings for that project only. AutoBump
+auto-detects the file from `local`, `run`, and discovery modes, so the global
+config in `~/.config/autobump.yaml` does not need to know anything about it.
+
+The keys recognized in a per-project file are:
+
+| Key                | Purpose                                                                              |
+|--------------------|--------------------------------------------------------------------------------------|
+| `changelog_path`   | Custom changelog filename relative to the project root (e.g. `CHANGELOG_PROPRIETARY.md`) |
+| `versioning`       | Versioning mode: `semver` (default), `fork-dot`, or `fork-dash`                      |
+| `languages`        | Per-language overrides for `extensions`, `special_patterns`, and `version_files`     |
+
+```yaml
+# .autobump.yaml at the root of a fork repository
+changelog_path: 'CHANGELOG_PROPRIETARY.md'
+versioning: 'fork-dot'
+```
+
+The same keys can also be set at the global level in `~/.config/autobump.yaml`
+(under the project entry, or as top-level defaults applied to every project).
+Project-level values always win over global ones.
+
+## Versioning Modes
+
+AutoBump supports three versioning strategies, selectable via the `versioning`
+key. All three honor the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+format; only the way the next version is computed differs.
+
+| Mode        | Pattern   | Example transition       | When to use                                      |
+|-------------|-----------|--------------------------|--------------------------------------------------|
+| `semver`    | `X.Y.Z`   | `1.0.0` → `1.1.0`        | Default. Standard Semantic Versioning            |
+| `fork-dot`  | `X.Y.Z.N` | `3.3.0.16` → `3.3.0.17`  | Forks following the [Forking Technique](https://github.com/rios0rios0/guide/wiki/Forking-Technique) with a 4th increment digit |
+| `fork-dash` | `X.Y.Z-N` | `1.21.0-9` → `1.21.0-10` | Forks where CI/CD does not accept four-segment versions |
+
+In fork modes, AutoBump:
+
+- Reads the current version from the **last non-`Unreleased` header** in the changelog
+- Increments **only the trailing fork digit** (`N`); the upstream `X.Y.Z` is preserved
+- **Skips** language-specific version-file rewrites (forks typically maintain those manually or via separate pipelines)
+- Still moves `[Unreleased]` content into a freshly dated `## [<next>] - YYYY-MM-DD` section
+
+Example fork repository:
+
+```yaml
+# ~/.config/autobump.yaml
+projects:
+  - path: '~/Development/dev.azure.com/MyOrg/forks/opensearch-dashboards'
+    changelog_path: 'CHANGELOG_PROPRIETARY.md'
+    versioning: 'fork-dot'
+
+  - path: '~/Development/dev.azure.com/MyOrg/forks/oui'
+    changelog_path: 'CHANGELOG_PROPRIETARY.md'
+    versioning: 'fork-dash'
+```
+
+Or, equivalently, place a `.autobump.yaml` in each fork's root:
+
+```yaml
+# .autobump.yaml inside the opensearch-dashboards fork
+changelog_path: 'CHANGELOG_PROPRIETARY.md'
+versioning: 'fork-dot'
+```
+
 ## How It Works
 
 1. **Repository Discovery** *(run mode with providers)*: Queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations

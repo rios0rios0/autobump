@@ -174,6 +174,8 @@ autobump/
 - Supports `projects` list and/or `providers` list (both processed by `run` command)
 - Token resolution: inline string, `${ENV_VAR}` expansion, or file path auto-detection
 - SSH push auth: `ssh_key_path`, `ssh_key_passphrase`, `ssh_auth_sock` fields; auto-detects common SSH agent sockets (1Password, standard `ssh-agent`) when not explicitly set
+- Per-project `.autobump.yaml` discovered via `entities.FindProjectConfigFile`; `loadProjectConfigOverrides` in `internal/domain/commands/service.go` merges its `changelog_path`, `versioning`, and `languages` fields into the resolved config
+- `versioning` mode (`semver`, `fork-dot`, `fork-dash`) drives `getNextVersionString` and `updateChangelogFileString`; fork modes preserve the upstream `X.Y.Z` and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`
 
 ### Provider Configuration (run mode with providers)
 
