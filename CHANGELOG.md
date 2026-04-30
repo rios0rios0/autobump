@@ -16,8 +16,15 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `versioning` configuration key (global and per-project) supporting `semver`, `fork-dot`, and `fork-dash` modes for fork repositories that follow the Forking Technique
+- added per-project propagation of `versioning` through `.autobump.yaml` so forks can opt in without touching the global config
+- added fork-aware changelog bumper that increments only the trailing fork digit (e.g. `3.3.0.16` → `3.3.0.17`, `1.21.0-9` → `1.21.0-10`) and skips language-specific version-file rewrites in fork mode
+
 ### Changed
 
+- changed `loadProjectConfigOverrides` to also merge the `versioning` field from per-project `.autobump.yaml`, mirroring the existing `changelog_path` merge behavior
 - changed the Go module dependencies to their latest versions
 
 ## [2.31.6] - 2026-04-29

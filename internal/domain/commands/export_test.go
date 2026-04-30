@@ -61,8 +61,20 @@ var EnsureProjectLanguage = ensureProjectLanguage //nolint:gochecknoglobals // t
 // UpdateChangelogFile exports updateChangelogFile for testing.
 var UpdateChangelogFile = updateChangelogFile //nolint:gochecknoglobals // test export
 
+// UpdateChangelogFileString exports updateChangelogFileString for testing.
+var UpdateChangelogFileString = updateChangelogFileString //nolint:gochecknoglobals // test export
+
 // GetNextVersion exports getNextVersion for testing.
 var GetNextVersion = getNextVersion //nolint:gochecknoglobals // test export
+
+// GetNextVersionString exports getNextVersionString for testing.
+var GetNextVersionString = getNextVersionString //nolint:gochecknoglobals // test export
+
+// ProcessForkChangelog exports processForkChangelog for testing.
+var ProcessForkChangelog = processForkChangelog //nolint:gochecknoglobals // test export
+
+// RewriteUnreleasedAsForkRelease exports rewriteUnreleasedAsForkRelease for testing.
+var RewriteUnreleasedAsForkRelease = rewriteUnreleasedAsForkRelease //nolint:gochecknoglobals // test export
 
 // CreateChangelogIfNotExists exports createChangelogIfNotExists for testing.
 var CreateChangelogIfNotExists = createChangelogIfNotExists //nolint:gochecknoglobals // test export

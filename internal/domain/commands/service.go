@@ -48,9 +48,10 @@ var (
 // project directory. If found, it reads the file and merges its languages section
 // into the provided globalConfig, returning a new GlobalConfig without mutating the
 // original globalConfig, but it may update the provided projectConfig.
-// It also merges the changelog_path from the per-project config into the projectConfig
-// when the projectConfig does not already specify one. If no per-project config is
-// found, the original globalConfig is returned unchanged.
+// It also merges the changelog_path and versioning fields from the per-project
+// config into the projectConfig when the projectConfig does not already specify
+// one. If no per-project config is found, the original globalConfig is returned
+// unchanged.
 func loadProjectConfigOverrides(
 	globalConfig *entities.GlobalConfig,
 	projectConfig *entities.ProjectConfig,
@@ -71,6 +72,10 @@ func loadProjectConfigOverrides(
 
 	if projectOverrides.ChangelogPath != "" && projectConfig.ChangelogPath == "" {
 		projectConfig.ChangelogPath = projectOverrides.ChangelogPath
+	}
+
+	if projectOverrides.Versioning != "" && projectConfig.Versioning == "" {
+		projectConfig.Versioning = projectOverrides.Versioning
 	}
 
 	if len(projectOverrides.LanguagesConfig) == 0 {
@@ -448,14 +453,14 @@ func setupRepo(ctx *RepoContext) error {
 }
 
 func createBumpBranch(ctx *RepoContext, changelogPath string) (string, entities.BranchStatus, error) {
-	nextVersion, err := getNextVersion(changelogPath)
+	nextVersion, err := getNextVersionString(ctx.GlobalConfig, ctx.ProjectConfig, changelogPath)
 	if err != nil {
 		return "", entities.BranchCreated, err
 	}
 
-	branchName := "chore/bump-" + nextVersion.String()
+	branchName := "chore/bump-" + nextVersion
 	// Store the version for PR creation even if branch exists
-	ctx.ProjectConfig.NewVersion = nextVersion.String()
+	ctx.ProjectConfig.NewVersion = nextVersion
 
 	branchExists, err := gitInfra.CheckBranchExists(ctx.Repo, branchName)
 	if err != nil {
@@ -476,17 +481,25 @@ func createBumpBranch(ctx *RepoContext, changelogPath string) (string, entities.
 
 func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) error {
 	logger.Infof("Updating changelog file %s", changelogPath)
-	version, err := updateChangelogFile(changelogPath)
+	version, err := updateChangelogFileString(ctx.GlobalConfig, ctx.ProjectConfig, changelogPath)
 	if err != nil {
 		logger.Errorf("No version found in changelog for project at %s\n", ctx.ProjectConfig.Path)
 		return err
 	}
 
-	ctx.ProjectConfig.NewVersion = version.String()
-	logger.Infof("Updating version to %s", ctx.ProjectConfig.NewVersion)
-	err = updateVersion(ctx.GlobalConfig, ctx.ProjectConfig)
-	if err != nil {
-		return err
+	ctx.ProjectConfig.NewVersion = version
+	mode := entities.ResolveVersioning(ctx.GlobalConfig, ctx.ProjectConfig)
+	if IsForkVersioning(mode) {
+		logger.Infof(
+			"Fork versioning mode %q is active; skipping language-specific version file updates for %s",
+			mode, ctx.ProjectConfig.NewVersion,
+		)
+	} else {
+		logger.Infof("Updating version to %s", ctx.ProjectConfig.NewVersion)
+		err = updateVersion(ctx.GlobalConfig, ctx.ProjectConfig)
+		if err != nil {
+			return err
+		}
 	}
 
 	return addFilesToWorktree(ctx, changelogPath)
@@ -1174,7 +1187,10 @@ func buildGitforgeRepo(remoteURL string, defaultBranch string) globalEntities.Re
 
 // ---- Changelog I/O wrappers ----
 
-// updateChangelogFile reads the changelog, processes it, and writes it back.
+// updateChangelogFile reads the changelog, processes it with the SemVer
+// pipeline, and writes it back. This is the legacy entry point used by tests.
+// Production callers should prefer updateChangelogFileString to honor the
+// project's versioning mode.
 func updateChangelogFile(changelogPath string) (*semver.Version, error) {
 	lines, err := support.ReadLines(changelogPath)
 	if err != nil {
@@ -1194,7 +1210,40 @@ func updateChangelogFile(changelogPath string) (*semver.Version, error) {
 	return version, nil
 }
 
-// getNextVersion reads the changelog and calculates the next version.
+// updateChangelogFileString rewrites the changelog using the versioning mode
+// resolved from the global/project configuration and returns the next version
+// as a plain string. Fork modes preserve the upstream X.Y.Z and only
+// increment the trailing fork digit; SemVer mode delegates to gitforge.
+func updateChangelogFileString(
+	globalConfig *entities.GlobalConfig,
+	projectConfig *entities.ProjectConfig,
+	changelogPath string,
+) (string, error) {
+	mode := entities.ResolveVersioning(globalConfig, projectConfig)
+	if IsForkVersioning(mode) {
+		lines, err := support.ReadLines(changelogPath)
+		if err != nil {
+			return "", err
+		}
+		nextVersion, newContent, err := processForkChangelog(lines, mode)
+		if err != nil {
+			return "", err
+		}
+		if err = support.WriteLines(changelogPath, newContent); err != nil {
+			return "", err
+		}
+		return nextVersion, nil
+	}
+
+	version, err := updateChangelogFile(changelogPath)
+	if err != nil {
+		return "", err
+	}
+	return version.String(), nil
+}
+
+// getNextVersion reads the changelog and calculates the next SemVer version.
+// Legacy entry point preserved for tests and external callers.
 func getNextVersion(changelogPath string) (*semver.Version, error) {
 	lines, err := support.ReadLines(changelogPath)
 	if err != nil {
@@ -1215,6 +1264,41 @@ func getNextVersion(changelogPath string) (*semver.Version, error) {
 	}
 
 	return version, nil
+}
+
+// getNextVersionString reads the changelog and calculates the next version
+// using the versioning mode resolved from the global/project configuration.
+// The result is returned as a plain string so the caller does not have to
+// know which mode produced it.
+func getNextVersionString(
+	globalConfig *entities.GlobalConfig,
+	projectConfig *entities.ProjectConfig,
+	changelogPath string,
+) (string, error) {
+	mode := entities.ResolveVersioning(globalConfig, projectConfig)
+	if IsForkVersioning(mode) {
+		lines, err := support.ReadLines(changelogPath)
+		if err != nil {
+			return "", err
+		}
+		current, err := FindLatestForkVersion(lines, mode)
+		currentString := ""
+		switch {
+		case err == nil:
+			currentString = current.String()
+		case errors.Is(err, ErrNoForkVersionFound):
+			// No prior fork release yet; NextForkVersion seeds the initial value.
+		default:
+			return "", err
+		}
+		return NextForkVersion(currentString, mode)
+	}
+
+	version, err := getNextVersion(changelogPath)
+	if err != nil {
+		return "", err
+	}
+	return version.String(), nil
 }
 
 // createChangelogIfNotExists create an empty CHANGELOG file if it doesn't exist.

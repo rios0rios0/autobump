@@ -16,6 +16,7 @@ type GlobalConfigBuilder struct {
 	excludeForks           bool
 	excludeArchived        bool
 	changelogPath          string
+	versioning             string
 	gpgKeyPath             string
 	gpgKeyPassphrase       string
 	sshKeyPath             string
@@ -65,6 +66,12 @@ func (b *GlobalConfigBuilder) WithLanguagesConfig(
 // WithChangelogPath sets the changelog file path.
 func (b *GlobalConfigBuilder) WithChangelogPath(path string) *GlobalConfigBuilder {
 	b.changelogPath = path
+	return b
+}
+
+// WithVersioning sets the global default versioning mode.
+func (b *GlobalConfigBuilder) WithVersioning(mode string) *GlobalConfigBuilder {
+	b.versioning = mode
 	return b
 }
 
@@ -148,6 +155,7 @@ func (b *GlobalConfigBuilder) BuildGlobalConfig() *entities.GlobalConfig {
 		ExcludeForks:           b.excludeForks,
 		ExcludeArchived:        b.excludeArchived,
 		ChangelogPath:          b.changelogPath,
+		Versioning:             b.versioning,
 		GpgKeyPath:             b.gpgKeyPath,
 		GpgKeyPassphrase:       b.gpgKeyPassphrase,
 		SSHKeyPath:             b.sshKeyPath,
@@ -169,6 +177,7 @@ func (b *GlobalConfigBuilder) Reset() testkit.Builder {
 	b.excludeForks = false
 	b.excludeArchived = false
 	b.changelogPath = ""
+	b.versioning = ""
 	b.gpgKeyPath = ""
 	b.gpgKeyPassphrase = ""
 	b.sshKeyPath = ""
@@ -208,6 +217,7 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 		excludeForks:           b.excludeForks,
 		excludeArchived:        b.excludeArchived,
 		changelogPath:          b.changelogPath,
+		versioning:             b.versioning,
 		gpgKeyPath:             b.gpgKeyPath,
 		gpgKeyPassphrase:       b.gpgKeyPassphrase,
 		sshKeyPath:             b.sshKeyPath,
