@@ -112,13 +112,17 @@ type RepoContext struct {
 	Head            *plumbing.Reference
 }
 
+// langIDJava is the user-facing config key alias shared by all Java langforge variants
+// (plain Java, Gradle, and Maven). Extracted to satisfy goconst.
+const langIDJava = "java"
+
 //nolint:gochecknoglobals // read-only lookup table mapping langforge Language constants to common config key aliases
 var langforgeAliases = map[langEntities.Language][]string{
 	langEntities.LanguageGo:         {"golang"},
 	langEntities.LanguageNode:       {"typescript", "javascript"},
-	langEntities.LanguageJava:       {"java"},
-	langEntities.LanguageJavaGradle: {"java"},
-	langEntities.LanguageJavaMaven:  {"java"},
+	langEntities.LanguageJava:       {langIDJava},
+	langEntities.LanguageJavaGradle: {langIDJava},
+	langEntities.LanguageJavaMaven:  {langIDJava},
 	langEntities.LanguageCSharp:     {"cs"},
 	langEntities.LanguagePython:     {},
 	langEntities.LanguageRuby:       {},
