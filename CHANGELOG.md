@@ -16,11 +16,13 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.32.4] - 2026-05-19
+
 ### Changed
 
 - changed the Go module dependencies to their latest versions
-- refreshed `CLAUDE.md` to document fork versioning modes and per-project `.autobump.yaml` overrides
 - refreshed `.github/copilot-instructions.md` to correct Go version, add `fork_version.go` to repo structure, and update test files section
+- refreshed `CLAUDE.md` to document fork versioning modes and per-project `.autobump.yaml` overrides
 
 ## [2.32.3] - 2026-05-08
 
