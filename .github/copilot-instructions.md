@@ -63,6 +63,8 @@ autobump/
 │   │   ├── commands/
 │   │   │   ├── service.go               # Use cases: ProcessRepo, IterateProjects,
 │   │   │   │                            #   DiscoverAndProcess, DetectProjectLanguage
+│   │   │   ├── fork_version.go          # Fork versioning: fork-dot/fork-dash modes,
+│   │   │   │                            #   fork-aware changelog bumping
 │   │   │   ├── self_update.go           # SelfUpdate interface and SelfUpdateRunnerFunc type
 │   │   │   ├── self_update_command.go   # SelfUpdateCommand implementation (via cliforge)
 │   │   │   ├── version.go              # Version interface
@@ -109,7 +111,7 @@ autobump/
 │   ├── autobump.yaml                    # Default configuration template
 │   └── CHANGELOG.template.md           # Default CHANGELOG template
 ├── Makefile                             # Build: build, debug, build-musl, run, install
-├── go.mod                               # Module: github.com/rios0rios0/autobump (Go 1.26.2)
+├── go.mod                               # Module: github.com/rios0rios0/autobump (Go 1.26.3)
 └── .github/
     └── workflows/default.yaml           # CI/CD pipeline (go-binary reusable workflow)
 ```
@@ -211,12 +213,10 @@ The tool auto-detects and supports:
 
 ### Test Files
 
-| File | Tests |
-|---|---|
-| `internal/domain/commands/service_test.go` | Language detection, repo processing, discover/batch logic |
-| `internal/domain/commands/export_test.go` | Exports unexported command functions for white-box testing |
-| `internal/domain/entities/export_test.go` | Exports unexported changelog/dedup functions for white-box testing |
-| `test/domain/entitybuilders/repository_builder.go` | Test builder for `Repository` entities |
+Tests are co-located with source files using `_test.go` suffix. Key patterns:
+- `service_test.go`, `fork_version_test.go`, `process_repo_test.go`, etc. — use-case tests across `commands/`
+- `export_test.go` — in each package, exposes unexported functions for white-box testing
+- `test/domain/entitybuilders/` — testkit-based builders for `GlobalConfig`, `ProjectConfig`, `ProviderConfig`, `Repository`
 
 ### Running Tests
 

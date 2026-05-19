@@ -89,3 +89,7 @@ Three-stage fallback in `DetectProjectLanguage`:
 ## Configuration
 
 Config file search order: `.` → `.config/` → `configs/` → `~/` → `~/.config/`. Falls back to downloading default from GitHub. Token values support inline strings, `${ENV_VAR}` expansion, and file paths. SSH push auth is configured via `ssh_key_path`, `ssh_key_passphrase`, and `ssh_auth_sock` fields; common SSH agent sockets (1Password, standard `ssh-agent`) are auto-detected when not explicitly set.
+
+Versioning modes: `semver` (default), `fork-dot`, `fork-dash`. Fork modes increment only the trailing fork digit (e.g. `3.3.0.16` → `3.3.0.17`) and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`.
+
+Per-project `.autobump.yaml` files can override `changelog_path`, `versioning`, and `languages` fields. `loadProjectConfigOverrides` in `service.go` merges these into the resolved config.
