@@ -5,9 +5,9 @@ go 1.26.3
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.5.0
-	github.com/go-git/go-git/v5 v5.19.0
-	github.com/rios0rios0/cliforge v0.3.6
-	github.com/rios0rios0/langforge v0.6.6
+	github.com/go-git/go-git/v5 v5.19.1
+	github.com/rios0rios0/cliforge v0.3.7
+	github.com/rios0rios0/langforge v0.6.7
 	github.com/rios0rios0/testkit v0.2.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
