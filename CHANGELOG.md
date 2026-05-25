@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - changed the Go module dependencies to their latest versions
+- refreshed `.github/copilot-instructions.md` to remove phantom `DeduplicateEntries` and `UpdateSection` functions, add real changelog functions (`ProcessNewChangelog`, `SortChangelogEntries`, `IsChangelogUnreleasedEmpty`), and correct `changelog.go` description
 
 ## [2.32.6] - 2026-05-22
 

@@ -73,8 +73,8 @@ autobump/
 │   │   │   ├── export_test.go           # Exports unexported functions for white-box testing
 │   │   │   └── service_test.go          # BDD unit tests for command functions
 │   │   └── entities/
-│   │       ├── changelog.go             # Changelog parsing, version calculation, entry
-│   │       │                            #   deduplication (token-based similarity)
+│   │       ├── changelog.go             # Changelog delegates to gitforge: version
+│   │       │                            #   calculation, processing, entry sorting
 │   │       ├── controller.go            # Controller interface and ControllerBind struct
 │   │       ├── repository.go            # Re-exports gitforge entities: ServiceType,
 │   │       │                            #   LatestTag, BranchStatus, Repository,
@@ -145,10 +145,11 @@ autobump/
 
 ### Key Domain Functions
 
-- `ProcessChangelog(lines) (*semver.Version, []string, error)` -- processes changelog, calculates next version
-- `DeduplicateEntries(entries) []string` -- removes exact duplicates and merges semantically overlapping entries using token overlap
-- `UpdateSection(unreleased, version) ([]string, *semver.Version, error)` -- updates unreleased section, deduplicates, sorts, calculates version bump
+- `ProcessChangelog(lines) (*semver.Version, []string, error)` -- delegates to gitforge, calculates next version, sorts entries
+- `ProcessNewChangelog(lines) (*semver.Version, []string, error)` -- same as ProcessChangelog but uses gitforge's ProcessNew path
 - `FindLatestVersion(lines) (*semver.Version, error)` -- finds highest version in changelog
+- `SortChangelogEntries(lines) []string` -- sorts bullet entries alphabetically (case-insensitive) within contiguous runs
+- `IsChangelogUnreleasedEmpty(lines) (bool, error)` -- checks whether the unreleased section has any entries
 
 ## CLI Commands
 
