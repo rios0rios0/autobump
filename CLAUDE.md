@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Does
 
-AutoBump is a Go CLI tool that automates the release process: it reads `CHANGELOG.md`, calculates the next semantic version, updates language-specific version files (go.mod, package.json, pyproject.toml, build.gradle, *.csproj), commits, pushes, and creates PRs/MRs on GitHub, GitLab, or Azure DevOps.
+AutoBump is a Go CLI tool that automates the release process: it reads `CHANGELOG.md`, calculates the next semantic version, updates language-specific version files (`package.json`, `build.gradle`/`pom.xml`, `__init__.py`, `*.csproj`, `Chart.yaml`; Go and Terraform carry no version file and rely on git tags), commits, pushes, and creates PRs/MRs on GitHub, GitLab, or Azure DevOps.
 
 ## Build & Development Commands
 
