@@ -16,10 +16,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.32.8] - 2026-06-03
+
 ### Changed
 
-- refreshed `CLAUDE.md` to correct the version-file list (Go and Terraform rely on git tags, Python bumps `__init__.py`; `go.mod`/`pyproject.toml` are detection markers, not bumped files)
 - changed the Go version to `1.26.4` and updated all module dependencies
+- refreshed `CLAUDE.md` to correct the version-file list (Go and Terraform rely on git tags, Python bumps `__init__.py`; `go.mod`/`pyproject.toml` are detection markers, not bumped files)
 
 ## [2.32.7] - 2026-05-25
 
