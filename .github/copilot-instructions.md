@@ -111,7 +111,7 @@ autobump/
 │   ├── autobump.yaml                    # Default configuration template
 │   └── CHANGELOG.template.md           # Default CHANGELOG template
 ├── Makefile                             # Build: build, debug, build-musl, run, install
-├── go.mod                               # Module: github.com/rios0rios0/autobump (Go 1.26.3)
+├── go.mod                               # Module: github.com/rios0rios0/autobump (Go 1.26.4)
 └── .github/
     └── workflows/default.yaml           # CI/CD pipeline (go-binary reusable workflow)
 ```
