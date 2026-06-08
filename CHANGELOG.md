@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- refreshed `.github/copilot-instructions.md` to correct the Go version to `1.26.4`
+
 ## [2.32.8] - 2026-06-03
 
 ### Changed
