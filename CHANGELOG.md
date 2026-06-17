@@ -20,6 +20,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - changed the Go module dependencies to their latest versions
 
+### Fixed
+
+- fixed SSH commit signing ignoring a configured `gpg.ssh.program` (such as 1Password's `op-ssh-sign-wsl`): the value was read as a flat `gpg.ssh` section instead of the `[gpg "ssh"]` subsection, so signing always fell back to `ssh-keygen` and failed where the private key is only reachable through the configured signer
+
 ## [2.32.9] - 2026-06-09
 
 ### Changed

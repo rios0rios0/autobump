@@ -13,6 +13,9 @@ func FilterRepositories(
 // CommitChanges exports the commitChanges function for testing.
 var CommitChanges = commitChanges //nolint:gochecknoglobals // test export
 
+// ResolveSSHProgram exports resolveSSHProgram for testing.
+var ResolveSSHProgram = resolveSSHProgram //nolint:gochecknoglobals // test export
+
 // ResolveConfigKey exports resolveConfigKey for testing.
 var ResolveConfigKey = resolveConfigKey //nolint:gochecknoglobals // test export
 
