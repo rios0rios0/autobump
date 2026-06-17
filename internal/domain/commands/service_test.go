@@ -13,6 +13,7 @@ import (
 	"time"
 
 	git "github.com/go-git/go-git/v5"
+	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1224,5 +1225,59 @@ func TestFilterRepositories(t *testing.T) {
 
 		// then
 		assert.Empty(t, result)
+	})
+}
+
+// TestResolveSSHProgram locks in that gpg.ssh.program is read from the "ssh"
+// subsection of the "gpg" section. A flat "gpg.ssh" section lookup silently
+// returns "" (the original bug), which made the SSH signer fall back to
+// ssh-keygen instead of a configured signer such as op-ssh-sign-wsl.
+func TestResolveSSHProgram(t *testing.T) {
+	t.Parallel()
+
+	newCfg := func() *gitconfig.Config {
+		cfg := &gitconfig.Config{}
+		cfg.Raw = gitconfig.NewConfig().Raw
+		return cfg
+	}
+
+	t.Run("should read gpg.ssh.program from the global config subsection", func(t *testing.T) {
+		// given
+		local := newCfg()
+		global := newCfg()
+		global.Raw.Section("gpg").Subsection("ssh").
+			SetOption("program", "/opt/1Password/op-ssh-sign-wsl")
+
+		// when
+		program := commands.ResolveSSHProgram(local, global)
+
+		// then
+		assert.Equal(t, "/opt/1Password/op-ssh-sign-wsl", program)
+	})
+
+	t.Run("should prefer the local config over the global config", func(t *testing.T) {
+		// given
+		local := newCfg()
+		local.Raw.Section("gpg").Subsection("ssh").SetOption("program", "/local/signer")
+		global := newCfg()
+		global.Raw.Section("gpg").Subsection("ssh").SetOption("program", "/global/signer")
+
+		// when
+		program := commands.ResolveSSHProgram(local, global)
+
+		// then
+		assert.Equal(t, "/local/signer", program)
+	})
+
+	t.Run("should return empty when gpg.ssh.program is not configured", func(t *testing.T) {
+		// given
+		local := newCfg()
+		global := newCfg()
+
+		// when
+		program := commands.ResolveSSHProgram(local, global)
+
+		// then
+		assert.Empty(t, program)
 	})
 }

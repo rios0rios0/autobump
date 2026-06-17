@@ -370,7 +370,7 @@ func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error
 	gpgSign := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "commit", "gpgsign")
 	gpgFormat := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg", "format")
 	signingKey := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
-	sshProgram := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg.ssh", "program")
+	sshProgram := resolveSSHProgram(cfg, ctx.GlobalGitConfig)
 
 	name := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
 	email := ctx.GlobalGitConfig.Raw.Section("user").Option("email")
@@ -564,6 +564,17 @@ func commitAndPushChanges(ctx *RepoContext, branchName string) error {
 	return nil
 }
 
+// resolveSSHProgram reads gpg.ssh.program from the local or global git config.
+// Git stores this value as the "program" option of the "ssh" subsection under the
+// "gpg" section ([gpg "ssh"] program = ...), so it must be read with the
+// subsection-aware helper. A flat section lookup for "gpg.ssh" never matches the
+// subsection and silently returns "", which makes the SSH signer fall back to
+// ssh-keygen instead of honoring a configured signer such as 1Password's
+// op-ssh-sign-wsl.
+func resolveSSHProgram(cfg, globalCfg *gitconfig.Config) string {
+	return gitHelpers.GetSubsectionOptionFromConfig(cfg, globalCfg, "gpg", "ssh", "program")
+}
+
 // commitChanges commits the staged changes with optional GPG or SSH signing.
 func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 	cfg, err := ctx.Repo.Config()
@@ -579,7 +590,7 @@ func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 	email := ctx.GlobalGitConfig.Raw.Section("user").Option("email")
 	commitMessage := "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion
 
-	sshProgram := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg.ssh", "program")
+	sshProgram := resolveSSHProgram(cfg, ctx.GlobalGitConfig)
 
 	signer, err := signingInfra.ResolveSignerFromGitConfig(
 		gpgSign, gpgFormat, signingKey,
