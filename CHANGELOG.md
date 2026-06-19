@@ -16,6 +16,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed the commit author identity in `autobump local` (and `autobump .`): `user.name` and `user.email` are now read from the repository's local Git config first, falling back to the global `~/.gitconfig`, instead of always using the global identity
+- fixed the release pipeline being blocked by a Gitleaks false positive on an example GitLab token in the `README.md` Git history, which had prevented new releases (and therefore `self-update`) from being published
+
 ## [2.32.10] - 2026-06-18
 
 ### Changed
