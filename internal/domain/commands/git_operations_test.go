@@ -332,36 +332,45 @@ func TestUpdateChangelogAndVersionFiles(t *testing.T) {
 	})
 }
 
+// buildCommitCtx stages a file in repo and returns a RepoContext whose global Git
+// config carries the given identity. Shared by the TestCommitChanges sub-tests.
+func buildCommitCtx(
+	t *testing.T, repo *git.Repository, repoPath, globalName, globalEmail string,
+) *commands.RepoContext {
+	t.Helper()
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	testFile := filepath.Join(repoPath, "test.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("test content"), 0o644))
+	_, err = wt.Add("test.txt")
+	require.NoError(t, err)
+
+	// Minimal git config without signing to avoid SSH agent issues
+	globalGitConfig := &config.Config{}
+	globalGitConfig.Raw = config.NewConfig().Raw
+	globalGitConfig.Raw.Section("user").SetOption("name", globalName)
+	globalGitConfig.Raw.Section("user").SetOption("email", globalEmail)
+
+	return &commands.RepoContext{
+		Repo:            repo,
+		Worktree:        wt,
+		GlobalGitConfig: globalGitConfig,
+		GlobalConfig:    entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
+		ProjectConfig: entitybuilders.NewProjectConfigBuilder().
+			WithNewVersion("1.0.0").
+			BuildProjectConfig(),
+	}
+}
+
 func TestCommitChanges(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should create a commit when changes are staged", func(t *testing.T) {
 		// given
 		repoPath, repo := createTestRepo(t)
-		wt, err := repo.Worktree()
-		require.NoError(t, err)
-
-		// Create and stage a file
-		testFile := filepath.Join(repoPath, "test.txt")
-		require.NoError(t, os.WriteFile(testFile, []byte("test content"), 0o644))
-		_, err = wt.Add("test.txt")
-		require.NoError(t, err)
-
-		// Use a minimal git config without signing to avoid SSH agent issues
-		globalGitConfig := &config.Config{}
-		globalGitConfig.Raw = config.NewConfig().Raw
-		globalGitConfig.Raw.Section("user").SetOption("name", "Test User")
-		globalGitConfig.Raw.Section("user").SetOption("email", "test@test.com")
-
-		ctx := &commands.RepoContext{
-			Repo:            repo,
-			Worktree:        wt,
-			GlobalGitConfig: globalGitConfig,
-			GlobalConfig:    entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
-			ProjectConfig: entitybuilders.NewProjectConfigBuilder().
-				WithNewVersion("1.0.0").
-				BuildProjectConfig(),
-		}
+		ctx := buildCommitCtx(t, repo, repoPath, "Test User", "test@test.com")
 
 		// when
 		hash, err := commands.CommitChanges(ctx)
@@ -369,11 +378,34 @@ func TestCommitChanges(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.NotEqual(t, plumbing.ZeroHash, hash)
-
-		// verify commit
 		commit, commitErr := repo.CommitObject(hash)
 		require.NoError(t, commitErr)
 		assert.Contains(t, commit.Message, "chore(bump): bumped version to 1.0.0")
+	})
+
+	t.Run("should use the local repo identity over the global one when set", func(t *testing.T) {
+		// given
+		repoPath, repo := createTestRepo(t)
+
+		// Set a repo-local identity that differs from the global one
+		localCfg, err := repo.Config()
+		require.NoError(t, err)
+		localCfg.Raw.Section("user").SetOption("name", "Local User")
+		localCfg.Raw.Section("user").SetOption("email", "local@repo.com")
+		require.NoError(t, repo.Storer.SetConfig(localCfg))
+
+		// Global identity must NOT be used when a local one is present
+		ctx := buildCommitCtx(t, repo, repoPath, "Global User", "global@global.com")
+
+		// when
+		hash, err := commands.CommitChanges(ctx)
+
+		// then
+		require.NoError(t, err)
+		commit, commitErr := repo.CommitObject(hash)
+		require.NoError(t, commitErr)
+		assert.Equal(t, "Local User", commit.Author.Name)
+		assert.Equal(t, "local@repo.com", commit.Author.Email)
 	})
 }
 
