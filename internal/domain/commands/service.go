@@ -372,8 +372,8 @@ func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error
 	signingKey := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
 	sshProgram := resolveSSHProgram(cfg, ctx.GlobalGitConfig)
 
-	name := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
-	email := ctx.GlobalGitConfig.Raw.Section("user").Option("email")
+	name := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "name")
+	email := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "email")
 
 	signer, err := signingInfra.ResolveSignerFromGitConfig(
 		gpgSign, gpgFormat, signingKey,
@@ -586,8 +586,8 @@ func commitChanges(ctx *RepoContext) (plumbing.Hash, error) {
 	gpgFormat := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "gpg", "format")
 	signingKey := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "signingkey")
 
-	name := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
-	email := ctx.GlobalGitConfig.Raw.Section("user").Option("email")
+	name := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "name")
+	email := gitHelpers.GetOptionFromConfig(cfg, ctx.GlobalGitConfig, "user", "email")
 	commitMessage := "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion
 
 	sshProgram := resolveSSHProgram(cfg, ctx.GlobalGitConfig)
