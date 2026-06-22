@@ -7,7 +7,7 @@ SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 # the CHANGELOG when a release pipeline is interrupted, so a tag is only used as
 # a fallback (and finally "dev"). An explicit VERSION from the environment/CLI
 # always wins thanks to ?=.
-VERSION ?= $(shell { grep -oE '^\#\# \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'; } || { git describe --tags --abbrev=0 2>/dev/null || echo "dev"; } | sed 's/^v//')
+VERSION ?= $(shell { grep -m1 -oE '^\#\# \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'; } || { git describe --tags --abbrev=0 2>/dev/null || echo "dev"; } | sed 's/^v//')
 LDFLAGS := -X main.version=$(VERSION)
 
 .PHONY: debug build build-musl install run
