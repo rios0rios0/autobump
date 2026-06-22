@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed `autobump version` and `autobump self-update` reporting a stale version when Git tags lag behind `CHANGELOG.md` (for example, after a release pipeline was interrupted and the tag was never published): the build version is now derived from the latest versioned heading in `CHANGELOG.md` — AutoBump's own release source of truth — falling back to the latest Git tag and then `dev`
+
 ## [2.32.11] - 2026-06-22
 
 ### Fixed
