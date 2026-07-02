@@ -13,7 +13,8 @@ on:
 jobs:
   claude:
     uses: 'rios0rios0/.github/.github/workflows/claude.yaml@main'
-    secrets: inherit
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     permissions:
       contents: 'write'
       pull-requests: 'write'
