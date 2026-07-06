@@ -44,7 +44,7 @@ Note: The CI/CD pipeline automatically uses these scripts via the reusable workf
 
 ## Architecture
 
-The project follows **Clean Architecture** with dependencies always pointing inward toward the domain layer. Dependency injection is handled by [go.uber.org/dig](https://github.com/uber-go/dig). Provider and Git forge abstractions are sourced from the [rios0rios0/gitforge](https://github.com/rios0rios0/gitforge) library. CLI utilities (self-update, version commands, startup update checks) come from [rios0rios0/cliforge](https://github.com/rios0rios0/cliforge).
+The project follows **Clean Architecture** with dependencies always pointing inward toward the domain layer. Dependency injection is handled by [go.uber.org/dig](https://github.com/uber-go/dig). Provider and Git forge abstractions are sourced from the [rios0rios0/gitforge](https://github.com/rios0rios0/gitforge) library. CLI utilities (self-update, version commands, startup update checks) come from [rios0rios0/cliforge](https://github.com/rios0rios0/cliforge). Language detection is driven by [rios0rios0/langforge](https://github.com/rios0rios0/langforge) (marker-file registry + classifier).
 
 ### Repository Structure
 
@@ -133,7 +133,7 @@ autobump/
 - **Adapter pattern**: `ForgeProvider`/`LocalGitAuthProvider` interfaces (from gitforge) with GitHub/GitLab/Azure DevOps implementations
 - **Registry pattern**: `ProviderRegistry` wraps gitforge's registry for adapter and discoverer lookup
 - **Factory pattern**: Discoverer and provider creation from token string via registered factories
-- **Strategy pattern**: Language detection via file-pattern matching (special patterns and extensions)
+- **Strategy pattern**: Language detection is a three-stage fallback in `DetectProjectLanguage` — (1) langforge registry marker files, (2) config-driven special patterns, (3) langforge extension classifier
 - **Controller pattern**: Each CLI subcommand is a `Controller` implementing `GetBind()` and `Execute()`
 
 ### Key Domain Interfaces
