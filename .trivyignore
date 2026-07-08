@@ -1,0 +1,6 @@
+# GO-2026-5932: golang.org/x/crypto/openpgp was deprecated upstream as unsafe/unmaintained
+# with no fixed version (advisory published 2026-07-07). This repository does NOT import the
+# openpgp subpackage (x/crypto is used only for ssh/bcrypt or pulled in transitively), so this
+# module-level Trivy SCA finding is a false positive. If openpgp is ever introduced, remove this
+# ignore and migrate to github.com/ProtonMail/go-crypto/openpgp instead.
+GO-2026-5932
