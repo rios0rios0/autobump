@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.32.15] - 2026-07-08
+
 ### Changed
 
 - refreshed `.github/copilot-instructions.md` to document `langforge` as the primary language-detection dependency and correct the three-stage `DetectProjectLanguage` fallback
