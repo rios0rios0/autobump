@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - refreshed `.github/copilot-instructions.md` to document `langforge` as the primary language-detection dependency and correct the three-stage `DetectProjectLanguage` fallback
+- changed the Go version to `1.26.5` and updated all module dependencies
 
 ## [2.32.14] - 2026-07-03
 
