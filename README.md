@@ -21,7 +21,7 @@ commit the changes, push the commits, and create a merge request/pull request on
 
 AutoBump supports automatic language detection and version updates for:
 
-- **Go**: Detects via `go.mod`; versions managed through git tags (no version file)
+- **Go**: Detects via `go.mod`; versions managed through git tags; APIs documented with Swagger (`swaggo`) also get the `@version` annotation in `main.go` and the generated `docs.go`/`swagger.json`/`swagger.yaml` updated (root and `cmd/` layouts)
 - **Java**: Detects via `build.gradle`, `pom.xml`, updates `build.gradle` and `application.yaml`
 - **Python**: Detects via `pyproject.toml`, `setup.py`, updates `__init__.py`
 - **Terraform**: Detects via `*.tf`, `versions.tf`; versions managed through git tags (no version file)
