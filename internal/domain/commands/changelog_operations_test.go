@@ -235,7 +235,11 @@ func TestGeneratePRDescription(t *testing.T) {
 	t.Run("should generate description when version files are configured", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte("<project/>"), 0o644))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, "pom.xml"),
+			[]byte("<project><version>1.1.0</version></project>"),
+			0o644,
+		))
 		ctx := &commands.RepoContext{
 			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
 				WithLanguagesConfig(map[string]entities.LanguageConfig{
