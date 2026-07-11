@@ -25,6 +25,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed version file discovery to skip files whose content does not match any configured version pattern, so files without a version marker (e.g. a `main.go` without Swagger annotations) are no longer rewritten in place nor listed in the pull request description
 - refreshed `.github/copilot-instructions.md` to document `langforge` as the primary language-detection dependency and correct the three-stage `DetectProjectLanguage` fallback
 - changed the Go version to `1.26.5` and updated all module dependencies
+- changed the Go module dependencies to their latest versions
 
 ## [2.32.14] - 2026-07-03
 
