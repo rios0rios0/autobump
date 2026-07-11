@@ -194,7 +194,7 @@ providers:
 
 The tool auto-detects and supports:
 
-- **Go**: Detects via `go.mod`; versions managed through git tags (no version file)
+- **Go**: Detects via `go.mod`; versions managed through git tags; APIs documented with Swagger (`swaggo`) also get the `@version` annotation in the entrypoint (`main.go`, `cmd/main.go`, or `cmd/*/main.go`) and the generated `docs.go`/`swagger.json`/`swagger.yaml` (under `docs/`, `cmd/docs/`, or `cmd/*/docs/`) updated
 - **Helm**: Detects via `Chart.yaml`, updates the `version` field in `Chart.yaml`
 - **Java**: Detects via `build.gradle`, `pom.xml`, updates `build.gradle` and `application.yaml`
 - **Python**: Detects via `pyproject.toml`, `setup.py`, updates `__init__.py`
