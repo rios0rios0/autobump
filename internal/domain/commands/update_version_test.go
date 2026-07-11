@@ -555,7 +555,7 @@ repositories {
 func goSwaggerLanguagesConfig() map[string]entities.LanguageConfig {
 	annotationPatterns := []string{`(?m)(^//\s*@version\s+)\S+`}
 	docsGoPatterns := []string{`(\bVersion:\s*")[^"]*(")`}
-	swaggerJSONPatterns := []string{`("version":\s*")[^"]*(")`}
+	swaggerJSONPatterns := []string{`(?s)("info":\s*\{.*?"version":\s*")[^"]*(")`}
 	swaggerYAMLPatterns := []string{`(?m)(^  version:\s*['"]?)[^\s'"]+(['"]?)`}
 	return map[string]entities.LanguageConfig{
 		"go": {
@@ -619,6 +619,9 @@ func main() {}
     "paths": {},
     "definitions": {
         "entities.Widget": {
+            "example": {
+                "version": "9.9.9"
+            },
             "properties": {
                 "version": {
                     "type": "string"
@@ -672,6 +675,8 @@ func assertGoSwaggerProjectBumped(t *testing.T, projectPath, mainRelPath, docsRe
 	swaggerJSON, err := os.ReadFile(filepath.Join(projectPath, docsRelDir, "swagger.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(swaggerJSON), `"version": "2.0.0"`)
+	assert.Contains(t, string(swaggerJSON), `"version": "9.9.9"`,
+		"the string-valued version inside definitions must not be touched")
 	assert.NotContains(t, string(swaggerJSON), "1.2.3")
 
 	swaggerYAML, err := os.ReadFile(filepath.Join(projectPath, docsRelDir, "swagger.yaml"))
@@ -681,67 +686,53 @@ func assertGoSwaggerProjectBumped(t *testing.T, projectPath, mainRelPath, docsRe
 	assert.NotContains(t, string(swaggerYAML), "1.2.3")
 }
 
+// newGoSwaggerBumpConfigs builds the global/project config pair shared by the Go
+// Swagger bump scenarios: default Go version files, language "go", bump to 2.0.0.
+func newGoSwaggerBumpConfigs(projectPath string) (*entities.GlobalConfig, *entities.ProjectConfig) {
+	globalConfig := entitybuilders.NewGlobalConfigBuilder().
+		WithLanguagesConfig(goSwaggerLanguagesConfig()).
+		BuildGlobalConfig()
+	projectConfig := entitybuilders.NewProjectConfigBuilder().
+		WithPath(projectPath).
+		WithLanguage("go").
+		WithNewVersion("2.0.0").
+		BuildProjectConfig()
+	return globalConfig, projectConfig
+}
+
 func TestUpdateVersionGoSwagger(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should update Swagger annotation and generated docs when Go project keeps docs at the root", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		writeGoSwaggerProject(t, tmpDir, "main.go", "docs")
+	layouts := []struct {
+		name        string
+		mainRelPath string
+		docsRelDir  string
+	}{
+		{name: "docs at the root", mainRelPath: "main.go", docsRelDir: "docs"},
+		{name: "docs under cmd", mainRelPath: filepath.Join("cmd", "main.go"), docsRelDir: filepath.Join("cmd", "docs")},
+	}
+	for _, layout := range layouts {
+		t.Run("should update Swagger annotation and generated docs when Go project keeps "+layout.name, func(t *testing.T) {
+			// given
+			tmpDir := t.TempDir()
+			writeGoSwaggerProject(t, tmpDir, layout.mainRelPath, layout.docsRelDir)
+			globalConfig, projectConfig := newGoSwaggerBumpConfigs(tmpDir)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(goSwaggerLanguagesConfig()).
-			BuildGlobalConfig()
-		projectConfig := entitybuilders.NewProjectConfigBuilder().
-			WithPath(tmpDir).
-			WithLanguage("go").
-			WithNewVersion("2.0.0").
-			BuildProjectConfig()
+			// when
+			err := commands.UpdateVersion(globalConfig, projectConfig)
 
-		// when
-		err := commands.UpdateVersion(globalConfig, projectConfig)
-
-		// then
-		require.NoError(t, err)
-		assertGoSwaggerProjectBumped(t, tmpDir, "main.go", "docs")
-	})
-
-	t.Run("should update Swagger annotation and generated docs when Go project keeps docs under cmd", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		writeGoSwaggerProject(t, tmpDir, filepath.Join("cmd", "main.go"), filepath.Join("cmd", "docs"))
-
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(goSwaggerLanguagesConfig()).
-			BuildGlobalConfig()
-		projectConfig := entitybuilders.NewProjectConfigBuilder().
-			WithPath(tmpDir).
-			WithLanguage("go").
-			WithNewVersion("2.0.0").
-			BuildProjectConfig()
-
-		// when
-		err := commands.UpdateVersion(globalConfig, projectConfig)
-
-		// then
-		require.NoError(t, err)
-		assertGoSwaggerProjectBumped(t, tmpDir, filepath.Join("cmd", "main.go"), filepath.Join("cmd", "docs"))
-	})
+			// then
+			require.NoError(t, err)
+			assertGoSwaggerProjectBumped(t, tmpDir, layout.mainRelPath, layout.docsRelDir)
+		})
+	}
 
 	t.Run("should update tab-separated Swagger annotation when swag fmt formatting is used", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		mainGoContent := "package main\n\n//\t@title\t\tExample API\n//\t@version\t1.2.3\nfunc main() {}\n"
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(mainGoContent), 0o644))
-
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(goSwaggerLanguagesConfig()).
-			BuildGlobalConfig()
-		projectConfig := entitybuilders.NewProjectConfigBuilder().
-			WithPath(tmpDir).
-			WithLanguage("go").
-			WithNewVersion("2.0.0").
-			BuildProjectConfig()
+		globalConfig, projectConfig := newGoSwaggerBumpConfigs(tmpDir)
 
 		// when
 		err := commands.UpdateVersion(globalConfig, projectConfig)
@@ -758,15 +749,7 @@ func TestUpdateVersionGoSwagger(t *testing.T) {
 		tmpDir := t.TempDir()
 		mainGoContent := "package main\n\nfunc main() {}\n"
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(mainGoContent), 0o644))
-
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(goSwaggerLanguagesConfig()).
-			BuildGlobalConfig()
-		projectConfig := entitybuilders.NewProjectConfigBuilder().
-			WithPath(tmpDir).
-			WithLanguage("go").
-			WithNewVersion("2.0.0").
-			BuildProjectConfig()
+		globalConfig, projectConfig := newGoSwaggerBumpConfigs(tmpDir)
 
 		// when
 		err := commands.UpdateVersion(globalConfig, projectConfig)
@@ -796,14 +779,7 @@ func TestGetVersionFiles(t *testing.T) {
 			[]byte(`{"info": {"title": "Example API", "version": "1.2.3"}}`),
 			0o644,
 		))
-
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(goSwaggerLanguagesConfig()).
-			BuildGlobalConfig()
-		projectConfig := entitybuilders.NewProjectConfigBuilder().
-			WithPath(tmpDir).
-			WithLanguage("go").
-			BuildProjectConfig()
+		globalConfig, projectConfig := newGoSwaggerBumpConfigs(tmpDir)
 
 		// when
 		versionFiles, err := commands.GetVersionFiles(globalConfig, projectConfig)

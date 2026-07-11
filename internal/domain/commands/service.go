@@ -1357,9 +1357,11 @@ func updateVersion(globalConfig *entities.GlobalConfig, projectConfig *entities.
 		return err
 	}
 
-	// If no version files are configured or none matched for this language, just continue
+	// If no version files are configured or none matched for this language, just continue.
+	// This is an expected case (e.g. Go projects without Swagger annotations), so it is
+	// logged at info level instead of warning.
 	if len(versionFiles) == 0 {
-		logger.Warnf(
+		logger.Infof(
 			"No version files applicable for language '%s', only changelog will be updated",
 			projectConfig.Language,
 		)
