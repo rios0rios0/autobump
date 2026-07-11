@@ -57,8 +57,36 @@ languages:
       - "go"
     special_patterns:
       - "go.mod"
-    # Go doesn't have a version file - versions are managed through git tags
-    # version_files is intentionally omitted
+    # Go doesn't have a native version file - versions are managed through git tags.
+    # However, APIs documented with Swagger (swaggo) carry the version in the
+    # "@version" general-info annotation and in the generated docs artifacts.
+    # A file is only updated when it exists and one of its patterns matches,
+    # so plain Go projects keep the changelog-only behavior.
+    version_files:
+      - path: "main.go"
+        patterns: [ "(?m)(^//\\s*@version\\s+)\\S+" ]
+      - path: "cmd/main.go"
+        patterns: [ "(?m)(^//\\s*@version\\s+)\\S+" ]
+      - path: "cmd/*/main.go"
+        patterns: [ "(?m)(^//\\s*@version\\s+)\\S+" ]
+      - path: "docs/docs.go"
+        patterns: [ "(\\bVersion:\\s*\")[^\"]*(\")" ]
+      - path: "cmd/docs/docs.go"
+        patterns: [ "(\\bVersion:\\s*\")[^\"]*(\")" ]
+      - path: "cmd/*/docs/docs.go"
+        patterns: [ "(\\bVersion:\\s*\")[^\"]*(\")" ]
+      - path: "docs/swagger.json"
+        patterns: [ "(?s)(\"info\":\\s*\\{.*?\"version\":\\s*\")[^\"]*(\")" ]
+      - path: "cmd/docs/swagger.json"
+        patterns: [ "(?s)(\"info\":\\s*\\{.*?\"version\":\\s*\")[^\"]*(\")" ]
+      - path: "cmd/*/docs/swagger.json"
+        patterns: [ "(?s)(\"info\":\\s*\\{.*?\"version\":\\s*\")[^\"]*(\")" ]
+      - path: "docs/swagger.yaml"
+        patterns: [ "(?m)(^  version:\\s*['\"]?)[^\\s'\"]+(['\"]?)" ]
+      - path: "cmd/docs/swagger.yaml"
+        patterns: [ "(?m)(^  version:\\s*['\"]?)[^\\s'\"]+(['\"]?)" ]
+      - path: "cmd/*/docs/swagger.yaml"
+        patterns: [ "(?m)(^  version:\\s*['\"]?)[^\\s'\"]+(['\"]?)" ]
 
   helm:
     extensions:

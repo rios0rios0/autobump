@@ -1357,10 +1357,12 @@ func updateVersion(globalConfig *entities.GlobalConfig, projectConfig *entities.
 		return err
 	}
 
-	// If no version files configured for this language, just continue
+	// If no version files are configured or none matched for this language, just continue.
+	// This is an expected case (e.g. Go projects without Swagger annotations), so it is
+	// logged at info level instead of warning.
 	if len(versionFiles) == 0 {
-		logger.Warnf(
-			"No version files configured for language '%s', only changelog will be updated",
+		logger.Infof(
+			"No version files applicable for language '%s', only changelog will be updated",
 			projectConfig.Language,
 		)
 		return nil
@@ -1491,6 +1493,14 @@ func getVersionFiles(
 			return nil, fmt.Errorf("failed to get version files: %w", err)
 		}
 		for _, match := range matches {
+			hasMatch, matchErr := versionFileHasPatternMatch(match, versionFile.Patterns)
+			if matchErr != nil {
+				return nil, matchErr
+			}
+			if !hasMatch {
+				logger.Debugf("Skipping %s: no version pattern matches its content", match)
+				continue
+			}
 			versionFiles = append(
 				versionFiles, entities.VersionFile{
 					Path:     match,
@@ -1500,6 +1510,27 @@ func getVersionFiles(
 		}
 	}
 	return versionFiles, nil
+}
+
+// versionFileHasPatternMatch reports whether the file content matches at least one of
+// the configured version patterns. A globbed file that carries no version marker
+// (e.g. a main.go without a Swagger "@version" annotation) is not a version file for
+// the project, so it must not be rewritten in place nor reported as updated.
+func versionFileHasPatternMatch(path string, patterns []string) (bool, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false, fmt.Errorf("failed to read version file %s: %w", path, err)
+	}
+	for _, pattern := range patterns {
+		re, compileErr := regexp.Compile(pattern)
+		if compileErr != nil {
+			return false, fmt.Errorf("invalid regex pattern %q in version file config: %w", pattern, compileErr)
+		}
+		if re.Match(content) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // getLanguageInterface returns the appropriate Language interface for the project.
