@@ -1,3 +1,26 @@
-README.md:gitlab-pat:143
-README.md:gitlab_personal_access_token:143
+# Gitleaks false-positive allowlist.
+#
+# Every entry is a full fingerprint: <commit>:<file>:<rule-id>:<line>. The CI scan
+# runs `gitleaks detect --log-opts HEAD`, which walks every commit reachable from
+# HEAD, so a finding keeps being reported even after the offending file is rewritten
+# at the tip. An allowlist entry is the only way to clear it.
+#
+# The pipeline scans twice, and a single match has to be allowlisted once per pass,
+# because the fingerprint embeds the rule id and each pass names the rule
+# differently:
+#
+#   * pass 1 -- the gitleaks default ruleset ....... "gitlab-pat"
+#   * pass 2 -- the GitLab-customised ruleset that
+#               the pipelines repository supplies ... "gitlab_personal_access_token"
+#
+# Allowlisting only one of the two leaves the other pass red, which is what used to
+# fail every `main` build here.
+#
+# 2026-07-13 -- both entries below are the same documentation placeholder: the
+# batch-mode example in README.md set `project_access_token` to a dummy value that
+# happened to carry the real GitLab prefix followed by the number of characters the
+# rules count, which is all they look for. No credential was ever committed. The
+# README no longer spells the placeholder that way, but the scan still walks the
+# commit that did.
 42a90f886a27f99560a300d024b524b154f7096d:README.md:gitlab-pat:113
+42a90f886a27f99560a300d024b524b154f7096d:README.md:gitlab_personal_access_token:113
