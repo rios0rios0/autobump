@@ -16,16 +16,18 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.33.0] - 2026-07-13
+
 ### Added
 
 - added Swagger/OpenAPI version bumping for Go projects: when an API documented with `swaggo` carries an `@version` annotation in its entrypoint (`main.go`, `cmd/main.go`, or `cmd/*/main.go`) or generated docs artifacts (`docs.go`, `swagger.json`, `swagger.yaml` under `docs/`, `cmd/docs/`, or `cmd/*/docs/`), the new version is now written to those files alongside the changelog
 
 ### Changed
 
+- changed the Go module dependencies to their latest versions
+- changed the Go version to `1.26.5` and updated all module dependencies
 - changed version file discovery to skip files whose content does not match any configured version pattern, so files without a version marker (e.g. a `main.go` without Swagger annotations) are no longer rewritten in place nor listed in the pull request description
 - refreshed `.github/copilot-instructions.md` to document `langforge` as the primary language-detection dependency and correct the three-stage `DetectProjectLanguage` fallback
-- changed the Go version to `1.26.5` and updated all module dependencies
-- changed the Go module dependencies to their latest versions
 
 ## [2.32.14] - 2026-07-03
 
