@@ -16,6 +16,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed the `sast:gitleaks` pipeline job failing on every `main` build by allowlisting the GitLab token
+  placeholder documented in `README.md` for both detection passes: it was suppressed only under the rule
+  id used by the default ruleset, while the second pass reports the same match under a different rule id
+
 ## [2.33.0] - 2026-07-13
 
 ### Added
