@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed the Go module dependencies to their latest versions
+
 ### Fixed
 
 - fixed the `sast:gitleaks` pipeline job failing on every `main` build by allowlisting the GitLab token
