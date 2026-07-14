@@ -16,6 +16,15 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed the `delivery:binary` pipeline job failing and publishing a release with no binaries attached, by pointing
+  GoReleaser at `./cmd/autobump` explicitly. The shared pipeline detects the entry point by grepping for a line
+  starting with `func main()` and taking the first hit, which since the Swagger version-bumping tests is the sample
+  program embedded in `internal/domain/commands/update_version_test.go` rather than `cmd/autobump/main.go`. It built
+  `internal/domain/commands`, a package with no `main` function, so release `2.33.1` shipped with zero assets and
+  `autobump self-update` had nothing to download
+
 ## [2.33.1] - 2026-07-14
 
 ### Changed

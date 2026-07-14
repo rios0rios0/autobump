@@ -21,3 +21,4 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/go-binary.yaml@main'
     with:
       binary_name: 'autobump'
+      binary_path: './cmd/autobump'
