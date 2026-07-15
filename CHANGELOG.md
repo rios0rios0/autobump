@@ -29,6 +29,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
   `internal/domain/commands`, a package with no `main` function, so release `2.33.1` shipped with zero assets and
   `autobump self-update` had nothing to download
 
+### Security
+
+- hardened test-fixture directory permissions from `0o755` to owner-only `0o700` in the update-version and process-repo tests, resolving the Semgrep `incorrect-default-permission` CI failures (a directory needs the owner execute bit, so the rule's `0o600` file threshold is documented as inapplicable and suppressed per line)
+
 ## [2.33.1] - 2026-07-14
 
 ### Changed
