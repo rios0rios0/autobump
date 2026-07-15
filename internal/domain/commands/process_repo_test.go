@@ -162,7 +162,9 @@ func TestProcessRepoAdditionalBranches(t *testing.T) { //nolint:tparallel // mut
 		// given
 		repoPath, _ := createTestRepo(t)
 		docsDir := filepath.Join(repoPath, "docs")
-		require.NoError(t, os.MkdirAll(docsDir, 0o700)) //nolint:gosec // test directory needs execute bit for traversal
+		// The docs dir needs the owner execute bit for traversal, so 0o700 is least-privilege.
+		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+		require.NoError(t, os.MkdirAll(docsDir, 0o700))
 		changelogPath := filepath.Join(docsDir, "CHANGES.md")
 		content := "# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
 		require.NoError(t, os.WriteFile(changelogPath, []byte(content), 0o644))

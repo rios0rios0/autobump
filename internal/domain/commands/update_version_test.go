@@ -648,8 +648,12 @@ swagger: "2.0"
 `
 
 	docsDir := filepath.Join(projectPath, docsRelDir)
-	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(projectPath, mainRelPath)), 0o755))
-	require.NoError(t, os.MkdirAll(docsDir, 0o755))
+	// A directory needs the owner execute bit; 0o700 is least-privilege (rule's 0o600 is file-only).
+	// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(projectPath, mainRelPath)), 0o700))
+	// A directory needs the owner execute bit; 0o700 is least-privilege (rule's 0o600 is file-only).
+	// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+	require.NoError(t, os.MkdirAll(docsDir, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(projectPath, mainRelPath), []byte(mainGoContent), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "docs.go"), []byte(docsGoContent), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "swagger.json"), []byte(swaggerJSONContent), 0o644))
@@ -768,7 +772,9 @@ func TestGetVersionFiles(t *testing.T) {
 	t.Run("should return only files whose content matches a version pattern when globbing", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "docs"), 0o755))
+		// A directory needs the owner execute bit; 0o700 is least-privilege (rule's 0o600 is file-only).
+		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+		require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "docs"), 0o700))
 		require.NoError(t, os.WriteFile(
 			filepath.Join(tmpDir, "main.go"),
 			[]byte("package main\n\nfunc main() {}\n"),
