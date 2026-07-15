@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed the Go module dependencies to their latest versions
+
 ### Fixed
 
 - fixed the `delivery:binary` pipeline job failing and publishing a release with no binaries attached, by pointing
