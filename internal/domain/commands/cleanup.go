@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"time"
 
 	logger "github.com/sirupsen/logrus"
 
@@ -11,6 +12,9 @@ import (
 	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 	globalEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
 )
+
+// closePullRequestTimeout caps a single close call against the forge API.
+const closePullRequestTimeout = 30 * time.Second
 
 // filterStaleBumpBranches returns the branches AutoBump owns and may safely remove:
 // every branch carrying the bump prefix, except the repository's default branch.
@@ -71,8 +75,16 @@ func cleanupStaleBumpBranches(ctx *RepoContext) {
 	provider, forgeRepo := resolveCleanupProvider(ctx, serviceType, defaultBranch)
 
 	for _, branch := range stale {
-		if provider != nil {
-			closeStalePullRequest(provider, forgeRepo, branch)
+		// A branch whose pull request could not be closed is left alone. Deleting it
+		// would strand an open pull request whose source branch no longer exists, and
+		// because cleanup only looks at branches that still exist, no later run would
+		// see it to try closing it again. Keeping it makes the pair retryable.
+		//
+		// A missing provider is different: without a token the bumper never opened a
+		// pull request in the first place, so there is nothing to strand and the branch
+		// is still worth removing.
+		if provider != nil && !closeStalePullRequest(provider, forgeRepo, branch) {
+			continue
 		}
 
 		if deleteErr := gitInfra.DeleteRemoteBranch(ctx.Repo, branch, authMethods); deleteErr != nil {
@@ -134,17 +146,32 @@ func resolveCleanupProvider(
 // closeStalePullRequest closes the pull request opened from the given branch, if one is
 // still open. It runs before the branch is deleted, because a provider cannot reliably
 // resolve a pull request from a source branch that no longer exists.
+//
+// It reports whether the branch is safe to delete: false means the pull request could not
+// be closed, so the branch must stay for a later run to retry. Finding no open pull
+// request is a success, not a failure.
 func closeStalePullRequest(
 	provider globalEntities.ForgeProvider,
 	forgeRepo globalEntities.Repository,
 	branch string,
-) {
-	closed, err := provider.ClosePullRequest(context.Background(), forgeRepo, branch)
+) bool {
+	// Bounded so an unresponsive provider cannot hang the release behind housekeeping.
+	// Cleanup runs before the bump and walks every stale branch, so without a deadline a
+	// single hung call would stall the whole run rather than degrading to best-effort.
+	ctx, cancel := context.WithTimeout(context.Background(), closePullRequestTimeout)
+	defer cancel()
+
+	closed, err := provider.ClosePullRequest(ctx, forgeRepo, branch)
 	if err != nil {
-		logger.Warnf("Could not close the pull request for the branch '%s': %v", branch, err)
-		return
+		logger.Warnf(
+			"Could not close the pull request for the branch '%s', "+
+				"keeping the branch so a later run can retry: %v",
+			branch, err,
+		)
+		return false
 	}
 	if closed {
 		logger.Infof("Closed the pull request for the stale branch '%s'", branch)
 	}
+	return true
 }
