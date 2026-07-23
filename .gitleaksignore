@@ -16,11 +16,22 @@
 # Allowlisting only one of the two leaves the other pass red, which is what used to
 # fail every `main` build here.
 #
+# Because the fingerprint embeds the commit, a rewritten history invalidates every
+# entry here: a rebase gives the offending commit a new hash, the old fingerprint
+# stops matching anything, and the finding comes back. Re-point the entries at the
+# new hash rather than adding a second set -- the orphaned commit is unreachable
+# from HEAD, so the scan never walks it again.
+#
 # 2026-07-13 -- both entries below are the same documentation placeholder: the
 # batch-mode example in README.md set `project_access_token` to a dummy value that
 # happened to carry the real GitLab prefix followed by the number of characters the
 # rules count, which is all they look for. No credential was ever committed. The
 # README no longer spells the placeholder that way, but the scan still walks the
 # commit that did.
-42a90f886a27f99560a300d024b524b154f7096d:README.md:gitlab-pat:113
-42a90f886a27f99560a300d024b524b154f7096d:README.md:gitlab_personal_access_token:113
+#
+# 2026-07-23 -- re-pointed from 42a90f88 to 38d8dd75. The commit is the same change
+# ("Update README.md and Copilot instructions with accurate information", 2025-12-16);
+# only its hash moved, because the branch it sits on was rebased. 42a90f88 is now
+# unreachable from HEAD. The placeholder itself is unchanged and still not a secret.
+38d8dd7523bb66b7ed3bc988f51c53f0d960afb9:README.md:gitlab-pat:113
+38d8dd7523bb66b7ed3bc988f51c53f0d960afb9:README.md:gitlab_personal_access_token:113
