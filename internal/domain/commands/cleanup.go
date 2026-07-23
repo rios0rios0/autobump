@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"time"
 
 	logger "github.com/sirupsen/logrus"
 
@@ -11,6 +12,9 @@ import (
 	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 	globalEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
 )
+
+// closePullRequestTimeout caps a single close call against the forge API.
+const closePullRequestTimeout = 30 * time.Second
 
 // filterStaleBumpBranches returns the branches AutoBump owns and may safely remove:
 // every branch carrying the bump prefix, except the repository's default branch.
@@ -151,7 +155,13 @@ func closeStalePullRequest(
 	forgeRepo globalEntities.Repository,
 	branch string,
 ) bool {
-	closed, err := provider.ClosePullRequest(context.Background(), forgeRepo, branch)
+	// Bounded so an unresponsive provider cannot hang the release behind housekeeping.
+	// Cleanup runs before the bump and walks every stale branch, so without a deadline a
+	// single hung call would stall the whole run rather than degrading to best-effort.
+	ctx, cancel := context.WithTimeout(context.Background(), closePullRequestTimeout)
+	defer cancel()
+
+	closed, err := provider.ClosePullRequest(ctx, forgeRepo, branch)
 	if err != nil {
 		logger.Warnf(
 			"Could not close the pull request for the branch '%s', "+
