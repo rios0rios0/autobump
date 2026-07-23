@@ -834,27 +834,67 @@ func TestPushChangesWithRemote(t *testing.T) { //nolint:tparallel // mutates pac
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
 
 	t.Run("should return error for unsupported remote URL scheme", func(t *testing.T) {
-		// given -- local bare remote has a file:// scheme which is unsupported
+		// given a remote whose URL uses a scheme no transport knows how to reach
 		_, repo, _ := createTestRepoWithRemote(t)
-		globalGitConfig := &config.Config{}
-		globalGitConfig.Raw = config.NewConfig().Raw
-		globalGitConfig.Raw.Section("user").SetOption("name", "Test")
-		globalGitConfig.Raw.Section("user").SetOption("email", "test@test.com")
+		require.NoError(t, repo.DeleteRemote("origin"))
+		_, err := repo.CreateRemote(&config.RemoteConfig{
+			Name: "origin",
+			URLs: []string{"nonsense://example.com/org/repo.git"},
+		})
+		require.NoError(t, err)
 
 		ctx := &commands.RepoContext{
 			Repo:            repo,
-			GlobalGitConfig: globalGitConfig,
+			GlobalGitConfig: newTestGlobalGitConfig(),
 			GlobalConfig:    entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
 			ProjectConfig:   entitybuilders.NewProjectConfigBuilder().BuildProjectConfig(),
 		}
 
 		// when
-		err := commands.PushChanges(ctx, "chore/bump-1.0.0")
+		err = commands.PushChanges(ctx, "chore/bump-1.0.0")
 
-		// then -- local bare repos have unsupported URL scheme
+		// then
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported")
 	})
+
+	t.Run("should push to a remote living on the local filesystem", func(t *testing.T) {
+		// given a bare remote reachable by path, which needs no transport authentication
+		_, repo, bareDir := createTestRepoWithRemote(t)
+		head, err := repo.Head()
+		require.NoError(t, err)
+
+		const branchName = "chore/bump-1.0.0"
+		require.NoError(t, repo.Storer.SetReference(
+			plumbing.NewHashReference(plumbing.ReferenceName("refs/heads/"+branchName), head.Hash()),
+		))
+
+		ctx := &commands.RepoContext{
+			Repo:            repo,
+			GlobalGitConfig: newTestGlobalGitConfig(),
+			GlobalConfig:    entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
+			ProjectConfig:   entitybuilders.NewProjectConfigBuilder().BuildProjectConfig(),
+		}
+
+		// when
+		err = commands.PushChanges(ctx, branchName)
+
+		// then the branch reaches the bare remote
+		require.NoError(t, err)
+		bare, err := git.PlainOpen(bareDir)
+		require.NoError(t, err)
+		_, err = bare.Reference(plumbing.ReferenceName("refs/heads/"+branchName), false)
+		assert.NoError(t, err, "the pushed branch should exist on the remote")
+	})
+}
+
+// newTestGlobalGitConfig builds the minimal global git config the push helpers read.
+func newTestGlobalGitConfig() *config.Config {
+	globalGitConfig := &config.Config{}
+	globalGitConfig.Raw = config.NewConfig().Raw
+	globalGitConfig.Raw.Section("user").SetOption("name", "Test")
+	globalGitConfig.Raw.Section("user").SetOption("email", "test@test.com")
+	return globalGitConfig
 }
 
 func TestCreatePullRequestWithRemote(t *testing.T) { //nolint:tparallel // mutates package-level globals
