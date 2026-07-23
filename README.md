@@ -112,9 +112,41 @@ ssh_key_passphrase: ''
 ssh_auth_sock: '~/.1password/agent.sock'
 ```
 
+### Stale Branch Cleanup
+
+Before creating the branch for a release, AutoBump deletes every remote branch carrying the bump prefix (`chore/bump-*`) and closes the pull request attached to each one — on Azure DevOps the pull request is abandoned. Without this, running AutoBump repeatedly on a repository nobody reviews leaves a trail of abandoned release branches and open pull requests.
+
+Merged and unmerged branches are treated alike: a bump branch is disposable, because the branch needed for the current release is recreated immediately afterwards. Cleanup only runs once a bump is actually needed, so a pull request is never closed without a replacement being opened for it.
+
+Cleanup is **enabled by default**. Turn it off permanently in the config:
+
+```yaml
+# Keep the bump branches from previous runs
+cleanup_stale_branches: false
+
+# Customise the branch prefix used for both creation and cleanup
+bump_branch_prefix: 'chore/bump-'
+```
+
+Or disable it for a single run with `--skip-cleanup`:
+
+```bash
+autobump run --skip-cleanup
+```
+
+> **Note:** closing pull requests needs a token for the platform. Without one, AutoBump still deletes the branches and logs a warning that the pull requests were left open.
+
 ## Usage
 
 AutoBump has two main modes: **local** (single repository) and **run** (batch engine).
+
+These flags work with every mode:
+
+| Flag                | Description                                                                              |
+|---------------------|------------------------------------------------------------------------------------------|
+| `-c`, `--config`    | Path to the config file (auto-detected when omitted)                                     |
+| `-v`, `--verbose`   | Enable verbose output                                                                    |
+| `--skip-cleanup`    | Keep the bump branches from earlier runs instead of deleting them and closing their PRs  |
 
 ### 1. Local Mode
 

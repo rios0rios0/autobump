@@ -46,6 +46,7 @@ func (it *LocalController) Execute(cmd *cobra.Command, args []string) {
 		logger.Errorf("failed to read config: %v", err)
 		return
 	}
+	applySkipCleanupFlag(cmd, globalConfig)
 
 	repoDir := "."
 	if len(args) > 0 {

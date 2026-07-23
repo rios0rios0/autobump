@@ -35,6 +35,17 @@ github_access_token: "ghp_TOKEN"
 # (optional) global default changelog filename, relative to each project root.
 #changelog_path: 'CHANGELOG.md'
 
+# (optional) delete the bump branches left over by earlier runs, closing any pull
+# request attached to them, before creating the branch for the current release.
+# This keeps unattended runs from piling up release branches nobody merged.
+# Enabled by default, so set it to false to keep those branches, or pass
+# --skip-cleanup to disable it for a single run.
+#cleanup_stale_branches: true
+
+# (optional) prefix of the branches AutoBump creates; the next version is appended
+# to it. The same prefix decides which branches the cleanup above removes.
+#bump_branch_prefix: 'chore/bump-'
+
 # rules for automatically detecting project languages
 languages:
   # name of the language, this requires support in the code

@@ -152,3 +152,6 @@ var DetectByExtensions = detectByExtensions //nolint:gochecknoglobals // test ex
 
 // GetLanguageInterface exports getLanguageInterface for testing.
 var GetLanguageInterface = getLanguageInterface //nolint:gochecknoglobals // test export
+
+// FilterStaleBumpBranches exports filterStaleBumpBranches for testing.
+var FilterStaleBumpBranches = filterStaleBumpBranches //nolint:gochecknoglobals // test export

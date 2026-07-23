@@ -462,7 +462,7 @@ func createBumpBranch(ctx *RepoContext, changelogPath string) (string, entities.
 		return "", entities.BranchCreated, err
 	}
 
-	branchName := "chore/bump-" + nextVersion
+	branchName := entities.ResolveBumpBranchPrefix(ctx.GlobalConfig) + nextVersion
 	// Store the version for PR creation even if branch exists
 	ctx.ProjectConfig.NewVersion = nextVersion
 
@@ -664,6 +664,25 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 	return support.WriteLines(changelogPath, lines)
 }
 
+// resolveChangelogPath returns the absolute path of the project's changelog, defaulting
+// to CHANGELOG.md. The configured path must stay inside the project root: an absolute or
+// parent-escaping path would make the bumper read and rewrite a file outside the
+// repository it was pointed at.
+func resolveChangelogPath(ctx *RepoContext) (string, error) {
+	changelogFile := ctx.ProjectConfig.ChangelogPath
+	if changelogFile == "" {
+		changelogFile = "CHANGELOG.md"
+	}
+
+	cleanChangelogFile := filepath.Clean(changelogFile)
+	if filepath.IsAbs(changelogFile) || cleanChangelogFile == ".." ||
+		strings.HasPrefix(cleanChangelogFile, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid changelog_path %q: must be relative to the project root", changelogFile)
+	}
+
+	return filepath.Join(ctx.ProjectConfig.Path, cleanChangelogFile), nil
+}
+
 // ProcessRepo processes a repository:
 // - clones the repository if it is a remote repository
 // - creates the chore/bump branch
@@ -697,17 +716,10 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 	// Load per-project config overrides (must happen after clone so files are available)
 	ctx.GlobalConfig = loadProjectConfigOverrides(ctx.GlobalConfig, ctx.ProjectConfig, ctx.ProjectConfig.Path)
 
-	projectPath := ctx.ProjectConfig.Path
-	changelogFile := ctx.ProjectConfig.ChangelogPath
-	if changelogFile == "" {
-		changelogFile = "CHANGELOG.md"
+	changelogPath, err := resolveChangelogPath(ctx)
+	if err != nil {
+		return err
 	}
-	cleanChangelogFile := filepath.Clean(changelogFile)
-	if filepath.IsAbs(changelogFile) || cleanChangelogFile == ".." ||
-		strings.HasPrefix(cleanChangelogFile, ".."+string(os.PathSeparator)) {
-		return fmt.Errorf("invalid changelog_path %q: must be relative to the project root", changelogFile)
-	}
-	changelogPath := filepath.Join(projectPath, cleanChangelogFile)
 
 	// Setup repository and worktree
 	err = setupRepo(ctx)
@@ -723,7 +735,7 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 	if !changelogExisted {
 		logger.Infof(
 			"New %s was created for project '%s'; no unreleased content to bump",
-			changelogFile, ctx.ProjectConfig.Name,
+			filepath.Base(changelogPath), ctx.ProjectConfig.Name,
 		)
 		return nil
 	}
@@ -739,6 +751,13 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 
 	// Ensure the project language is detected (optional - will only update changelog if unknown)
 	ensureProjectLanguage(ctx)
+
+	// Drop the bump branches left behind by earlier runs, closing their pull requests,
+	// before the new one is created. This runs only once a bump is known to be needed,
+	// so a pull request is never closed without a replacement being opened for it.
+	if entities.CleanupEnabled(ctx.GlobalConfig) {
+		cleanupStaleBumpBranches(ctx)
+	}
 
 	// Create and switch to bump branch (or check if it already exists)
 	branchName, branchStatus, err := createBumpBranch(ctx, changelogPath)

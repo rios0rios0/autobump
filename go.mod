@@ -43,7 +43,7 @@ require (
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
-	github.com/rios0rios0/gitforge v1.0.0
+	github.com/rios0rios0/gitforge v1.0.1-0.20260723213209-a16be141d1d4
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/skeema/knownhosts v1.3.2
 	github.com/spf13/pflag v1.0.10 // indirect
