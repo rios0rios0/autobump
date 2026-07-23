@@ -227,6 +227,14 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 		languagesConfigCopy[k] = v
 	}
 
+	// The clone gets its own bool so the two builders never share the pointer:
+	// a deep copy that hands out the same address is not a deep copy.
+	var cleanupStaleBranchesCopy *bool
+	if b.cleanupStaleBranches != nil {
+		cleanupStaleBranches := *b.cleanupStaleBranches
+		cleanupStaleBranchesCopy = &cleanupStaleBranches
+	}
+
 	return &GlobalConfigBuilder{
 		BaseBuilder:            b.BaseBuilder.Clone().(*testkit.BaseBuilder),
 		providers:              providersCopy,
@@ -234,7 +242,7 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 		languagesConfig:        languagesConfigCopy,
 		excludeForks:           b.excludeForks,
 		excludeArchived:        b.excludeArchived,
-		cleanupStaleBranches:   b.cleanupStaleBranches,
+		cleanupStaleBranches:   cleanupStaleBranchesCopy,
 		bumpBranchPrefix:       b.bumpBranchPrefix,
 		changelogPath:          b.changelogPath,
 		versioning:             b.versioning,

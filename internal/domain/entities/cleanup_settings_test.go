@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	"github.com/rios0rios0/autobump/test/domain/entitybuilders"
@@ -68,6 +69,26 @@ func TestCleanupEnabled(t *testing.T) {
 
 		// then
 		assert.True(t, enabled)
+	})
+}
+
+func TestGlobalConfigBuilderCloneIsIndependent(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should give the clone its own cleanup toggle", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		original := entitybuilders.NewGlobalConfigBuilder().WithCleanupStaleBranches(false)
+		clone, ok := original.Clone().(*entitybuilders.GlobalConfigBuilder)
+		require.True(t, ok)
+
+		// when the clone is re-pointed at a different value
+		clone.WithCleanupStaleBranches(true)
+
+		// then the original keeps its own, rather than sharing one bool
+		assert.False(t, entities.CleanupEnabled(original.BuildGlobalConfig()))
+		assert.True(t, entities.CleanupEnabled(clone.BuildGlobalConfig()))
 	})
 }
 
