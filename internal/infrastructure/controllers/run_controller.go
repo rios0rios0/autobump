@@ -52,6 +52,7 @@ func (it *RunController) Execute(cmd *cobra.Command, _ []string) {
 		logger.Errorf("failed to read config: %v", err)
 		return
 	}
+	applySkipCleanupFlag(cmd, globalConfig)
 
 	hasProviders := len(globalConfig.Providers) > 0
 	hasProjects := len(globalConfig.Projects) > 0

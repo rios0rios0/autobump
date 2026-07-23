@@ -16,6 +16,24 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added an automatic cleanup of the bump branches left behind by earlier runs: before creating the
+  branch for a release, AutoBump now deletes every remote branch carrying the bump prefix and closes
+  (on Azure DevOps, abandons) the pull request attached to each one. Unattended runs no longer pile up
+  abandoned release branches when nobody reviews and merges them. Merged and unmerged branches are
+  treated alike, because the branch needed for the current release is recreated immediately afterwards
+- added the `cleanup_stale_branches` configuration key and the `--skip-cleanup` flag to turn that
+  cleanup off. Cleanup is opt-out, so it runs unless it is explicitly disabled; the flag overrides the
+  configuration for a single run
+- added the `bump_branch_prefix` configuration key to customise the `chore/bump-` branch prefix. The
+  same value drives branch creation and cleanup, so the two can never match different branches
+
+### Changed
+
+- changed cleanup to run only once a bump is known to be needed, so a pull request is never closed
+  without a replacement being opened for it
+
 ## [2.33.2] - 2026-07-16
 
 ### Changed

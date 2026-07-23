@@ -61,6 +61,10 @@ Usage modes:
 	// Global persistent flags
 	cmd.PersistentFlags().StringP("config", "c", "", "Path to config file (default: auto-detect)")
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
+	cmd.PersistentFlags().Bool(
+		"skip-cleanup", false,
+		"Keep bump branches from previous runs instead of deleting them and closing their PRs",
+	)
 
 	// Root-level flags (for `autobump .` shorthand)
 	cmd.Flags().StringP("language", "l", "", "project language")

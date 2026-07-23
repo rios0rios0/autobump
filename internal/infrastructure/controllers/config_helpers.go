@@ -5,10 +5,25 @@ import (
 	"fmt"
 
 	logger "github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	downloadHelpers "github.com/rios0rios0/gitforge/pkg/config/infrastructure/helpers"
 )
+
+// applySkipCleanupFlag turns off stale bump-branch cleanup when --skip-cleanup is set.
+// The flag is a per-run override, so it wins over the configuration file; without it the
+// configured value stands, and cleanup stays enabled when nothing is configured at all.
+func applySkipCleanupFlag(cmd *cobra.Command, globalConfig *entities.GlobalConfig) {
+	skipCleanup, _ := cmd.Flags().GetBool("skip-cleanup")
+	if !skipCleanup {
+		return
+	}
+
+	disabled := false
+	globalConfig.CleanupStaleBranches = &disabled
+	logger.Info("Stale bump branch cleanup is disabled for this run by --skip-cleanup")
+}
 
 // downloadDefaultConfig fetches and decodes the default autobump configuration.
 func downloadDefaultConfig() (*entities.GlobalConfig, error) {

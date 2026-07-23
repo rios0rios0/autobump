@@ -179,6 +179,8 @@ autobump/
 - SSH push auth: `ssh_key_path`, `ssh_key_passphrase`, `ssh_auth_sock` fields; auto-detects common SSH agent sockets (1Password, standard `ssh-agent`) when not explicitly set
 - Per-project `.autobump.yaml` discovered via `entities.FindProjectConfigFile`; `loadProjectConfigOverrides` in `internal/domain/commands/service.go` merges its `changelog_path`, `versioning`, and `languages` fields into the resolved config
 - `versioning` mode (`semver`, `fork-dot`, `fork-dash`) drives `getNextVersionString` and `updateChangelogFileString`; fork modes preserve the upstream `X.Y.Z` and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`
+- `cleanup_stale_branches` (opt-out, default enabled) and the persistent `--skip-cleanup` flag control stale bump-branch cleanup: `cleanupStaleBumpBranches` in `internal/domain/commands/cleanup.go` runs before `createBumpBranch` (only when a bump is needed) to delete matching remote branches and close their PRs/MRs via the gitforge `ForgeProvider.ClosePullRequest`. `entities.CleanupEnabled` resolves the toggle; `applySkipCleanupFlag` in `internal/infrastructure/controllers/config_helpers.go` lets the flag override the config
+- `bump_branch_prefix` (default `chore/bump-`, via `entities.ResolveBumpBranchPrefix`) drives both branch creation in `createBumpBranch` and the cleanup match, so they can never diverge
 
 ### Provider Configuration (run mode with providers)
 

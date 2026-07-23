@@ -15,6 +15,8 @@ type GlobalConfigBuilder struct {
 	languagesConfig        map[string]entities.LanguageConfig
 	excludeForks           bool
 	excludeArchived        bool
+	cleanupStaleBranches   *bool
+	bumpBranchPrefix       string
 	changelogPath          string
 	versioning             string
 	gpgKeyPath             string
@@ -87,6 +89,18 @@ func (b *GlobalConfigBuilder) WithExcludeArchived(exclude bool) *GlobalConfigBui
 	return b
 }
 
+// WithCleanupStaleBranches sets the stale bump-branch cleanup toggle.
+func (b *GlobalConfigBuilder) WithCleanupStaleBranches(cleanup bool) *GlobalConfigBuilder {
+	b.cleanupStaleBranches = &cleanup
+	return b
+}
+
+// WithBumpBranchPrefix sets the bump-branch prefix.
+func (b *GlobalConfigBuilder) WithBumpBranchPrefix(prefix string) *GlobalConfigBuilder {
+	b.bumpBranchPrefix = prefix
+	return b
+}
+
 // WithGpgKeyPath sets the GPG key path.
 func (b *GlobalConfigBuilder) WithGpgKeyPath(gpgKeyPath string) *GlobalConfigBuilder {
 	b.gpgKeyPath = gpgKeyPath
@@ -154,6 +168,8 @@ func (b *GlobalConfigBuilder) BuildGlobalConfig() *entities.GlobalConfig {
 		LanguagesConfig:        b.languagesConfig,
 		ExcludeForks:           b.excludeForks,
 		ExcludeArchived:        b.excludeArchived,
+		CleanupStaleBranches:   b.cleanupStaleBranches,
+		BumpBranchPrefix:       b.bumpBranchPrefix,
 		ChangelogPath:          b.changelogPath,
 		Versioning:             b.versioning,
 		GpgKeyPath:             b.gpgKeyPath,
@@ -176,6 +192,8 @@ func (b *GlobalConfigBuilder) Reset() testkit.Builder {
 	b.languagesConfig = make(map[string]entities.LanguageConfig)
 	b.excludeForks = false
 	b.excludeArchived = false
+	b.cleanupStaleBranches = nil
+	b.bumpBranchPrefix = ""
 	b.changelogPath = ""
 	b.versioning = ""
 	b.gpgKeyPath = ""
@@ -216,6 +234,8 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 		languagesConfig:        languagesConfigCopy,
 		excludeForks:           b.excludeForks,
 		excludeArchived:        b.excludeArchived,
+		cleanupStaleBranches:   b.cleanupStaleBranches,
+		bumpBranchPrefix:       b.bumpBranchPrefix,
 		changelogPath:          b.changelogPath,
 		versioning:             b.versioning,
 		gpgKeyPath:             b.gpgKeyPath,

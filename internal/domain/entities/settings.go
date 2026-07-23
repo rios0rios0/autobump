@@ -31,6 +31,11 @@ const (
 	VersioningForkDash = "fork-dash"
 )
 
+// DefaultBumpBranchPrefix is the prefix of the branches AutoBump creates for a release.
+// The next version is appended to it (e.g. "chore/bump-1.2.3"), and stale-branch cleanup
+// matches the same prefix.
+const DefaultBumpBranchPrefix = "chore/bump-"
+
 // GlobalConfig represents the top-level configuration.
 type GlobalConfig struct {
 	Providers              []configEntities.ProviderConfig `yaml:"providers"`
@@ -38,6 +43,8 @@ type GlobalConfig struct {
 	LanguagesConfig        map[string]LanguageConfig       `yaml:"languages"`
 	ExcludeForks           bool                            `yaml:"exclude_forks"`
 	ExcludeArchived        bool                            `yaml:"exclude_archived"`
+	CleanupStaleBranches   *bool                           `yaml:"cleanup_stale_branches"`
+	BumpBranchPrefix       string                          `yaml:"bump_branch_prefix"`
 	ChangelogPath          string                          `yaml:"changelog_path"`
 	Versioning             string                          `yaml:"versioning"`
 	GpgKeyPath             string                          `yaml:"gpg_key_path"`
@@ -98,6 +105,28 @@ func ResolveVersioning(globalConfig *GlobalConfig, projectConfig *ProjectConfig)
 		logger.Warnf("Unknown versioning mode %q, falling back to %q", mode, VersioningSemver)
 		return VersioningSemver
 	}
+}
+
+// CleanupEnabled reports whether stale bump-branch cleanup should run.
+// Cleanup is opt-out, so an absent setting means enabled; only an explicit
+// "cleanup_stale_branches: false" (or the --skip-cleanup flag) turns it off.
+func CleanupEnabled(globalConfig *GlobalConfig) bool {
+	if globalConfig == nil || globalConfig.CleanupStaleBranches == nil {
+		return true
+	}
+	return *globalConfig.CleanupStaleBranches
+}
+
+// ResolveBumpBranchPrefix returns the configured bump-branch prefix, falling back to
+// DefaultBumpBranchPrefix. The same prefix drives both branch creation and cleanup, so
+// a custom prefix can never leave cleanup matching branches the bumper no longer makes.
+func ResolveBumpBranchPrefix(globalConfig *GlobalConfig) string {
+	if globalConfig != nil {
+		if prefix := strings.TrimSpace(globalConfig.BumpBranchPrefix); prefix != "" {
+			return prefix
+		}
+	}
+	return DefaultBumpBranchPrefix
 }
 
 // DefaultConfigURL is the URL of the default configuration file.
