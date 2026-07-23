@@ -46,6 +46,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
   token also still deletes, because without one no pull request was ever opened to strand
 - fixed the pull request close call running without a deadline, so an unresponsive provider could
   stall a release behind cleanup. Each close is now bounded, keeping cleanup best-effort
+- fixed the Gitleaks stage failing every build on `main`. The allowlisted fingerprints in
+  `.gitleaksignore` embed the hash of the commit a finding came from, so when a rebase moved the
+  commit holding the `README.md` token placeholder, the entries stopped matching and the
+  long-suppressed false positive came back. Re-pointed both of them at the commit's current hash
 
 ## [2.33.2] - 2026-07-16
 
