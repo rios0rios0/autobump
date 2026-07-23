@@ -41,8 +41,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed cleanup deleting a stale branch even when closing its pull request had failed, which stranded
   an open pull request whose source branch no longer existed. Because cleanup only considers branches
   that still exist, no later run would have seen it to retry the close; the branch is now kept so the
-  pair stays retryable. A missing token still deletes the branch, because without one no pull request
-  was ever opened to strand
+  pair stays retryable. Only a genuine close failure keeps a branch: one with no pull request at all
+  is still deleted, since having nothing to close is a no-op rather than a failure, and a missing
+  token also still deletes, because without one no pull request was ever opened to strand
 
 ## [2.33.2] - 2026-07-16
 
