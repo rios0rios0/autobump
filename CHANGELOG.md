@@ -33,6 +33,16 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - changed cleanup to run only once a bump is known to be needed, so a pull request is never closed
   without a replacement being opened for it
+- changed the sample configuration to show `cleanup_stale_branches: false`, since the key is opt-out
+  and `true` is the one value that has no effect
+
+### Fixed
+
+- fixed cleanup deleting a stale branch even when closing its pull request had failed, which stranded
+  an open pull request whose source branch no longer existed. Because cleanup only considers branches
+  that still exist, no later run would have seen it to retry the close; the branch is now kept so the
+  pair stays retryable. A missing token still deletes the branch, because without one no pull request
+  was ever opened to strand
 
 ## [2.33.2] - 2026-07-16
 
