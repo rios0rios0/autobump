@@ -32,6 +32,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - changed cleanup to run only once a bump is known to be needed, so a pull request is never closed
+- changed the Go module dependencies to their latest versions
   without a replacement being opened for it
 - changed the sample configuration to show `cleanup_stale_branches: false`, since the key is opt-out
   and `true` is the one value that has no effect
