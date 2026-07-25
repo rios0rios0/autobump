@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.34.0] - 2026-07-25
+
 ### Added
 
 - added an automatic cleanup of the bump branches left behind by earlier runs: before creating the
