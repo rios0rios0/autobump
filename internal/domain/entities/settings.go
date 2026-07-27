@@ -44,6 +44,7 @@ type GlobalConfig struct {
 	ExcludeForks           bool                            `yaml:"exclude_forks"`
 	ExcludeArchived        bool                            `yaml:"exclude_archived"`
 	CleanupStaleBranches   *bool                           `yaml:"cleanup_stale_branches"`
+	DetectChlog            *bool                           `yaml:"detect_chlog"`
 	BumpBranchPrefix       string                          `yaml:"bump_branch_prefix"`
 	ChangelogPath          string                          `yaml:"changelog_path"`
 	Versioning             string                          `yaml:"versioning"`
@@ -83,6 +84,7 @@ type ProjectConfig struct {
 	NewVersion         string `yaml:"new_version"`
 	ChangelogPath      string `yaml:"changelog_path"`
 	Versioning         string `yaml:"versioning"`
+	DetectChlog        *bool  `yaml:"detect_chlog"`
 }
 
 // ResolveVersioning returns the effective versioning mode for a project.
@@ -105,6 +107,23 @@ func ResolveVersioning(globalConfig *GlobalConfig, projectConfig *ProjectConfig)
 		logger.Warnf("Unknown versioning mode %q, falling back to %q", mode, VersioningSemver)
 		return VersioningSemver
 	}
+}
+
+// ChlogEnabled reports whether a project should be inspected for a chlog
+// (https://github.com/luizjhonata/chlog) fragment layout. Detection is opt-out, so an
+// absent setting means enabled; only an explicit "detect_chlog: false" turns it off.
+// Project-level setting wins over global, matching ResolveVersioning.
+//
+// Leaving it on costs nothing for a repository that does not use chlog: without the
+// fragment directory, detection is a single stat call and changes no behaviour.
+func ChlogEnabled(globalConfig *GlobalConfig, projectConfig *ProjectConfig) bool {
+	if projectConfig != nil && projectConfig.DetectChlog != nil {
+		return *projectConfig.DetectChlog
+	}
+	if globalConfig != nil && globalConfig.DetectChlog != nil {
+		return *globalConfig.DetectChlog
+	}
+	return true
 }
 
 // CleanupEnabled reports whether stale bump-branch cleanup should run.

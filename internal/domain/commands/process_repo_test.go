@@ -77,45 +77,111 @@ func TestProcessRepoIntegration(t *testing.T) { //nolint:tparallel // mutates pa
 
 	t.Run("should create bump branch and update files when unreleased entries exist", func(t *testing.T) {
 		// given
-		repoPath, repo := createTestRepo(t)
-		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
-		content := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- added new feature\n\n## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
-		require.NoError(t, os.WriteFile(changelogPath, []byte(content), 0o644))
-
-		// Commit the changelog so it survives branch switches
-		wt, err := repo.Worktree()
-		require.NoError(t, err)
-		_, err = wt.Add("CHANGELOG.md")
-		require.NoError(t, err)
-		_, err = wt.Commit("add changelog", &git.CommitOptions{
-			Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
-		})
-		require.NoError(t, err)
-
-		registry := repositories.NewProviderRegistry()
-		commands.SetProviderRegistry(registry)
-		commands.SetGitOperations(gitInfra.NewGitOperations(registry))
-
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{}).
-			BuildGlobalConfig()
-		projectConfig := entitybuilders.NewProjectConfigBuilder().
-			WithPath(repoPath).
-			WithName("test-project").
-			BuildProjectConfig()
+		fixture := newBumpFixture(t,
+			"# Changelog\n\n## [Unreleased]\n\n### Added\n\n- added new feature\n\n"+
+				"## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n", nil)
 
 		// when
-		err = commands.ProcessRepo(globalConfig, projectConfig)
+		err := commands.ProcessRepo(fixture.globalConfig, fixture.projectConfig)
 
 		// then — push will fail (no remote), but branch should be created and changelog updated
 		// The error is expected because there's no remote to push to
 		require.Error(t, err)
 
 		// Verify the changelog was updated with the new version
-		updatedChangelog, readErr := os.ReadFile(changelogPath)
-		require.NoError(t, readErr)
-		assert.Contains(t, string(updatedChangelog), "[1.1.0]")
+		assert.Contains(t, fixture.readChangelog(t), "[1.1.0]")
 	})
+
+	t.Run("should release chlog fragments and stage their removal when the project uses chlog", func(t *testing.T) {
+		// given — the unreleased section is empty, exactly as chlog leaves it: the pending
+		// work lives in the fragments, which is what AutoBump used to miss entirely
+		fixture := newBumpFixture(t,
+			"# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n",
+			map[string]string{
+				".changes/unreleased/100-a1b2.yaml": "kind: Added\nbody: added OAuth2 login\n",
+				".changes/unreleased/200-c3d4.yaml": "kind: Fixed\nbody: fixed the retry backoff\n",
+			})
+
+		// when
+		err := commands.ProcessRepo(fixture.globalConfig, fixture.projectConfig)
+
+		// then — the push fails because the test repo has no remote, but everything
+		// before it must have happened
+		require.Error(t, err)
+
+		updatedChangelog := fixture.readChangelog(t)
+		assert.Contains(t, updatedChangelog, "[1.1.0]")
+		assert.Contains(t, updatedChangelog, "- added OAuth2 login")
+		assert.Contains(t, updatedChangelog, "- fixed the retry backoff")
+
+		// The consumed fragments must be gone from disk and their deletion staged,
+		// otherwise the next run would release the same entries again.
+		assert.NoFileExists(t, filepath.Join(fixture.repoPath, ".changes", "unreleased", "100-a1b2.yaml"))
+		assert.NoFileExists(t, filepath.Join(fixture.repoPath, ".changes", "unreleased", "200-c3d4.yaml"))
+
+		status, statusErr := fixture.worktree.Status()
+		require.NoError(t, statusErr)
+		assert.Empty(t, status, "the commit should have captured the changelog and both fragment removals")
+	})
+}
+
+// bumpFixture is a committed repository wired up so ProcessRepo can run against it.
+type bumpFixture struct {
+	repoPath      string
+	changelogPath string
+	worktree      *git.Worktree
+	globalConfig  *entities.GlobalConfig
+	projectConfig *entities.ProjectConfig
+}
+
+// newBumpFixture writes the changelog plus any extra files (keyed by slash-separated path
+// relative to the repository root), commits them so they survive branch switches, and
+// registers the provider registry ProcessRepo needs.
+func newBumpFixture(t *testing.T, changelog string, extraFiles map[string]string) bumpFixture {
+	t.Helper()
+
+	repoPath, repo := createTestRepo(t)
+	changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
+	require.NoError(t, os.WriteFile(changelogPath, []byte(changelog), 0o600))
+
+	for relPath, content := range extraFiles {
+		fullPath := filepath.Join(repoPath, filepath.FromSlash(relPath))
+		makeDir(t, filepath.Dir(fullPath))
+		require.NoError(t, os.WriteFile(fullPath, []byte(content), 0o600))
+	}
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, worktree.AddWithOptions(&git.AddOptions{All: true}))
+	_, err = worktree.Commit("seed the fixture", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
+	})
+	require.NoError(t, err)
+
+	registry := repositories.NewProviderRegistry()
+	commands.SetProviderRegistry(registry)
+	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
+
+	return bumpFixture{
+		repoPath:      repoPath,
+		changelogPath: changelogPath,
+		worktree:      worktree,
+		globalConfig: entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{}).
+			BuildGlobalConfig(),
+		projectConfig: entitybuilders.NewProjectConfigBuilder().
+			WithPath(repoPath).
+			WithName("test-project").
+			BuildProjectConfig(),
+	}
+}
+
+// readChangelog returns the current contents of the fixture's changelog.
+func (f bumpFixture) readChangelog(t *testing.T) string {
+	t.Helper()
+	content, err := os.ReadFile(f.changelogPath)
+	require.NoError(t, err)
+	return string(content)
 }
 
 func TestProcessRepoAdditionalBranches(t *testing.T) { //nolint:tparallel // mutates package-level globals

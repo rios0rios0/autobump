@@ -127,7 +127,7 @@ func TestUpdateChangelogFile(t *testing.T) {
 		})
 
 		// when
-		version, err := commands.UpdateChangelogFile(changelogPath)
+		version, err := commands.UpdateChangelogFile(nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
 
 		// then
 		require.NoError(t, err)
@@ -151,7 +151,7 @@ func TestUpdateChangelogFile(t *testing.T) {
 		})
 
 		// when
-		version, err := commands.UpdateChangelogFile(changelogPath)
+		version, err := commands.UpdateChangelogFile(nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
 
 		// then
 		require.Error(t, err)
@@ -160,7 +160,7 @@ func TestUpdateChangelogFile(t *testing.T) {
 
 	t.Run("should return error when file does not exist", func(t *testing.T) {
 		// given / when
-		version, err := commands.UpdateChangelogFile("/nonexistent/CHANGELOG.md")
+		version, err := commands.UpdateChangelogFile(nil, nil, "/nonexistent/CHANGELOG.md")
 
 		// then
 		require.Error(t, err)
@@ -191,7 +191,7 @@ func TestGetNextVersion(t *testing.T) {
 		})
 
 		// when
-		version, err := commands.GetNextVersion(changelogPath)
+		version, err := commands.GetNextVersion(nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
 
 		// then
 		require.NoError(t, err)
@@ -212,7 +212,7 @@ func TestGetNextVersion(t *testing.T) {
 		})
 
 		// when
-		version, err := commands.GetNextVersion(changelogPath)
+		version, err := commands.GetNextVersion(nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
 
 		// then
 		require.NoError(t, err)
@@ -221,7 +221,7 @@ func TestGetNextVersion(t *testing.T) {
 
 	t.Run("should return error when file does not exist", func(t *testing.T) {
 		// given / when
-		version, err := commands.GetNextVersion("/nonexistent/CHANGELOG.md")
+		version, err := commands.GetNextVersion(nil, nil, "/nonexistent/CHANGELOG.md")
 
 		// then
 		require.Error(t, err)

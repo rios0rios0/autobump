@@ -48,10 +48,10 @@ var (
 // project directory. If found, it reads the file and merges its languages section
 // into the provided globalConfig, returning a new GlobalConfig without mutating the
 // original globalConfig, but it may update the provided projectConfig.
-// It also merges the changelog_path and versioning fields from the per-project
-// config into the projectConfig when the projectConfig does not already specify
-// them. If no per-project config is found, the original globalConfig is returned
-// unchanged.
+// It also merges the changelog_path, versioning and detect_chlog fields from the
+// per-project config into the projectConfig when the projectConfig does not already
+// specify them. If no per-project config is found, the original globalConfig is
+// returned unchanged.
 func loadProjectConfigOverrides(
 	globalConfig *entities.GlobalConfig,
 	projectConfig *entities.ProjectConfig,
@@ -76,6 +76,10 @@ func loadProjectConfigOverrides(
 
 	if projectOverrides.Versioning != "" && projectConfig.Versioning == "" {
 		projectConfig.Versioning = projectOverrides.Versioning
+	}
+
+	if projectOverrides.DetectChlog != nil && projectConfig.DetectChlog == nil {
+		projectConfig.DetectChlog = projectOverrides.DetectChlog
 	}
 
 	if len(projectOverrides.LanguagesConfig) == 0 {
@@ -404,7 +408,7 @@ func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error
 }
 
 func shouldBumpProject(ctx *RepoContext, changelogPath string) (bool, error) {
-	lines, err := support.ReadLines(changelogPath)
+	lines, err := readChangelogLines(ctx.GlobalConfig, ctx.ProjectConfig, changelogPath)
 	if err != nil {
 		return false, err
 	}
@@ -506,10 +510,39 @@ func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) erro
 		}
 	}
 
-	return addFilesToWorktree(ctx, changelogPath)
+	// The fragments have been folded into the release section above, so they must go.
+	// Leaving them behind would ship the same entries again on the next run.
+	consumedFragments, err := consumeChlogFragments(ctx)
+	if err != nil {
+		return err
+	}
+
+	return addFilesToWorktree(ctx, changelogPath, consumedFragments)
 }
 
-func addFilesToWorktree(ctx *RepoContext, changelogPath string) error {
+// consumeChlogFragments deletes the chlog fragments that were just released and returns
+// their paths so the deletions can be staged. The fragments are re-read rather than
+// threaded through the changelog writers: they are untouched on disk until this point,
+// and re-reading keeps the I/O wrappers free of chlog state.
+func consumeChlogFragments(ctx *RepoContext) ([]string, error) {
+	fragments, _, err := collectChlogFragments(ctx.GlobalConfig, ctx.ProjectConfig)
+	if err != nil {
+		return nil, err
+	}
+	if len(fragments) == 0 {
+		return nil, nil
+	}
+
+	deleted, err := DeleteChlogFragments(fragments)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Infof("Removed %d consumed chlog fragment(s)", len(deleted))
+	return deleted, nil
+}
+
+func addFilesToWorktree(ctx *RepoContext, changelogPath string, removedPaths []string) error {
 	versionFiles, err := getVersionFiles(ctx.GlobalConfig, ctx.ProjectConfig)
 	if err != nil {
 		return err
@@ -542,6 +575,21 @@ func addFilesToWorktree(ctx *RepoContext, changelogPath string) error {
 	_, err = ctx.Worktree.Add(changelogRelativePath)
 	if err != nil {
 		return fmt.Errorf("failed to add changelog file: %w", err)
+	}
+
+	// Staging a path that no longer exists on disk records its deletion, so the consumed
+	// chlog fragments disappear in the same commit that publishes their content.
+	for _, removedPath := range removedPaths {
+		var removedRelativePath string
+		removedRelativePath, err = filepath.Rel(projectPath, removedPath)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path for removed file: %w", err)
+		}
+
+		logger.Infof("Removing consumed file %s", removedRelativePath)
+		if _, err = ctx.Worktree.Add(removedRelativePath); err != nil {
+			return fmt.Errorf("failed to stage removal of %s: %w", removedRelativePath, err)
+		}
 	}
 
 	return nil
@@ -665,22 +713,50 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 }
 
 // resolveChangelogPath returns the absolute path of the project's changelog, defaulting
-// to CHANGELOG.md. The configured path must stay inside the project root: an absolute or
-// parent-escaping path would make the bumper read and rewrite a file outside the
-// repository it was pointed at.
+// to CHANGELOG.md. A chlog project that points changelogPath elsewhere in .chlog.yaml is
+// honoured, so AutoBump writes where that project already keeps its changelog; an
+// explicit changelog_path still wins over it.
+//
+// The configured path must stay inside the project root: an absolute or parent-escaping
+// path would make the bumper read and rewrite a file outside the repository it was
+// pointed at.
 func resolveChangelogPath(ctx *RepoContext) (string, error) {
 	changelogFile := ctx.ProjectConfig.ChangelogPath
 	if changelogFile == "" {
-		changelogFile = "CHANGELOG.md"
+		var err error
+		changelogFile, err = chlogChangelogPath(ctx)
+		if err != nil {
+			return "", err
+		}
 	}
 
-	cleanChangelogFile := filepath.Clean(changelogFile)
-	if filepath.IsAbs(changelogFile) || cleanChangelogFile == ".." ||
-		strings.HasPrefix(cleanChangelogFile, ".."+string(os.PathSeparator)) {
+	if !isPathInsideProject(changelogFile) {
 		return "", fmt.Errorf("invalid changelog_path %q: must be relative to the project root", changelogFile)
 	}
 
-	return filepath.Join(ctx.ProjectConfig.Path, cleanChangelogFile), nil
+	return filepath.Join(ctx.ProjectConfig.Path, filepath.Clean(changelogFile)), nil
+}
+
+// chlogChangelogPath returns the changelog location a chlog project declares in
+// .chlog.yaml, falling back to the plain CHANGELOG.md default for every other project.
+//
+// A broken or hostile .chlog.yaml is an error rather than a fallback: a project that
+// commits one expects it to be honoured, and quietly using the default would look in the
+// wrong place and release without the fragments.
+func chlogChangelogPath(ctx *RepoContext) (string, error) {
+	if !entities.ChlogEnabled(ctx.GlobalConfig, ctx.ProjectConfig) {
+		return defaultChlogChangelogPath, nil
+	}
+
+	config, usesChlog, err := DetectChlog(ctx.ProjectConfig.Path)
+	if err != nil {
+		return "", err
+	}
+	if !usesChlog {
+		return defaultChlogChangelogPath, nil
+	}
+
+	return config.ChangelogPath, nil
 }
 
 // ProcessRepo processes a repository:
@@ -720,6 +796,8 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 	if err != nil {
 		return err
 	}
+
+	logChlogDetection(ctx)
 
 	// Setup repository and worktree
 	err = setupRepo(ctx)
@@ -1221,12 +1299,98 @@ func buildGitforgeRepo(remoteURL string, defaultBranch string) globalEntities.Re
 
 // ---- Changelog I/O wrappers ----
 
-// updateChangelogFile reads the changelog, processes it with the SemVer
-// pipeline, and writes it back. This is the legacy entry point used by tests.
-// Production callers should prefer updateChangelogFileString to honor the
-// project's versioning mode.
-func updateChangelogFile(changelogPath string) (*semver.Version, error) {
+// readChangelogLines is the single boundary through which the changelog is read.
+//
+// It returns the file's own lines for an ordinary project. For a project using chlog
+// (https://github.com/luizjhonata/chlog), whose pending changes live as YAML fragments
+// under .changes/unreleased/ rather than in the file, it also splices those fragments
+// into the [Unreleased] section. Everything downstream therefore sees plain Keep a
+// Changelog content and needs no awareness of chlog -- including the emptiness check
+// that decides whether a release is needed at all, the SemVer calculation, and fork mode.
+//
+// Entries already written by hand into [Unreleased] are kept: during a migration to
+// chlog both sources can hold real work, and dropping either would lose a release note.
+func readChangelogLines(
+	globalConfig *entities.GlobalConfig,
+	projectConfig *entities.ProjectConfig,
+	changelogPath string,
+) ([]string, error) {
 	lines, err := support.ReadLines(changelogPath)
+	if err != nil {
+		return nil, err
+	}
+
+	fragments, config, err := collectChlogFragments(globalConfig, projectConfig)
+	if err != nil {
+		return nil, err
+	}
+	if len(fragments) == 0 {
+		return lines, nil
+	}
+
+	return MergeChlogIntoUnreleased(lines, RenderChlogFragments(fragments, config)), nil
+}
+
+// collectChlogFragments reads the pending chlog fragments of a project, if it uses chlog
+// and detection is enabled. It returns no fragments for every other project.
+func collectChlogFragments(
+	globalConfig *entities.GlobalConfig,
+	projectConfig *entities.ProjectConfig,
+) ([]ChlogFragment, *ChlogConfig, error) {
+	if projectConfig == nil || !entities.ChlogEnabled(globalConfig, projectConfig) {
+		return nil, nil, nil
+	}
+
+	config, usesChlog, err := DetectChlog(projectConfig.Path)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !usesChlog {
+		return nil, nil, nil
+	}
+
+	fragments, err := ReadChlogFragments(projectConfig.Path, config)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(fragments) == 0 {
+		return nil, config, nil
+	}
+
+	// Debug, not Info: the changelog is read several times per run, and ProcessRepo
+	// already announces the detection once via logChlogDetection.
+	logger.Debugf("Read %d chlog fragment(s) from %s",
+		len(fragments), config.UnreleasedPath(projectConfig.Path))
+
+	return fragments, config, nil
+}
+
+// logChlogDetection announces once per run that a project keeps its pending changes as
+// chlog fragments. Detection problems are only warned about here: the same read happens
+// again on the path that actually needs the fragments, where the error is returned.
+func logChlogDetection(ctx *RepoContext) {
+	fragments, config, err := collectChlogFragments(ctx.GlobalConfig, ctx.ProjectConfig)
+	if err != nil {
+		logger.Warnf("Could not read the chlog fragments in %s: %v", ctx.ProjectConfig.Path, err)
+		return
+	}
+	if len(fragments) == 0 {
+		return
+	}
+
+	logger.Infof("Detected a chlog changelog with %d pending fragment(s) in %s",
+		len(fragments), config.UnreleasedPath(ctx.ProjectConfig.Path))
+}
+
+// updateChangelogFile reads the changelog, processes it with the SemVer
+// pipeline, and writes it back. Production callers should prefer
+// updateChangelogFileString to honor the project's versioning mode.
+func updateChangelogFile(
+	globalConfig *entities.GlobalConfig,
+	projectConfig *entities.ProjectConfig,
+	changelogPath string,
+) (*semver.Version, error) {
+	lines, err := readChangelogLines(globalConfig, projectConfig, changelogPath)
 	if err != nil {
 		return nil, err
 	}
@@ -1255,7 +1419,7 @@ func updateChangelogFileString(
 ) (string, error) {
 	mode := entities.ResolveVersioning(globalConfig, projectConfig)
 	if IsForkVersioning(mode) {
-		lines, err := support.ReadLines(changelogPath)
+		lines, err := readChangelogLines(globalConfig, projectConfig, changelogPath)
 		if err != nil {
 			return "", err
 		}
@@ -1269,17 +1433,21 @@ func updateChangelogFileString(
 		return nextVersion, nil
 	}
 
-	version, err := updateChangelogFile(changelogPath)
+	version, err := updateChangelogFile(globalConfig, projectConfig, changelogPath)
 	if err != nil {
 		return "", err
 	}
 	return version.String(), nil
 }
 
-// getNextVersion reads the changelog and calculates the next SemVer version.
-// Legacy entry point preserved for tests and external callers.
-func getNextVersion(changelogPath string) (*semver.Version, error) {
-	lines, err := support.ReadLines(changelogPath)
+// getNextVersion reads the changelog and calculates the next SemVer version
+// without writing anything back.
+func getNextVersion(
+	globalConfig *entities.GlobalConfig,
+	projectConfig *entities.ProjectConfig,
+	changelogPath string,
+) (*semver.Version, error) {
+	lines, err := readChangelogLines(globalConfig, projectConfig, changelogPath)
 	if err != nil {
 		return nil, err
 	}
@@ -1311,7 +1479,7 @@ func getNextVersionString(
 ) (string, error) {
 	mode := entities.ResolveVersioning(globalConfig, projectConfig)
 	if IsForkVersioning(mode) {
-		lines, err := support.ReadLines(changelogPath)
+		lines, err := readChangelogLines(globalConfig, projectConfig, changelogPath)
 		if err != nil {
 			return "", err
 		}
@@ -1328,7 +1496,7 @@ func getNextVersionString(
 		return NextForkVersion(currentString, mode)
 	}
 
-	version, err := getNextVersion(changelogPath)
+	version, err := getNextVersion(globalConfig, projectConfig, changelogPath)
 	if err != nil {
 		return "", err
 	}

@@ -35,6 +35,13 @@ github_access_token: "ghp_TOKEN"
 # (optional) global default changelog filename, relative to each project root.
 #changelog_path: 'CHANGELOG.md'
 
+# (optional) detect projects using chlog (https://github.com/luizjhonata/chlog),
+# whose pending changes live as YAML fragments under '.changes/unreleased/' rather
+# than in the '[Unreleased]' section. Without this, such a project looks like it has
+# nothing to release. Enabled by default; uncomment the line below to ignore the
+# fragments instead.
+#detect_chlog: false
+
 # (optional) delete the bump branches left over by earlier runs, closing any pull
 # request attached to them, before creating the branch for the current release.
 # This keeps unattended runs from piling up release branches nobody merged.
@@ -190,6 +197,11 @@ projects:
   #- path: '/home/user/forks/oui'
   #  changelog_path: 'CHANGELOG_PROPRIETARY.md'
   #  versioning: 'fork-dash'
+
+  # (optional) ignore the chlog fragments of a single project, overriding the
+  # global 'detect_chlog' setting for it
+  #- path: '/home/user/repo3.6'
+  #  detect_chlog: false
 
   # you can specify a project access token that will be used for this project
   # this token will be prioritized over the gitlab_access_token and the CI_JOB_TOKEN
