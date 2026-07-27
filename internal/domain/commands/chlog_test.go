@@ -39,6 +39,31 @@ func writeChlogConfig(t *testing.T, dir, content string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".chlog.yaml"), []byte(content), 0o600))
 }
 
+// readFragments detects the project's chlog configuration and reads its pending fragments,
+// which is the pairing every fragment-reading test needs.
+func readFragments(t *testing.T, dir string) ([]commands.ChlogFragment, error) {
+	t.Helper()
+	config, _, err := commands.DetectChlog(dir)
+	require.NoError(t, err)
+	return commands.ReadChlogFragments(dir, config)
+}
+
+// chlogBaseChangelog is a released changelog with an empty unreleased section — the state
+// chlog leaves behind, since its pending changes live in the fragments instead.
+func chlogBaseChangelog() []string {
+	return []string{
+		"# Changelog",
+		"",
+		"## [Unreleased]",
+		"",
+		"## [1.2.0] - 2026-01-01",
+		"",
+		"### Added",
+		"",
+		"- added the first release",
+	}
+}
+
 func TestDetectChlog(t *testing.T) {
 	t.Parallel()
 
@@ -135,11 +160,9 @@ func TestReadChlogFragments(t *testing.T) {
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "300-c3d4.yaml", "kind: Fixed\nbody: fixed the retry backoff\n")
 		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
-		config, _, err := commands.DetectChlog(tmpDir)
-		require.NoError(t, err)
 
 		// when
-		fragments, err := commands.ReadChlogFragments(tmpDir, config)
+		fragments, err := readFragments(t, tmpDir)
 
 		// then
 		require.NoError(t, err)
@@ -155,13 +178,12 @@ func TestReadChlogFragments(t *testing.T) {
 			"kind: Added\nbody: added SSO support\ntime: 2026-07-21T10:00:00Z\n")
 		writeFragment(t, tmpDir, "200-c3d4.yaml",
 			"kind: Added\nbody: added OAuth2 login\ntime: 2026-07-20T10:00:00Z\n")
-		config, _, err := commands.DetectChlog(tmpDir)
-		require.NoError(t, err)
 
 		// when
-		fragments, err := commands.ReadChlogFragments(tmpDir, config)
+		fragments, err := readFragments(t, tmpDir)
 
 		// then
+		require.NoError(t, err)
 		require.Len(t, fragments, 2)
 		assert.Equal(t, "added OAuth2 login", fragments[0].Body)
 		assert.Equal(t, "added SSO support", fragments[1].Body)
@@ -172,13 +194,12 @@ func TestReadChlogFragments(t *testing.T) {
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Performance\nbody: sped up the parser\n")
 		writeFragment(t, tmpDir, "200-c3d4.yaml", "kind: Added\nbody: added OAuth2 login\n")
-		config, _, err := commands.DetectChlog(tmpDir)
-		require.NoError(t, err)
 
 		// when
-		fragments, err := commands.ReadChlogFragments(tmpDir, config)
+		fragments, err := readFragments(t, tmpDir)
 
 		// then
+		require.NoError(t, err)
 		require.Len(t, fragments, 2)
 		assert.Equal(t, "Added", fragments[0].Kind)
 		assert.Equal(t, "Performance", fragments[1].Kind)
@@ -188,11 +209,9 @@ func TestReadChlogFragments(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "100-a1b2.yml", "kind: Added\nbody: added OAuth2 login\n")
-		config, _, err := commands.DetectChlog(tmpDir)
-		require.NoError(t, err)
 
 		// when
-		fragments, err := commands.ReadChlogFragments(tmpDir, config)
+		fragments, err := readFragments(t, tmpDir)
 
 		// then
 		require.NoError(t, err)
@@ -204,11 +223,9 @@ func TestReadChlogFragments(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: \"\"\n")
-		config, _, err := commands.DetectChlog(tmpDir)
-		require.NoError(t, err)
 
 		// when
-		fragments, err := commands.ReadChlogFragments(tmpDir, config)
+		fragments, err := readFragments(t, tmpDir)
 
 		// then
 		require.NoError(t, err)
@@ -219,11 +236,9 @@ func TestReadChlogFragments(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: [Added\n")
-		config, _, err := commands.DetectChlog(tmpDir)
-		require.NoError(t, err)
 
 		// when
-		_, err = commands.ReadChlogFragments(tmpDir, config)
+		_, err := readFragments(t, tmpDir)
 
 		// then
 		require.Error(t, err)
@@ -233,11 +248,9 @@ func TestReadChlogFragments(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		makeDir(t, filepath.Join(tmpDir, ".changes", "unreleased"))
-		config, _, err := commands.DetectChlog(tmpDir)
-		require.NoError(t, err)
 
 		// when
-		fragments, err := commands.ReadChlogFragments(tmpDir, config)
+		fragments, err := readFragments(t, tmpDir)
 
 		// then
 		require.NoError(t, err)
@@ -250,11 +263,9 @@ func TestReadChlogFragments(t *testing.T) {
 		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
 		require.NoError(t, os.WriteFile(
 			filepath.Join(tmpDir, ".changes", "v1.2.0.md"), []byte("## [1.2.0]\n"), 0o600))
-		config, _, err := commands.DetectChlog(tmpDir)
-		require.NoError(t, err)
 
 		// when
-		_, err = commands.ReadChlogFragments(tmpDir, config)
+		_, err := readFragments(t, tmpDir)
 
 		// then
 		require.ErrorIs(t, err, commands.ErrChlogPendingVersionFiles)
@@ -479,17 +490,7 @@ func TestDeleteChlogFragments(t *testing.T) {
 func TestReadChangelogLinesWithChlog(t *testing.T) {
 	t.Parallel()
 
-	baseChangelog := []string{
-		"# Changelog",
-		"",
-		"## [Unreleased]",
-		"",
-		"## [1.2.0] - 2026-01-01",
-		"",
-		"### Added",
-		"",
-		"- added the first release",
-	}
+	baseChangelog := chlogBaseChangelog()
 
 	t.Run("should splice fragments into the unreleased section when the project uses chlog", func(t *testing.T) {
 		// given
@@ -544,17 +545,7 @@ func TestShouldBumpProjectWithChlog(t *testing.T) {
 	t.Run("should compute a minor bump when only chlog fragments hold the changes", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
-		changelogPath := writeChangelog(t, tmpDir, []string{
-			"# Changelog",
-			"",
-			"## [Unreleased]",
-			"",
-			"## [1.2.0] - 2026-01-01",
-			"",
-			"### Added",
-			"",
-			"- added the first release",
-		})
+		changelogPath := writeChangelog(t, tmpDir, chlogBaseChangelog())
 		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
 		writeFragment(t, tmpDir, "200-c3d4.yaml", "kind: Fixed\nbody: fixed the retry backoff\n")
 		projectConfig := &entities.ProjectConfig{Path: tmpDir}
@@ -570,17 +561,7 @@ func TestShouldBumpProjectWithChlog(t *testing.T) {
 	t.Run("should compute a major bump when a fragment marks a breaking change", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
-		changelogPath := writeChangelog(t, tmpDir, []string{
-			"# Changelog",
-			"",
-			"## [Unreleased]",
-			"",
-			"## [1.2.0] - 2026-01-01",
-			"",
-			"### Added",
-			"",
-			"- added the first release",
-		})
+		changelogPath := writeChangelog(t, tmpDir, chlogBaseChangelog())
 		writeFragment(t, tmpDir, "100-a1b2.yaml",
 			"kind: Changed\nbody: \"**BREAKING CHANGE:** dropped the v1 endpoint\"\n")
 		projectConfig := &entities.ProjectConfig{Path: tmpDir}
