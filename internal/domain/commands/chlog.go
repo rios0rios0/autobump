@@ -58,7 +58,17 @@ const chlogLinesPerFragment = 2
 // ErrChlogPendingVersionFiles is returned when chlog has already batched fragments into
 // .changes/v<version>.md but nobody has merged them into the changelog yet. Those files
 // carry a version chlog has decided; releasing a different one would rewrite history.
-var ErrChlogPendingVersionFiles = errors.New("chlog has batched but unmerged version files")
+var (
+	ErrChlogPendingVersionFiles = errors.New("chlog has batched but unmerged version files")
+
+	// ErrChlogPathEscapesProject is returned when .chlog.yaml configures a path that would
+	// take the bumper outside the repository it was pointed at.
+	ErrChlogPathEscapesProject = errors.New("chlog path escapes the project root")
+
+	// ErrChlogNotRegularFile is returned when a path that must be a plain file is a symlink,
+	// a directory, or a device.
+	ErrChlogNotRegularFile = errors.New("not a regular file")
+)
 
 // keepAChangelogSections maps a lower-cased kind label to its canonical Keep a Changelog
 // section. chlog's six default kinds are exactly these sections, which is what lets the
@@ -134,8 +144,18 @@ func DetectChlog(projectPath string) (*ChlogConfig, bool, error) {
 		return nil, false, err
 	}
 
-	if _, err = os.Stat(config.UnreleasedPath(projectPath)); err == nil {
-		return config, true, nil
+	// A stat failure other than "absent" -- a permission error, a broken mount -- must not
+	// be read as "this project does not use chlog": that would silently skip its fragments.
+	unreleasedPath := config.UnreleasedPath(projectPath)
+	info, err := os.Stat(unreleasedPath)
+	switch {
+	case err == nil:
+		if info.IsDir() {
+			return config, true, nil
+		}
+	case !errors.Is(err, os.ErrNotExist):
+		return nil, false, fmt.Errorf(
+			"failed to inspect the chlog fragment directory %s: %w", unreleasedPath, err)
 	}
 
 	return config, hasConfigFile, nil
@@ -148,12 +168,14 @@ func loadChlogConfig(projectPath string) (*ChlogConfig, bool, error) {
 
 	for _, name := range []string{chlogConfigFileName, chlogAltConfigFileName} {
 		configPath := filepath.Join(projectPath, name)
-		if _, err := os.Stat(configPath); err != nil {
+
+		data, err := readRegularFile(configPath)
+		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
-
-		data, err := os.ReadFile(configPath)
 		if err != nil {
+			// An existing but unreadable config is an error, not an absent one: falling
+			// back to the defaults would quietly look in the wrong place for fragments.
 			return nil, false, fmt.Errorf("failed to read chlog config %s: %w", configPath, err)
 		}
 
@@ -163,6 +185,9 @@ func loadChlogConfig(projectPath string) (*ChlogConfig, bool, error) {
 		}
 
 		applyChlogConfigDefaults(&config)
+		if err = validateChlogConfig(&config, configPath); err != nil {
+			return nil, false, err
+		}
 		return &config, true, nil
 	}
 
@@ -183,6 +208,61 @@ func applyChlogConfigDefaults(config *ChlogConfig) {
 	if len(config.Kinds) == 0 {
 		config.Kinds = DefaultChlogConfig().Kinds
 	}
+}
+
+// validateChlogConfig rejects configured paths that leave the project root.
+//
+// .chlog.yaml is committed by the repository being released, and in discovery mode
+// AutoBump clones repositories it does not own, so these values are untrusted input. They
+// drive globbing, reading, and -- for the consumed fragments -- deletion, so an absolute
+// or parent-escaping value would let a hostile configuration reach the host filesystem.
+func validateChlogConfig(config *ChlogConfig, configPath string) error {
+	fields := []struct{ name, value string }{
+		{"changesDir", config.ChangesDir},
+		{"unreleasedDir", config.UnreleasedDir},
+		{"changelogPath", config.ChangelogPath},
+		// The directories are joined, so a pair that is individually harmless but escapes
+		// once combined has to be rejected too.
+		{"changesDir/unreleasedDir", filepath.Join(config.ChangesDir, config.UnreleasedDir)},
+	}
+
+	for _, field := range fields {
+		if !isPathInsideProject(field.value) {
+			return fmt.Errorf("%w: %s %q in %s must be relative to the project root",
+				ErrChlogPathEscapesProject, field.name, field.value, configPath)
+		}
+	}
+
+	return nil
+}
+
+// isPathInsideProject reports whether a configured path stays within the project root.
+// An absolute path, "..", or anything starting with "../" would address a file the bumper
+// was never pointed at.
+func isPathInsideProject(path string) bool {
+	if filepath.IsAbs(path) {
+		return false
+	}
+	clean := filepath.Clean(path)
+	return clean != ".." && !strings.HasPrefix(clean, ".."+string(os.PathSeparator))
+}
+
+// readRegularFile reads a file only when the path itself is a regular file.
+//
+// A repository can commit a symlink under .changes/unreleased pointing anywhere on the
+// host, and AutoBump publishes fragment bodies verbatim into the changelog, so following
+// one would leak host files into a release. [os.Lstat] inspects the link rather than its
+// target, which is what makes the refusal possible.
+func readRegularFile(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%w: %s", ErrChlogNotRegularFile, path)
+	}
+
+	return os.ReadFile(path)
 }
 
 // ReadChlogFragments loads every pending fragment, sorted so the rendered output is
@@ -238,8 +318,16 @@ func chlogFragmentPaths(projectPath string, config *ChlogConfig) ([]string, erro
 
 // readChlogFragment parses one fragment file. A fragment with an empty body carries no
 // changelog content, so it is skipped (nil, nil) rather than emitting an empty bullet.
+//
+// A fragment that is not a regular file is skipped too, loudly: it is never read, so a
+// symlink planted under .changes/unreleased cannot leak its target into the changelog,
+// and the surrounding legitimate fragments still get released.
 func readChlogFragment(path string) (*ChlogFragment, error) {
-	data, err := os.ReadFile(path)
+	data, err := readRegularFile(path)
+	if errors.Is(err, ErrChlogNotRegularFile) {
+		logger.Warnf("Skipping chlog fragment %s: it is not a regular file", path)
+		return nil, nil //nolint:nilnil // a suspicious fragment is skipped, not an error
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to read chlog fragment %s: %w", path, err)
 	}

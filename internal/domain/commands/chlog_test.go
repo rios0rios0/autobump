@@ -150,6 +150,44 @@ func TestDetectChlog(t *testing.T) {
 		// then
 		require.Error(t, err)
 	})
+
+	t.Run("should reject a configured path that escapes the project root", func(t *testing.T) {
+		// given — .chlog.yaml is committed by the repository being released, and these
+		// values drive globbing, reading and deletion, so they are untrusted input
+		escaping := map[string]string{
+			"absolute changesDir":     "changesDir: /etc\n",
+			"parent changesDir":       "changesDir: ../../elsewhere\n",
+			"parent unreleasedDir":    "unreleasedDir: ../../../etc\n",
+			"absolute changelogPath":  "changelogPath: /etc/passwd\n",
+			"escaping directory pair": "changesDir: .changes\nunreleasedDir: ../../..\n",
+		}
+
+		for name, config := range escaping {
+			tmpDir := t.TempDir()
+			writeChlogConfig(t, tmpDir, config)
+
+			// when
+			_, _, err := commands.DetectChlog(tmpDir)
+
+			// then
+			require.ErrorIsf(t, err, commands.ErrChlogPathEscapesProject, "case %q", name)
+		}
+	})
+
+	t.Run("should not report chlog when the fragment path is a file rather than a directory", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		makeDir(t, filepath.Join(tmpDir, ".changes"))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmpDir, ".changes", "unreleased"), []byte("not a directory\n"), 0o600))
+
+		// when
+		_, usesChlog, err := commands.DetectChlog(tmpDir)
+
+		// then
+		require.NoError(t, err)
+		assert.False(t, usesChlog)
+	})
 }
 
 func TestReadChlogFragments(t *testing.T) {
@@ -230,6 +268,25 @@ func TestReadChlogFragments(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.Empty(t, fragments)
+	})
+
+	t.Run("should skip a fragment when it is a symlink rather than a regular file", func(t *testing.T) {
+		// given — a repository can commit a symlink pointing anywhere on the host, and
+		// fragment bodies are published verbatim, so following one would leak host files
+		tmpDir := t.TempDir()
+		secret := filepath.Join(tmpDir, "secret.txt")
+		require.NoError(t, os.WriteFile(secret, []byte("kind: Added\nbody: leaked host content\n"), 0o600))
+		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
+		require.NoError(t, os.Symlink(
+			secret, filepath.Join(tmpDir, ".changes", "unreleased", "200-evil.yaml")))
+
+		// when
+		fragments, err := readFragments(t, tmpDir)
+
+		// then
+		require.NoError(t, err)
+		require.Len(t, fragments, 1)
+		assert.Equal(t, "added OAuth2 login", fragments[0].Body)
 	})
 
 	t.Run("should return an error when a fragment is malformed", func(t *testing.T) {

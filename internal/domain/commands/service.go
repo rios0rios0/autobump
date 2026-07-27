@@ -723,37 +723,40 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 func resolveChangelogPath(ctx *RepoContext) (string, error) {
 	changelogFile := ctx.ProjectConfig.ChangelogPath
 	if changelogFile == "" {
-		changelogFile = chlogChangelogPath(ctx)
+		var err error
+		changelogFile, err = chlogChangelogPath(ctx)
+		if err != nil {
+			return "", err
+		}
 	}
 
-	cleanChangelogFile := filepath.Clean(changelogFile)
-	if filepath.IsAbs(changelogFile) || cleanChangelogFile == ".." ||
-		strings.HasPrefix(cleanChangelogFile, ".."+string(os.PathSeparator)) {
+	if !isPathInsideProject(changelogFile) {
 		return "", fmt.Errorf("invalid changelog_path %q: must be relative to the project root", changelogFile)
 	}
 
-	return filepath.Join(ctx.ProjectConfig.Path, cleanChangelogFile), nil
+	return filepath.Join(ctx.ProjectConfig.Path, filepath.Clean(changelogFile)), nil
 }
 
 // chlogChangelogPath returns the changelog location a chlog project declares in
-// .chlog.yaml, falling back to the plain CHANGELOG.md default. Detection failures are
-// not fatal here: a project without chlog, or with an unreadable .chlog.yaml, simply
-// gets the default.
-func chlogChangelogPath(ctx *RepoContext) string {
+// .chlog.yaml, falling back to the plain CHANGELOG.md default for every other project.
+//
+// A broken or hostile .chlog.yaml is an error rather than a fallback: a project that
+// commits one expects it to be honoured, and quietly using the default would look in the
+// wrong place and release without the fragments.
+func chlogChangelogPath(ctx *RepoContext) (string, error) {
 	if !entities.ChlogEnabled(ctx.GlobalConfig, ctx.ProjectConfig) {
-		return defaultChlogChangelogPath
+		return defaultChlogChangelogPath, nil
 	}
 
 	config, usesChlog, err := DetectChlog(ctx.ProjectConfig.Path)
 	if err != nil {
-		logger.Warnf("Could not read chlog configuration: %v, using the default changelog path", err)
-		return defaultChlogChangelogPath
+		return "", err
 	}
 	if !usesChlog {
-		return defaultChlogChangelogPath
+		return defaultChlogChangelogPath, nil
 	}
 
-	return config.ChangelogPath
+	return config.ChangelogPath, nil
 }
 
 // ProcessRepo processes a repository:
