@@ -275,7 +275,7 @@ func TestAddFilesToWorktree(t *testing.T) {
 		}
 
 		// when
-		err = commands.AddFilesToWorktree(ctx, changelogPath)
+		err = commands.AddFilesToWorktree(ctx, changelogPath, nil)
 
 		// then
 		require.NoError(t, err)
@@ -988,7 +988,7 @@ func TestAddFilesToWorktreeExtended(t *testing.T) {
 		}
 
 		// when
-		err = commands.AddFilesToWorktree(ctx, changelogPath)
+		err = commands.AddFilesToWorktree(ctx, changelogPath, nil)
 
 		// then
 		require.NoError(t, err)
@@ -1015,7 +1015,7 @@ func TestAddFilesToWorktreeExtended(t *testing.T) {
 		}
 
 		// when
-		err = commands.AddFilesToWorktree(ctx, changelogPath)
+		err = commands.AddFilesToWorktree(ctx, changelogPath, nil)
 
 		// then
 		require.NoError(t, err)

@@ -116,6 +116,69 @@ func TestProcessRepoIntegration(t *testing.T) { //nolint:tparallel // mutates pa
 		require.NoError(t, readErr)
 		assert.Contains(t, string(updatedChangelog), "[1.1.0]")
 	})
+
+	t.Run("should release chlog fragments and stage their removal when the project uses chlog", func(t *testing.T) {
+		// given
+		repoPath, repo := createTestRepo(t)
+		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
+		// The unreleased section is empty, exactly as chlog leaves it: the pending work
+		// lives in the fragments below, which is what AutoBump used to miss entirely.
+		content := "# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
+		require.NoError(t, os.WriteFile(changelogPath, []byte(content), 0o644))
+
+		unreleasedDir := makeDir(t, filepath.Join(repoPath, ".changes", "unreleased"))
+		addedFragment := filepath.Join(unreleasedDir, "100-a1b2.yaml")
+		fixedFragment := filepath.Join(unreleasedDir, "200-c3d4.yaml")
+		require.NoError(t, os.WriteFile(addedFragment,
+			[]byte("kind: Added\nbody: added OAuth2 login\n"), 0o600))
+		require.NoError(t, os.WriteFile(fixedFragment,
+			[]byte("kind: Fixed\nbody: fixed the retry backoff\n"), 0o600))
+
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+		for _, path := range []string{"CHANGELOG.md", ".changes/unreleased/100-a1b2.yaml", ".changes/unreleased/200-c3d4.yaml"} {
+			_, err = wt.Add(path)
+			require.NoError(t, err)
+		}
+		_, err = wt.Commit("add changelog and fragments", &git.CommitOptions{
+			Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
+		})
+		require.NoError(t, err)
+
+		registry := repositories.NewProviderRegistry()
+		commands.SetProviderRegistry(registry)
+		commands.SetGitOperations(gitInfra.NewGitOperations(registry))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{}).
+			BuildGlobalConfig()
+		projectConfig := entitybuilders.NewProjectConfigBuilder().
+			WithPath(repoPath).
+			WithName("test-project").
+			BuildProjectConfig()
+
+		// when
+		err = commands.ProcessRepo(globalConfig, projectConfig)
+
+		// then — the push fails because the test repo has no remote, but everything
+		// before it must have happened
+		require.Error(t, err)
+
+		updatedChangelog, readErr := os.ReadFile(changelogPath)
+		require.NoError(t, readErr)
+		assert.Contains(t, string(updatedChangelog), "[1.1.0]")
+		assert.Contains(t, string(updatedChangelog), "- added OAuth2 login")
+		assert.Contains(t, string(updatedChangelog), "- fixed the retry backoff")
+
+		// The consumed fragments must be gone from disk and their deletion staged,
+		// otherwise the next run would release the same entries again.
+		assert.NoFileExists(t, addedFragment)
+		assert.NoFileExists(t, fixedFragment)
+
+		status, statusErr := wt.Status()
+		require.NoError(t, statusErr)
+		assert.Empty(t, status, "the commit should have captured the changelog and both fragment removals")
+	})
 }
 
 func TestProcessRepoAdditionalBranches(t *testing.T) { //nolint:tparallel // mutates package-level globals

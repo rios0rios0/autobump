@@ -255,6 +255,7 @@ The keys recognized in a per-project file are:
 |--------------------|--------------------------------------------------------------------------------------|
 | `changelog_path`   | Custom changelog filename relative to the project root (e.g. `CHANGELOG_PROPRIETARY.md`) |
 | `versioning`       | Versioning mode: `semver` (default), `fork-dot`, or `fork-dash`                      |
+| `detect_chlog`     | Set to `false` to ignore [chlog](#fragment-based-changelogs-chlog) fragments (detection is on by default) |
 | `languages`        | Per-language overrides for `extensions`, `special_patterns`, and `version_files`     |
 
 ```yaml
@@ -266,6 +267,40 @@ versioning: 'fork-dot'
 The same keys can also be set at the global level in `~/.config/autobump.yaml`
 (under the project entry, or as top-level defaults applied to every project).
 Project-level values always win over global ones.
+
+## Fragment-Based Changelogs (`chlog`)
+
+[chlog](https://github.com/luizjhonata/chlog) removes changelog merge conflicts by giving
+every change its own YAML file under `.changes/unreleased/` instead of having developers
+edit a shared `CHANGELOG.md`. That leaves the `[Unreleased]` section permanently empty,
+which would otherwise make AutoBump conclude there is nothing to release.
+
+AutoBump detects the layout and handles it automatically — no configuration, and no
+`chlog` binary required on the runner. A repository counts as a chlog user when it has a
+`.chlog.yaml` (or `.chlog.yml`) **or** a `.changes/unreleased/` directory.
+
+When fragments are pending, AutoBump:
+
+- reads every fragment and turns it into ordinary `### <Kind>` entries, so chlog's six
+  default kinds (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`) land in
+  the matching Keep a Changelog sections. A custom kind is filed under `### Changed`
+  rather than being dropped
+- **merges** those entries with anything already written by hand in `[Unreleased]`, so
+  nothing is lost while a repository is migrating to chlog
+- computes the next version with its own SemVer rules, **not** chlog's `auto` mapping. An
+  `Added` entry means a minor bump, a `**BREAKING CHANGE:**` entry means a major bump, and
+  anything else means a patch — the same rules every other repository gets. A release may
+  therefore differ from what `chlog batch auto` would have chosen, which caps major bumps
+  below `1.0.0` and treats `Changed`/`Removed` as breaking
+- honours the `changelogPath` declared in `.chlog.yaml`, unless `changelog_path` overrides it
+- deletes the consumed fragments and stages the removals in the same commit that publishes
+  their content, so the next run does not release them twice
+
+If `chlog batch` has already produced a `.changes/v<version>.md` that was never merged,
+AutoBump stops with an error instead of releasing on top of it: that file carries a version
+chlog already decided. Run `chlog merge` (or delete the file) and try again.
+
+Set `detect_chlog: false` — globally or per project — to switch the behaviour off.
 
 ## Versioning Modes
 
@@ -314,7 +349,7 @@ versioning: 'fork-dot'
 2. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
 3. **Version Detection**: Reads the current version from CHANGELOG.md
 4. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
-5. **CHANGELOG Update**: Moves unreleased changes to the new version section with the current date, deduplicating semantically overlapping entries
+5. **CHANGELOG Update**: Moves unreleased changes to the new version section with the current date, deduplicating semantically overlapping entries and folding in any pending [chlog](#fragment-based-changelogs-chlog) fragments
 6. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
 7. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
 

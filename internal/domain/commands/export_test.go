@@ -82,6 +82,18 @@ var RewriteUnreleasedAsForkRelease = rewriteUnreleasedAsForkRelease //nolint:goc
 // CreateChangelogIfNotExists exports createChangelogIfNotExists for testing.
 var CreateChangelogIfNotExists = createChangelogIfNotExists //nolint:gochecknoglobals // test export
 
+// ReadChangelogLines exports readChangelogLines for testing.
+var ReadChangelogLines = readChangelogLines //nolint:gochecknoglobals // test export
+
+// ResolveChangelogPath exports resolveChangelogPath for testing.
+var ResolveChangelogPath = resolveChangelogPath //nolint:gochecknoglobals // test export
+
+// ChlogSectionForKind exports chlogSectionForKind for testing.
+var ChlogSectionForKind = chlogSectionForKind //nolint:gochecknoglobals // test export
+
+// ConsumeChlogFragments exports consumeChlogFragments for testing.
+var ConsumeChlogFragments = consumeChlogFragments //nolint:gochecknoglobals // test export
+
 // SetupRepo exports setupRepo for testing.
 var SetupRepo = setupRepo //nolint:gochecknoglobals // test export
 

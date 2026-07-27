@@ -31,6 +31,10 @@ var forkVersionRegex = regexp.MustCompile(`^(\d+\.\d+\.\d+)([.\-])(\d+)$`)
 
 var changelogVersionHeaderRegex = regexp.MustCompile(`^\s*##\s*\[([^\]]+)\]`)
 
+// unreleasedHeaderName is the name carried by the "## [Unreleased]" heading, as captured
+// by changelogVersionHeaderRegex.
+const unreleasedHeaderName = "Unreleased"
+
 // ForkVersion is the parsed representation of a fork version string.
 type ForkVersion struct {
 	Upstream  string
@@ -115,7 +119,7 @@ func FindLatestForkVersion(lines []string, mode string) (*ForkVersion, error) {
 			continue
 		}
 		header := match[1]
-		if header == "Unreleased" {
+		if header == unreleasedHeaderName {
 			continue
 		}
 		parsed, err := ParseForkVersion(header, mode)
@@ -175,7 +179,7 @@ func rewriteUnreleasedAsForkRelease(lines []string, nextVersion string) []string
 		if match == nil {
 			continue
 		}
-		if match[1] == "Unreleased" {
+		if match[1] == unreleasedHeaderName {
 			unreleasedHeaderIdx = i
 			continue
 		}

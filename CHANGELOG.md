@@ -16,6 +16,18 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added detection and release support for projects using [chlog](https://github.com/luizjhonata/chlog),
+  which keeps pending changes as one YAML file per change under `.changes/unreleased/` instead of in
+  `CHANGELOG.md`. Those repositories have a permanently empty `[Unreleased]` section, so AutoBump used
+  to skip them silently while real unreleased work was waiting. The fragments are now folded into the
+  release, merged with anything already written by hand in `[Unreleased]`, and deleted in the same
+  commit that publishes their content. Detection needs no configuration and no `chlog` binary on the
+  runner, and the `changelogPath` declared in `.chlog.yaml` is honoured
+- added the `detect_chlog` configuration key to turn that detection off. Detection is opt-out, so it
+  runs unless it is explicitly disabled, and the key works at both the global and per-project level
+
 ## [2.34.0] - 2026-07-27
 
 ### Added
