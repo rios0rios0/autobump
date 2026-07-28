@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.35.0] - 2026-07-28
+
 ### Added
 
 - added detection and release support for projects using [chlog](https://github.com/luizjhonata/chlog),
