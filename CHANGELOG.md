@@ -16,6 +16,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- refreshed `.github/copilot-instructions.md` to document chlog detection support, list `chlog.go` and
+  `cleanup.go` in the repository structure, and correct the Go version to 1.26.5
+
 ## [2.35.1] - 2026-07-30
 
 ### Changed
