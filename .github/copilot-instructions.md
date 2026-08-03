@@ -65,6 +65,11 @@ autobump/
 │   │   │   │                            #   DiscoverAndProcess, DetectProjectLanguage
 │   │   │   ├── fork_version.go          # Fork versioning: fork-dot/fork-dash modes,
 │   │   │   │                            #   fork-aware changelog bumping
+│   │   │   ├── chlog.go                  # chlog layout detection; parses
+│   │   │   │                            #   .changes/unreleased/ fragments into
+│   │   │   │                            #   Keep a Changelog entries
+│   │   │   ├── cleanup.go                # cleanupStaleBumpBranches: deletes stale
+│   │   │   │                            #   remote bump branches and closes their PRs
 │   │   │   ├── self_update.go           # SelfUpdate interface and SelfUpdateRunnerFunc type
 │   │   │   ├── self_update_command.go   # SelfUpdateCommand implementation (via cliforge)
 │   │   │   ├── version.go              # Version interface
@@ -111,7 +116,7 @@ autobump/
 │   ├── autobump.yaml                    # Default configuration template
 │   └── CHANGELOG.template.md           # Default CHANGELOG template
 ├── Makefile                             # Build: build, debug, build-musl, run, install
-├── go.mod                               # Module: github.com/rios0rios0/autobump (Go 1.26.4)
+├── go.mod                               # Module: github.com/rios0rios0/autobump (Go 1.26.5)
 └── .github/
     └── workflows/default.yaml           # CI/CD pipeline (go-binary reusable workflow)
 ```
@@ -177,10 +182,11 @@ autobump/
 - Supports `projects` list and/or `providers` list (both processed by `run` command)
 - Token resolution: inline string, `${ENV_VAR}` expansion, or file path auto-detection
 - SSH push auth: `ssh_key_path`, `ssh_key_passphrase`, `ssh_auth_sock` fields; auto-detects common SSH agent sockets (1Password, standard `ssh-agent`) when not explicitly set
-- Per-project `.autobump.yaml` discovered via `entities.FindProjectConfigFile`; `loadProjectConfigOverrides` in `internal/domain/commands/service.go` merges its `changelog_path`, `versioning`, and `languages` fields into the resolved config
+- Per-project `.autobump.yaml` discovered via `entities.FindProjectConfigFile`; `loadProjectConfigOverrides` in `internal/domain/commands/service.go` merges its `changelog_path`, `versioning`, `detect_chlog`, and `languages` fields into the resolved config
 - `versioning` mode (`semver`, `fork-dot`, `fork-dash`) drives `getNextVersionString` and `updateChangelogFileString`; fork modes preserve the upstream `X.Y.Z` and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`
 - `cleanup_stale_branches` (opt-out, default enabled) and the persistent `--skip-cleanup` flag control stale bump-branch cleanup: `cleanupStaleBumpBranches` in `internal/domain/commands/cleanup.go` runs before `createBumpBranch` (only when a bump is needed) to delete matching remote branches and close their PRs/MRs via the gitforge `ForgeProvider.ClosePullRequest`. `entities.CleanupEnabled` resolves the toggle; `applySkipCleanupFlag` in `internal/infrastructure/controllers/config_helpers.go` lets the flag override the config
 - `bump_branch_prefix` (default `chore/bump-`, via `entities.ResolveBumpBranchPrefix`) drives both branch creation in `createBumpBranch` and the cleanup match, so they can never diverge
+- `detect_chlog` (opt-out, default enabled via `entities.ChlogEnabled`) toggles [chlog](https://github.com/luizjhonata/chlog) support: repos that keep pending changes as YAML fragments under `.changes/unreleased/` (detected by a `.chlog.yaml` or the fragment directory) have a permanently empty `[Unreleased]`. `internal/domain/commands/chlog.go` parses the fragments and `readChangelogLines` in `service.go` splices them in as Keep a Changelog `### <Section>` entries — the single boundary every changelog read passes through, so emptiness checks, SemVer calculation, and fork mode all still see plain lines. Consumed fragments are deleted and staged in the release commit; a pending `.changes/v*.md` aborts with `ErrChlogPendingVersionFiles`. chlog is re-implemented, not imported (command-only module)
 
 ### Provider Configuration (run mode with providers)
 
