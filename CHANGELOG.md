@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.35.2] - 2026-08-04
+
 ### Changed
 
 - refreshed `.github/copilot-instructions.md` to document chlog detection support, list `chlog.go` and
