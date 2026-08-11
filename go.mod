@@ -22,7 +22,7 @@ require (
 	github.com/google/go-github/v66 v66.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gitlab.com/gitlab-org/api/client-go v1.46.0 // indirect
-	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 )
 
