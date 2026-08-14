@@ -1,6 +1,6 @@
 # AutoBump
 
-AutoBump is a Go CLI tool that automatically updates CHANGELOG.md files according to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html) standards, commits changes, pushes commits, and creates merge/pull requests on GitHub, GitLab, and Azure DevOps. It supports multiple programming languages including Go, Java, Python, TypeScript, and C#.
+AutoBump is a Go CLI tool that automatically updates CHANGELOG.md files according to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html) standards, commits changes, pushes commits, and creates merge/pull requests on GitHub, GitLab, and Azure DevOps. It supports multiple programming languages including Go, Java, Python, Dart/Flutter, TypeScript, and C#.
 
 Always reference these instructions first and fall back to search or bash commands only when you encounter unexpected information that does not match the info here.
 
@@ -202,6 +202,7 @@ providers:
 
 The tool auto-detects and supports:
 
+- **Dart/Flutter**: Detects via `pubspec.yaml`, updates its `version` field, carrying a Flutter build number across the bump and incrementing it
 - **Go**: Detects via `go.mod`; versions managed through git tags; APIs documented with Swagger (`swaggo`) also get the `@version` annotation in the entrypoint (`main.go`, `cmd/main.go`, or `cmd/*/main.go`) and the generated `docs.go`/`swagger.json`/`swagger.yaml` (under `docs/`, `cmd/docs/`, or `cmd/*/docs/`) updated
 - **Helm**: Detects via `Chart.yaml`, updates the `version` field in `Chart.yaml`
 - **Java**: Detects via `build.gradle`, `pom.xml`, updates `build.gradle` and `application.yaml`

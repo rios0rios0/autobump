@@ -70,6 +70,21 @@ languages:
           - "(\\s*<AssemblyVersion>)\\d+\\.\\d+\\.\\d+(</AssemblyVersion>)"
           - "(\\s*<FileVersion>)\\d+\\.\\d+\\.\\d+(</FileVersion>)"
 
+  dart:
+    extensions:
+      - "dart"
+    special_patterns:
+      - "pubspec.yaml"
+    # Flutter carries a build number after the version ("1.2.3+7"), which Android
+    # reads as versionCode and iOS as CFBundleVersion. Group 1 is the key, group 2
+    # is the trailing whitespace and comment; the value between them is replaced by
+    # AutoBump, which increments the build number rather than dropping it.
+    # The "^version:" anchor at column 0 matters: every other version-shaped value
+    # in a pubspec is indented (the SDK constraint, the dependency constraints).
+    version_files:
+      - path: "pubspec.yaml"
+        patterns: [ "(?m)(^version:[ \\t]*)[^\\s#]+([ \\t]*(?:#.*)?$)" ]
+
   go:
     extensions:
       - "go"

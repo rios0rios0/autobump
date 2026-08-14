@@ -16,9 +16,14 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added Dart and Flutter support, detecting a project by its `pubspec.yaml` and bumping the `version` field there. A Flutter build number is carried across the release and incremented (`1.2.3+7` → `1.3.0+8`), preserving zero padding, because Google Play and App Store Connect reject an upload whose build number did not increase — dropping it would turn a version bump into a release that cannot ship. A manifest without one keeps none, which is what pub.dev packages want. The `^version:` anchor is what protects the SDK constraint and the dependency constraints, every one of which is indented while the package's own version is not
+
 ### Changed
 
 - changed the Go version to `1.26.6` and updated all module dependencies
+- changed the version-file rewrite to resolve its exceptions through a `versionFileHooks` table keyed by file name, instead of branching inside the substitution loop. `pom.xml` keeps masking its `<parent>` block exactly as before and `pubspec.yaml` joins it, so the next exception is a map entry rather than another condition in the engine
 
 ## [2.35.6] - 2026-08-13
 

@@ -5,6 +5,7 @@ package commands_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -764,6 +765,120 @@ func TestUpdateVersionGoSwagger(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, mainGoContent, string(result))
 	})
+}
+
+// dartLanguagesConfig mirrors the "dart" block shipped in configs/autobump.yaml,
+// so these tests fail if the regex there stops behaving as documented.
+func dartLanguagesConfig() map[string]entities.LanguageConfig {
+	return map[string]entities.LanguageConfig{
+		"dart": {
+			Extensions:      []string{"dart"},
+			SpecialPatterns: []string{"pubspec.yaml"},
+			VersionFiles: []entities.VersionFile{
+				{
+					Path:     "pubspec.yaml",
+					Patterns: []string{`(?m)(^version:[ \t]*)[^\s#]+([ \t]*(?:#.*)?$)`},
+				},
+			},
+		},
+	}
+}
+
+// newDartBumpConfigs builds the global/project config pair for a Dart bump.
+func newDartBumpConfigs(projectPath, newVersion string) (*entities.GlobalConfig, *entities.ProjectConfig) {
+	globalConfig := entitybuilders.NewGlobalConfigBuilder().
+		WithLanguagesConfig(dartLanguagesConfig()).
+		BuildGlobalConfig()
+	projectConfig := entitybuilders.NewProjectConfigBuilder().
+		WithPath(projectPath).
+		WithLanguage("dart").
+		WithNewVersion(newVersion).
+		BuildProjectConfig()
+	return globalConfig, projectConfig
+}
+
+func TestUpdateVersionDart(t *testing.T) {
+	t.Parallel()
+
+	// A pubspec records why each dependency was chosen in comments between the
+	// entries, so a bump that loses them loses the reasoning with them.
+	const pubspec = `name: medhub
+description: 'medhub clinic management — Flutter (Material 3)'
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Routing. Keeps the SPA's paths verbatim.
+  go_router: ^17.0.0
+
+  intl: ^0.20.2
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+`
+
+	// A package inside a pub workspace legitimately declares no version.
+	const workspaceMember = "name: workspace_member\nresolution: workspace\n\nenvironment:\n  sdk: ^3.13.0\n"
+
+	testCases := []struct {
+		name       string
+		original   string
+		newVersion string
+		expected   string
+	}{
+		{
+			name:       "should update the version and leave the rest of pubspec.yaml untouched",
+			original:   pubspec,
+			newVersion: "0.2.0",
+			expected:   strings.Replace(pubspec, "version: 0.1.0", "version: 0.2.0", 1),
+		},
+		{
+			name:       "should increment the build number when the manifest carries one",
+			original:   "name: app\nversion: 1.0.0+1\n",
+			newVersion: "1.1.0",
+			expected:   "name: app\nversion: 1.1.0+2\n",
+		},
+		{
+			name:       "should preserve build number padding and the trailing comment",
+			original:   "name: app\nversion: 2.10.2+021002 # See README.md for details on versioning.\n",
+			newVersion: "2.11.0",
+			expected:   "name: app\nversion: 2.11.0+021003 # See README.md for details on versioning.\n",
+		},
+		{
+			name:       "should leave a pubspec.yaml that declares no version untouched",
+			original:   workspaceMember,
+			newVersion: "1.0.0",
+			expected:   workspaceMember,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// given
+			tmpDir := t.TempDir()
+			path := filepath.Join(tmpDir, "pubspec.yaml")
+			require.NoError(t, os.WriteFile(path, []byte(testCase.original), 0o644))
+			globalConfig, projectConfig := newDartBumpConfigs(tmpDir, testCase.newVersion)
+
+			// when
+			err := commands.UpdateVersion(globalConfig, projectConfig)
+
+			// then
+			require.NoError(t, err)
+			result, readErr := os.ReadFile(path)
+			require.NoError(t, readErr)
+			assert.Equal(t, testCase.expected, string(result))
+		})
+	}
 }
 
 func TestGetVersionFiles(t *testing.T) {
