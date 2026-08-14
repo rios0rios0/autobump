@@ -40,142 +40,100 @@ func generateTestSSHKey(t *testing.T) []byte {
 func TestDetectProjectLanguage(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should detect language by special pattern", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0o644))
-
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
+	testCases := []struct {
+		name        string
+		files       map[string]string
+		languages   map[string]entities.LanguageConfig
+		expected    string
+		expectedErr error
+	}{
+		{
+			name:  "should detect language by special pattern",
+			files: map[string]string{"go.mod": "module test"},
+			languages: map[string]entities.LanguageConfig{
 				"golang": {SpecialPatterns: []string{"go.mod"}, Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
-
-		// when
-		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "golang", language)
-	})
-
-	t.Run("should detect language by file extension", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.py"), []byte("print('hello')"), 0o644))
-
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
+			},
+			expected: "golang",
+		},
+		{
+			name:  "should detect language by file extension",
+			files: map[string]string{"main.py": "print('hello')"},
+			languages: map[string]entities.LanguageConfig{
 				"python": {Extensions: []string{"py"}},
-			}).
-			BuildGlobalConfig()
-
-		// when
-		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "python", language)
-	})
-
-	t.Run("should detect helm by Chart.yaml special pattern", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), []byte("apiVersion: v2\nname: test\nversion: 1.0.0\n"), 0o644))
-
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
+			},
+			expected: "python",
+		},
+		{
+			name:  "should detect helm by Chart.yaml special pattern",
+			files: map[string]string{"Chart.yaml": "apiVersion: v2\nname: test\nversion: 1.0.0\n"},
+			languages: map[string]entities.LanguageConfig{
 				"helm": {SpecialPatterns: []string{"Chart.yaml"}, Extensions: []string{"yaml"}},
-			}).
-			BuildGlobalConfig()
-
-		// when
-		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "helm", language)
-	})
-
-	t.Run("should detect dart by pubspec.yaml marker file", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pubspec.yaml"), []byte("name: app\nversion: 0.1.0\n"), 0o644))
-
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
+			},
+			expected: "helm",
+		},
+		{
+			name:  "should detect dart by pubspec.yaml marker file",
+			files: map[string]string{"pubspec.yaml": "name: app\nversion: 0.1.0\n"},
+			languages: map[string]entities.LanguageConfig{
 				"dart": {SpecialPatterns: []string{"pubspec.yaml"}, Extensions: []string{"dart"}},
-			}).
-			BuildGlobalConfig()
+			},
+			expected: "dart",
+		},
+		{
+			// package.json is a weak marker and pubspec.yaml is not, so langforge is
+			// expected to resolve this before the config-driven special-pattern
+			// fallback, whose map iteration order is random.
+			name:  "should detect dart and not typescript when a Flutter web project also has a package.json",
+			files: map[string]string{"pubspec.yaml": "name: app\n", "package.json": "{}\n"},
+			languages: map[string]entities.LanguageConfig{
+				"dart":       {SpecialPatterns: []string{"pubspec.yaml"}, Extensions: []string{"dart"}},
+				"typescript": {SpecialPatterns: []string{"package.json"}, Extensions: []string{"ts"}},
+			},
+			expected: "dart",
+		},
+		{
+			name:  "should detect terraform by main.tf marker file",
+			files: map[string]string{"main.tf": "terraform {\n  required_version = \">=1.9.3\"\n}\n"},
+			languages: map[string]entities.LanguageConfig{
+				"terraform": {SpecialPatterns: []string{"*.tf", "versions.tf"}, Extensions: []string{"tf", "hcl"}},
+			},
+			expected: "terraform",
+		},
+		{
+			name:  "should return error when no language is detected",
+			files: map[string]string{},
+			languages: map[string]entities.LanguageConfig{
+				"golang": {SpecialPatterns: []string{"go.mod"}, Extensions: []string{"go"}},
+			},
+			expectedErr: commands.ErrProjectLanguageNotRecognized,
+		},
+	}
 
-		// when
-		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "dart", language)
-	})
-
-	t.Run("should detect dart and not typescript when a Flutter web project also has a package.json",
-		func(t *testing.T) {
-			// given — package.json is a weak marker and pubspec.yaml is not, so
-			// langforge is expected to resolve this before the config-driven
-			// special-pattern fallback, whose map iteration order is random.
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// given
 			tmpDir := t.TempDir()
-			require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pubspec.yaml"), []byte("name: app\n"), 0o644))
-			require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte("{}\n"), 0o644))
-
+			for name, content := range testCase.files {
+				require.NoError(t, os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0o644))
+			}
 			globalConfig := entitybuilders.NewGlobalConfigBuilder().
-				WithLanguagesConfig(map[string]entities.LanguageConfig{
-					"dart":       {SpecialPatterns: []string{"pubspec.yaml"}, Extensions: []string{"dart"}},
-					"typescript": {SpecialPatterns: []string{"package.json"}, Extensions: []string{"ts"}},
-				}).
+				WithLanguagesConfig(testCase.languages).
 				BuildGlobalConfig()
 
 			// when
 			language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
 
 			// then
+			if testCase.expectedErr != nil {
+				assert.ErrorIs(t, err, testCase.expectedErr)
+				assert.Empty(t, language)
+
+				return
+			}
 			require.NoError(t, err)
-			assert.Equal(t, "dart", language)
+			assert.Equal(t, testCase.expected, language)
 		})
-
-	t.Run("should detect terraform by main.tf marker file", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("terraform {\n  required_version = \">=1.9.3\"\n}\n"), 0o644))
-
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"terraform": {SpecialPatterns: []string{"*.tf", "versions.tf"}, Extensions: []string{"tf", "hcl"}},
-			}).
-			BuildGlobalConfig()
-
-		// when
-		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "terraform", language)
-	})
-
-	t.Run("should return error when no language is detected", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {SpecialPatterns: []string{"go.mod"}, Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
-
-		// when
-		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
-
-		// then
-		assert.ErrorIs(t, err, commands.ErrProjectLanguageNotRecognized)
-		assert.Empty(t, language)
-	})
+	}
 }
 
 func TestResolveConfigKey(t *testing.T) {

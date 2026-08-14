@@ -826,80 +826,59 @@ flutter:
   uses-material-design: true
 `
 
-	t.Run("should update the version and leave the rest of pubspec.yaml untouched", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		path := filepath.Join(tmpDir, "pubspec.yaml")
-		require.NoError(t, os.WriteFile(path, []byte(pubspec), 0o644))
-		globalConfig, projectConfig := newDartBumpConfigs(tmpDir, "0.2.0")
+	// A package inside a pub workspace legitimately declares no version.
+	const workspaceMember = "name: workspace_member\nresolution: workspace\n\nenvironment:\n  sdk: ^3.13.0\n"
 
-		// when
-		err := commands.UpdateVersion(globalConfig, projectConfig)
+	testCases := []struct {
+		name       string
+		original   string
+		newVersion string
+		expected   string
+	}{
+		{
+			name:       "should update the version and leave the rest of pubspec.yaml untouched",
+			original:   pubspec,
+			newVersion: "0.2.0",
+			expected:   strings.Replace(pubspec, "version: 0.1.0", "version: 0.2.0", 1),
+		},
+		{
+			name:       "should increment the build number when the manifest carries one",
+			original:   "name: app\nversion: 1.0.0+1\n",
+			newVersion: "1.1.0",
+			expected:   "name: app\nversion: 1.1.0+2\n",
+		},
+		{
+			name:       "should preserve build number padding and the trailing comment",
+			original:   "name: app\nversion: 2.10.2+021002 # See README.md for details on versioning.\n",
+			newVersion: "2.11.0",
+			expected:   "name: app\nversion: 2.11.0+021003 # See README.md for details on versioning.\n",
+		},
+		{
+			name:       "should leave a pubspec.yaml that declares no version untouched",
+			original:   workspaceMember,
+			newVersion: "1.0.0",
+			expected:   workspaceMember,
+		},
+	}
 
-		// then
-		require.NoError(t, err)
-		result, readErr := os.ReadFile(path)
-		require.NoError(t, readErr)
-		expected := strings.Replace(pubspec, "version: 0.1.0", "version: 0.2.0", 1)
-		assert.Equal(t, expected, string(result))
-	})
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// given
+			tmpDir := t.TempDir()
+			path := filepath.Join(tmpDir, "pubspec.yaml")
+			require.NoError(t, os.WriteFile(path, []byte(testCase.original), 0o644))
+			globalConfig, projectConfig := newDartBumpConfigs(tmpDir, testCase.newVersion)
 
-	t.Run("should increment the build number when the manifest carries one", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		path := filepath.Join(tmpDir, "pubspec.yaml")
-		require.NoError(t, os.WriteFile(path, []byte("name: app\nversion: 1.0.0+1\n"), 0o644))
-		globalConfig, projectConfig := newDartBumpConfigs(tmpDir, "1.1.0")
+			// when
+			err := commands.UpdateVersion(globalConfig, projectConfig)
 
-		// when
-		err := commands.UpdateVersion(globalConfig, projectConfig)
-
-		// then
-		require.NoError(t, err)
-		result, readErr := os.ReadFile(path)
-		require.NoError(t, readErr)
-		assert.Equal(t, "name: app\nversion: 1.1.0+2\n", string(result))
-	})
-
-	t.Run("should preserve build number padding and the trailing comment", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		path := filepath.Join(tmpDir, "pubspec.yaml")
-		original := "name: app\nversion: 2.10.2+021002 # See README.md for details on versioning.\n"
-		require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
-		globalConfig, projectConfig := newDartBumpConfigs(tmpDir, "2.11.0")
-
-		// when
-		err := commands.UpdateVersion(globalConfig, projectConfig)
-
-		// then
-		require.NoError(t, err)
-		result, readErr := os.ReadFile(path)
-		require.NoError(t, readErr)
-		assert.Equal(
-			t,
-			"name: app\nversion: 2.11.0+021003 # See README.md for details on versioning.\n",
-			string(result),
-		)
-	})
-
-	t.Run("should leave a pubspec.yaml that declares no version untouched", func(t *testing.T) {
-		// given — a package in a pub workspace legitimately omits the version
-		tmpDir := t.TempDir()
-		path := filepath.Join(tmpDir, "pubspec.yaml")
-		original := "name: workspace_member\nresolution: workspace\n\nenvironment:\n  sdk: ^3.13.0\n"
-		require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
-		globalConfig, projectConfig := newDartBumpConfigs(tmpDir, "1.0.0")
-
-		// when
-		err := commands.UpdateVersion(globalConfig, projectConfig)
-
-		// then
-		require.NoError(t, err)
-		result, readErr := os.ReadFile(path)
-		require.NoError(t, readErr)
-		assert.Equal(t, original, string(result))
-	})
+			// then
+			require.NoError(t, err)
+			result, readErr := os.ReadFile(path)
+			require.NoError(t, readErr)
+			assert.Equal(t, testCase.expected, string(result))
+		})
+	}
 }
 
 func TestGetVersionFiles(t *testing.T) {
