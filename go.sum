@@ -85,8 +85,8 @@ github.com/rios0rios0/cliforge v0.3.14 h1:g3hSNyhLFgemWWgO+zzCQvbBprEiIuN2ARhV3j
 github.com/rios0rios0/cliforge v0.3.14/go.mod h1:6+3AwCsoJlSDaw7pu2Qe8S5Jw/059ZBMyZuQVcyFps8=
 github.com/rios0rios0/gitforge v1.0.1-0.20260723213209-a16be141d1d4 h1:SwY8oKLhirdpsRVtA7gsI5hixhJX8C/PxErttDu6zYU=
 github.com/rios0rios0/gitforge v1.0.1-0.20260723213209-a16be141d1d4/go.mod h1:fuwZbZ2YUVzUXy0knyD/wU9YjgZpef2HpCkOVJsSSgg=
-github.com/rios0rios0/langforge v0.6.12-0.20260814122130-74f6ef7dca0c h1:GNCuq/R6EAOY736Uezkc5fe63XTT9JDq8aygV0IBr4Q=
-github.com/rios0rios0/langforge v0.6.12-0.20260814122130-74f6ef7dca0c/go.mod h1:TabMEVXALv2Vvj4Er/4u9mf2SAmzv0xjkB1TxFA7SPo=
+github.com/rios0rios0/langforge v1.0.0 h1:J+5NdV30dDq1LW9jdDQKCeoAuEuUreocosvWbnbu8qQ=
+github.com/rios0rios0/langforge v1.0.0/go.mod h1:TabMEVXALv2Vvj4Er/4u9mf2SAmzv0xjkB1TxFA7SPo=
 github.com/rios0rios0/testkit v0.2.6 h1:JtHkUwxrO3Uog5xYhZTVmdbrjyHEz36Vre3a2SR4yY8=
 github.com/rios0rios0/testkit v0.2.6/go.mod h1:dsQ2xX7nMAOkquTgakoA2/Z2sMBuBkCSEyLZMwpXU/Q=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
