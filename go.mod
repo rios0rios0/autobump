@@ -1,6 +1,6 @@
 module github.com/rios0rios0/autobump
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -9,7 +9,7 @@ require (
 	github.com/rios0rios0/cliforge v0.3.14
 	github.com/rios0rios0/langforge v0.6.11
 	github.com/rios0rios0/testkit v0.2.6
-	github.com/sirupsen/logrus v1.9.4
+	github.com/sirupsen/logrus v1.10.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/dig v1.19.0
@@ -22,7 +22,7 @@ require (
 	github.com/google/go-github/v66 v66.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gitlab.com/gitlab-org/api/client-go v1.46.0 // indirect
-	golang.org/x/mod v0.39.0 // indirect
+	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 )
 
