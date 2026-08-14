@@ -97,6 +97,49 @@ func TestDetectProjectLanguage(t *testing.T) {
 		assert.Equal(t, "helm", language)
 	})
 
+	t.Run("should detect dart by pubspec.yaml marker file", func(t *testing.T) {
+		// given
+		tmpDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pubspec.yaml"), []byte("name: app\nversion: 0.1.0\n"), 0o644))
+
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"dart": {SpecialPatterns: []string{"pubspec.yaml"}, Extensions: []string{"dart"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "dart", language)
+	})
+
+	t.Run("should detect dart and not typescript when a Flutter web project also has a package.json",
+		func(t *testing.T) {
+			// given — package.json is a weak marker and pubspec.yaml is not, so
+			// langforge is expected to resolve this before the config-driven
+			// special-pattern fallback, whose map iteration order is random.
+			tmpDir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pubspec.yaml"), []byte("name: app\n"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte("{}\n"), 0o644))
+
+			globalConfig := entitybuilders.NewGlobalConfigBuilder().
+				WithLanguagesConfig(map[string]entities.LanguageConfig{
+					"dart":       {SpecialPatterns: []string{"pubspec.yaml"}, Extensions: []string{"dart"}},
+					"typescript": {SpecialPatterns: []string{"package.json"}, Extensions: []string{"ts"}},
+				}).
+				BuildGlobalConfig()
+
+			// when
+			language, err := commands.DetectProjectLanguage(globalConfig, tmpDir)
+
+			// then
+			require.NoError(t, err)
+			assert.Equal(t, "dart", language)
+		})
+
 	t.Run("should detect terraform by main.tf marker file", func(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
@@ -166,6 +209,21 @@ func TestResolveConfigKey(t *testing.T) {
 
 		// then
 		assert.Equal(t, "golang", result)
+	})
+
+	t.Run("should return the flutter alias when dart is not a config key", func(t *testing.T) {
+		// given
+		globalConfig := entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"flutter": {Extensions: []string{"dart"}},
+			}).
+			BuildGlobalConfig()
+
+		// when
+		result := commands.ResolveConfigKey(globalConfig, langEntities.LanguageDart)
+
+		// then
+		assert.Equal(t, "flutter", result)
 	})
 
 	t.Run("should return direct match for terraform langforge constant", func(t *testing.T) {

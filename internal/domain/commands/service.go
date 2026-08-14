@@ -128,6 +128,7 @@ var langforgeAliases = map[langEntities.Language][]string{
 	langEntities.LanguageJavaGradle: {langIDJava},
 	langEntities.LanguageJavaMaven:  {langIDJava},
 	langEntities.LanguageCSharp:     {"cs"},
+	langEntities.LanguageDart:       {"flutter"},
 	langEntities.LanguagePython:     {},
 	langEntities.LanguageRuby:       {},
 	langEntities.LanguageTerraform:  {},
@@ -1591,38 +1592,16 @@ func processVersionFile(versionFile entities.VersionFile, newVersion string) (bo
 		return false, fmt.Errorf("failed to read file %s: %w", versionFile.Path, err)
 	}
 
-	updatedContent := string(content)
-
-	// For pom.xml, protect the <parent> block from replacement so the project version
-	// (which appears after </parent>) is matched instead of the parent version.
-	parentPlaceholder := "<!--AUTOBUMP_PARENT_PLACEHOLDER-->"
-	var parentBlock string
-	if strings.HasSuffix(versionFile.Path, "pom.xml") {
-		parentRe := regexp.MustCompile(`(?s)<parent>.*?</parent>`)
-		if loc := parentRe.FindStringIndex(updatedContent); loc != nil {
-			parentBlock = updatedContent[loc[0]:loc[1]]
-			updatedContent = updatedContent[:loc[0]] + parentPlaceholder + updatedContent[loc[1]:]
-		}
-	}
-
-	for _, pattern := range versionFile.Patterns {
-		re, compileErr := regexp.Compile(pattern)
-		if compileErr != nil {
-			return false, fmt.Errorf("invalid regex pattern %q in version file config: %w", pattern, compileErr)
-		}
-		updated := false
-		updatedContent = re.ReplaceAllStringFunc(updatedContent, func(match string) string {
-			if updated {
-				return match
-			}
-			updated = true
-			return re.ReplaceAllString(match, "${1}"+newVersion+"${2}")
-		})
-	}
-
-	// Restore the parent block after replacement
-	if parentBlock != "" {
-		updatedContent = strings.Replace(updatedContent, parentPlaceholder, parentBlock, 1)
+	// Rewrite exceptions (Maven's <parent> block, Flutter's build number) are
+	// resolved by base name through versionFileHooks; see version_file_hooks.go.
+	updatedContent, err := applyVersionPatterns(
+		string(content),
+		versionFile.Patterns,
+		newVersion,
+		versionFileHooks[filepath.Base(versionFile.Path)],
+	)
+	if err != nil {
+		return false, err
 	}
 
 	//nolint:gosec // G703 false positive: path originates from filepath.Glob and is validated by os.Stat above
@@ -1711,7 +1690,7 @@ func versionFileHasPatternMatch(path string, patterns []string) (bool, error) {
 	for _, pattern := range patterns {
 		re, compileErr := regexp.Compile(pattern)
 		if compileErr != nil {
-			return false, fmt.Errorf("invalid regex pattern %q in version file config: %w", pattern, compileErr)
+			return false, wrapInvalidVersionPattern(pattern, compileErr)
 		}
 		if re.Match(content) {
 			return true, nil

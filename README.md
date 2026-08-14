@@ -21,7 +21,9 @@ commit the changes, push the commits, and create a merge request/pull request on
 
 AutoBump supports automatic language detection and version updates for:
 
+- **Dart/Flutter**: Detects via `pubspec.yaml`, updates its `version` field. A Flutter build number is carried across the bump and incremented (`1.2.3+7` → `1.3.0+8`), preserving zero padding, because stores reject an upload whose build number did not increase
 - **Go**: Detects via `go.mod`; versions managed through git tags; APIs documented with Swagger (`swaggo`) also get the `@version` annotation in the entrypoint (`main.go`, `cmd/main.go`, or `cmd/*/main.go`) and the generated `docs.go`/`swagger.json`/`swagger.yaml` (under `docs/`, `cmd/docs/`, or `cmd/*/docs/`) updated
+- **Helm**: Detects via `Chart.yaml`, updates the `version` field in `Chart.yaml`
 - **Java**: Detects via `build.gradle`, `pom.xml`, updates `build.gradle` and `application.yaml`
 - **Python**: Detects via `pyproject.toml`, `setup.py`, updates `__init__.py`
 - **Terraform**: Detects via `*.tf`, `versions.tf`; versions managed through git tags (no version file)
@@ -166,7 +168,7 @@ You can manually specify the project language using the `-l` or `--language` fla
 autobump local -l java
 ```
 
-Available languages: `go`, `java`, `python`, `terraform`, `typescript`, `cs`
+Available languages: `cs`, `dart`, `go`, `helm`, `java`, `python`, `terraform`, `typescript`
 
 You can also specify a custom configuration file path:
 
