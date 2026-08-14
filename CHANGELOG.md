@@ -23,6 +23,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - changed the Go version to `1.26.6` and updated all module dependencies
+- changed the `langforge` dependency from a commit pseudo-version to the released `v1.0.0`. The Dart support above needed `pkg/infrastructure/languages/dart`, which no published version carried, so the pin had to name a commit until langforge cut a release; it now names a tag like every other dependency. `v1.0.0` removes the per-ecosystem `Provider` structs and the two Java runtime managers, neither of which this repository ever named — it uses `NewDefaultRegistry`, `ClassifyFileByExtension`, the `Language` constants and `dart.BumpBuildNumber`, all unchanged
 - changed the version-file rewrite to resolve its exceptions through a `versionFileHooks` table keyed by file name, instead of branching inside the substitution loop. `pom.xml` keeps masking its `<parent>` block exactly as before and `pubspec.yaml` joins it, so the next exception is a map entry rather than another condition in the engine
 
 ## [2.35.6] - 2026-08-13
