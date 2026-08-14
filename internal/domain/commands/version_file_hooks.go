@@ -19,8 +19,8 @@ var mavenParentRe = regexp.MustCompile(`(?s)<parent>.*?</parent>`)
 // The substitution engine is otherwise language-agnostic: it writes the version
 // calculated from the changelog into whatever the configured regex captured.
 // Two files need more than that, so the exceptions live in a keyed table rather
-// than as branches inside the rewrite — a third one is a map entry, not an edit
-// to the engine.
+// than as branches inside the rewrite — any future one is a map entry, not an
+// edit to the engine.
 type versionFileHook struct {
 	// mask hides a region of the file from substitution, returning the masked
 	// content and the region it removed. Nil when the file needs no masking.
