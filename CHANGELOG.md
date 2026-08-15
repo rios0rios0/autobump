@@ -16,14 +16,16 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.36.0] - 2026-08-15
+
 ### Added
 
 - added Dart and Flutter support, detecting a project by its `pubspec.yaml` and bumping the `version` field there. A Flutter build number is carried across the release and incremented (`1.2.3+7` → `1.3.0+8`), preserving zero padding, because Google Play and App Store Connect reject an upload whose build number did not increase — dropping it would turn a version bump into a release that cannot ship. A manifest without one keeps none, which is what pub.dev packages want. The `^version:` anchor is what protects the SDK constraint and the dependency constraints, every one of which is indented while the package's own version is not
 
 ### Changed
 
-- changed the Go version to `1.26.6` and updated all module dependencies
 - changed the `langforge` dependency from a commit pseudo-version to the released `v1.0.0`. The Dart support above needed `pkg/infrastructure/languages/dart`, which no published version carried, so the pin had to name a commit until langforge cut a release; it now names a tag like every other dependency. `v1.0.0` removes the per-ecosystem `Provider` structs and the two Java runtime managers, neither of which this repository ever named — it uses `NewDefaultRegistry`, `ClassifyFileByExtension`, the `Language` constants and `dart.BumpBuildNumber`, all unchanged
+- changed the Go version to `1.26.6` and updated all module dependencies
 - changed the version-file rewrite to resolve its exceptions through a `versionFileHooks` table keyed by file name, instead of branching inside the substitution loop. `pom.xml` keeps masking its `<parent>` block exactly as before and `pubspec.yaml` joins it, so the next exception is a map entry rather than another condition in the engine
 
 ## [2.35.6] - 2026-08-13
