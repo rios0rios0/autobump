@@ -6,21 +6,19 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/go-git/go-git/v5 v5.19.2
-	github.com/rios0rios0/cliforge v0.3.15
-	github.com/rios0rios0/langforge v1.0.0
+	github.com/rios0rios0/cliforge v0.3.16
+	github.com/rios0rios0/langforge v1.0.1
 	github.com/rios0rios0/testkit v0.2.7
 	github.com/sirupsen/logrus v1.10.0
 	github.com/spf13/cobra v1.10.2
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.0
 	go.uber.org/dig v1.19.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
 	github.com/ProtonMail/go-crypto v1.4.1 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/go-github/v66 v66.0.0 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gitlab.com/gitlab-org/api/client-go v1.46.0 // indirect
 	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
