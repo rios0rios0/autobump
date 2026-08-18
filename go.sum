@@ -79,12 +79,12 @@ github.com/pjbgf/sha1cd v0.6.0/go.mod h1:lhpGlyHLpQZoxMv8HcgXvZEhcGs0PG/vsZnEJ7H
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/rios0rios0/cliforge v0.3.16 h1:UrNEtjCHfE1oK9YWEUOJ956w8OQnArg0fbCpPfvpVdQ=
-github.com/rios0rios0/cliforge v0.3.16/go.mod h1:zDTCm+otUsJuDt3avCMZg65x+maTmg4SAdxk5RuMTgI=
+github.com/rios0rios0/cliforge v0.3.17 h1:TLqZudvMnlZ/CeB+gQwHOzdXYk9FHcNi9boScOvAGC4=
+github.com/rios0rios0/cliforge v0.3.17/go.mod h1:syhuXxTTLExFx0yYwu1ci/Txe/jFbsd9qbyt2TzGYr4=
 github.com/rios0rios0/gitforge v1.0.1-0.20260723213209-a16be141d1d4 h1:SwY8oKLhirdpsRVtA7gsI5hixhJX8C/PxErttDu6zYU=
 github.com/rios0rios0/gitforge v1.0.1-0.20260723213209-a16be141d1d4/go.mod h1:fuwZbZ2YUVzUXy0knyD/wU9YjgZpef2HpCkOVJsSSgg=
-github.com/rios0rios0/langforge v1.0.1 h1:SCMR7JW4v8j3LxaQoXLJ94zs/2Qjs+o2Vee/nVPpv5Q=
-github.com/rios0rios0/langforge v1.0.1/go.mod h1:qBhZlQ/bkMhgx5lTR608Kfvc8VbEgBQNVgkdwmWahgc=
+github.com/rios0rios0/langforge v1.0.2 h1:whpvXvt4XstlRhnfomuYvBZzJfpWAvHfLv4y0FdaQVg=
+github.com/rios0rios0/langforge v1.0.2/go.mod h1:VyDZ2PHSk40N12IgjnLs+zTlyZZCXaa398ZdpLKczXw=
 github.com/rios0rios0/testkit v0.2.7 h1:rraDAdlbDc+G8nVIuw6alNH/niJBeV/EuVJBDgs5vz8=
 github.com/rios0rios0/testkit v0.2.7/go.mod h1:qd8GL0R/NI1Tgi2+GRTJLUN/uOAN0cxILNoThc3jSZw=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
