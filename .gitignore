@@ -3,3 +3,9 @@ build
 
 # this space is for project generated files, DO NOT add personal or IDE files here
 # try to use ~/.gitignore of your user for your workspace generated files
+/coverage.out
+/coverage.txt
+/coverage.xml
+/cobertura.xml
+/junit.xml
+/reports

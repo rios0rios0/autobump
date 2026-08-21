@@ -1197,9 +1197,7 @@ func sshAgentAuthFromSocket(socketPath string) transport.AuthMethod {
 			agentClient := agent.NewClient(c)
 			return agentClient.Signers()
 		},
-		HostKeyCallbackHelper: gitssh.HostKeyCallbackHelper{
-			HostKeyCallback: hostKeyCallback(),
-		},
+		HostKeyCallback: hostKeyCallback(),
 	}
 }
 
