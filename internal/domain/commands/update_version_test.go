@@ -44,13 +44,7 @@ func TestUpdateVersion(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "pom.xml", Patterns: []string{`(\s*<version>)[^<]+(</version>)`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(mavenLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -99,13 +93,7 @@ func TestUpdateVersion(t *testing.T) {
 			require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomContent), 0o644))
 
 			globalConfig := entitybuilders.NewGlobalConfigBuilder().
-				WithLanguagesConfig(map[string]entities.LanguageConfig{
-					"java": {
-						VersionFiles: []entities.VersionFile{
-							{Path: "pom.xml", Patterns: []string{`(\s*<version>)[^<]+(</version>)`}},
-						},
-					},
-				}).BuildGlobalConfig()
+				WithLanguagesConfig(mavenLanguagesConfig()).BuildGlobalConfig()
 
 			projectConfig := entitybuilders.NewProjectConfigBuilder().
 				WithPath(tmpDir).
@@ -158,13 +146,7 @@ func TestUpdateVersion(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "pom.xml", Patterns: []string{`(\s*<version>)[^<]+(</version>)`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(mavenLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -205,13 +187,7 @@ repositories {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build.gradle"), []byte(gradleContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "build.gradle", Patterns: []string{`(?m)(^\s*version\s*[=:]?\s*["'])[^"']+(["'])`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(gradleLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -249,13 +225,7 @@ repositories {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build.gradle"), []byte(gradleContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "build.gradle", Patterns: []string{`(?m)(^\s*version\s*[=:]?\s*["'])[^"']+(["'])`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(gradleLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -291,13 +261,7 @@ repositories {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build.gradle"), []byte(gradleContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "build.gradle", Patterns: []string{`(?m)(^\s*version\s*[=:]?\s*["'])[^"']+(["'])`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(gradleLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -329,13 +293,7 @@ appVersion: "1.0.0"
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), []byte(chartContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"helm": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)[^\s'"]+(['"]?)`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(helmLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -369,13 +327,7 @@ appVersion: '1.0.0'
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), []byte(chartContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"helm": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)[^\s'"]+(['"]?)`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(helmLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -408,13 +360,7 @@ appVersion: "1.0.0-beta.2"
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), []byte(chartContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"helm": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)[^\s'"]+(['"]?)`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(helmLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -532,13 +478,7 @@ repositories {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build.gradle"), []byte(gradleContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "build.gradle", Patterns: []string{`(?m)(^\s*version\s*[=:]?\s*["'])[^"']+(["'])`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(gradleLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -560,6 +500,40 @@ repositories {
 
 // goSwaggerLanguagesConfig mirrors the default Go version_files from configs/autobump.yaml,
 // where the version lives in the swaggo "@version" annotation and in the generated docs.
+// Each of these is one language with one version file, repeated across the cases that
+// exercise the same rewrite against different file contents. They sit beside the
+// goSwagger and dart ones the file already had.
+
+func mavenLanguagesConfig() map[string]entities.LanguageConfig {
+	return map[string]entities.LanguageConfig{
+		"java": {
+			VersionFiles: []entities.VersionFile{
+				{Path: "pom.xml", Patterns: []string{`(\s*<version>)[^<]+(</version>)`}},
+			},
+		},
+	}
+}
+
+func gradleLanguagesConfig() map[string]entities.LanguageConfig {
+	return map[string]entities.LanguageConfig{
+		"java": {
+			VersionFiles: []entities.VersionFile{
+				{Path: "build.gradle", Patterns: []string{`(?m)(^\s*version\s*[=:]?\s*["'])[^"']+(["'])`}},
+			},
+		},
+	}
+}
+
+func helmLanguagesConfig() map[string]entities.LanguageConfig {
+	return map[string]entities.LanguageConfig{
+		"helm": {
+			VersionFiles: []entities.VersionFile{
+				{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)[^\s'"]+(['"]?)`}},
+			},
+		},
+	}
+}
+
 func goSwaggerLanguagesConfig() map[string]entities.LanguageConfig {
 	annotationPatterns := []string{`(?m)(^//\s*@version\s+)\S+`}
 	docsGoPatterns := []string{`(\bVersion:\s*")[^"]*(")`}

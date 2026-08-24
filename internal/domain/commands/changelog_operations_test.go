@@ -30,69 +30,47 @@ func writeChangelog(t *testing.T, dir string, lines []string) string {
 func TestShouldBumpProject(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return true when unreleased section has entries", func(t *testing.T) {
-		t.Parallel()
+	// The two cases differ only in whether [Unreleased] has entries under it, which is
+	// the entire question ShouldBumpProject answers.
+	testCases := []struct {
+		name       string
+		unreleased []string
+		expected   bool
+	}{
+		{
+			name:       "should return true when unreleased section has entries",
+			unreleased: []string{"### Added", "", "- added new feature", ""},
+			expected:   true,
+		},
+		{
+			name:       "should return false when unreleased section is empty",
+			unreleased: nil,
+			expected:   false,
+		},
+	}
 
-		// given
-		tmpDir := t.TempDir()
-		changelogPath := writeChangelog(t, tmpDir, []string{
-			"# Changelog",
-			"",
-			"## [Unreleased]",
-			"",
-			"### Added",
-			"",
-			"- added new feature",
-			"",
-			"## [1.0.0] - 2026-01-01",
-			"",
-			"### Added",
-			"",
-			"- added initial release",
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			// given
+			lines := append([]string{"# Changelog", "", "## [Unreleased]", ""}, testCase.unreleased...)
+			lines = append(lines, "## [1.0.0] - 2026-01-01", "", "### Added", "", "- added initial release")
+			changelogPath := writeChangelog(t, t.TempDir(), lines)
+			ctx := &commands.RepoContext{
+				ProjectConfig: entitybuilders.NewProjectConfigBuilder().
+					WithName("test-project").
+					BuildProjectConfig(),
+			}
+
+			// when
+			result, err := commands.ShouldBumpProject(ctx, changelogPath)
+
+			// then
+			require.NoError(t, err)
+			assert.Equal(t, testCase.expected, result)
 		})
-		ctx := &commands.RepoContext{
-			ProjectConfig: entitybuilders.NewProjectConfigBuilder().
-				WithName("test-project").
-				BuildProjectConfig(),
-		}
-
-		// when
-		result, err := commands.ShouldBumpProject(ctx, changelogPath)
-
-		// then
-		require.NoError(t, err)
-		assert.True(t, result)
-	})
-
-	t.Run("should return false when unreleased section is empty", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		changelogPath := writeChangelog(t, tmpDir, []string{
-			"# Changelog",
-			"",
-			"## [Unreleased]",
-			"",
-			"## [1.0.0] - 2026-01-01",
-			"",
-			"### Added",
-			"",
-			"- added initial release",
-		})
-		ctx := &commands.RepoContext{
-			ProjectConfig: entitybuilders.NewProjectConfigBuilder().
-				WithName("test-project").
-				BuildProjectConfig(),
-		}
-
-		// when
-		result, err := commands.ShouldBumpProject(ctx, changelogPath)
-
-		// then
-		require.NoError(t, err)
-		assert.False(t, result)
-	})
+	}
 
 	t.Run("should return error when changelog file does not exist", func(t *testing.T) {
 		t.Parallel()

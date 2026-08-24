@@ -224,92 +224,70 @@ func TestResolveConfigKey(t *testing.T) {
 func TestBuildGitforgeRepo(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should parse GitHub SSH URL", func(t *testing.T) {
-		t.Parallel()
+	// One URL per vendor and transport. The assertions are identical, so the table is the
+	// test: what each case contributes is a shape the parser has to recognise. Project is
+	// empty everywhere except Azure DevOps, which is the only vendor that has one.
+	testCases := []struct {
+		name         string
+		url          string
+		organization string
+		project      string
+		repository   string
+	}{
+		{
+			name:         "should parse GitHub SSH URL",
+			url:          "git@github.com:myorg/myrepo.git",
+			organization: "myorg",
+			repository:   "myrepo",
+		},
+		{
+			name:         "should parse GitHub HTTPS URL",
+			url:          "https://github.com/myorg/myrepo.git",
+			organization: "myorg",
+			repository:   "myrepo",
+		},
+		{
+			name:         "should parse GitLab SSH URL",
+			url:          "git@gitlab.com:group/subgroup/project.git",
+			organization: "group/subgroup",
+			repository:   "project",
+		},
+		{
+			name:         "should parse GitLab HTTPS URL",
+			url:          "https://gitlab.com/group/subgroup/project.git",
+			organization: "group/subgroup",
+			repository:   "project",
+		},
+		{
+			name:         "should parse Azure DevOps SSH URL",
+			url:          "git@ssh.dev.azure.com:v3/myorg/myproject/myrepo",
+			organization: "myorg",
+			project:      "myproject",
+			repository:   "myrepo",
+		},
+		{
+			name:         "should parse Azure DevOps HTTPS URL",
+			url:          "https://dev.azure.com/myorg/myproject/_git/myrepo",
+			organization: "myorg",
+			project:      "myproject",
+			repository:   "myrepo",
+		},
+	}
 
-		// given
-		url := "git@github.com:myorg/myrepo.git"
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
+			// when
+			repo := commands.BuildGitforgeRepo(testCase.url, "main")
 
-		// then
-		assert.Equal(t, "myorg", repo.Organization)
-		assert.Equal(t, "myrepo", repo.Name)
-		assert.Equal(t, url, repo.RemoteURL)
-	})
-
-	t.Run("should parse GitHub HTTPS URL", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		url := "https://github.com/myorg/myrepo.git"
-
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
-
-		// then
-		assert.Equal(t, "myorg", repo.Organization)
-		assert.Equal(t, "myrepo", repo.Name)
-	})
-
-	t.Run("should parse GitLab SSH URL", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		url := "git@gitlab.com:group/subgroup/project.git"
-
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
-
-		// then
-		assert.Equal(t, "group/subgroup", repo.Organization)
-		assert.Equal(t, "project", repo.Name)
-	})
-
-	t.Run("should parse GitLab HTTPS URL", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		url := "https://gitlab.com/group/subgroup/project.git"
-
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
-
-		// then
-		assert.Equal(t, "group/subgroup", repo.Organization)
-		assert.Equal(t, "project", repo.Name)
-	})
-
-	t.Run("should parse Azure DevOps SSH URL", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		url := "git@ssh.dev.azure.com:v3/myorg/myproject/myrepo"
-
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
-
-		// then
-		assert.Equal(t, "myorg", repo.Organization)
-		assert.Equal(t, "myproject", repo.Project)
-		assert.Equal(t, "myrepo", repo.Name)
-	})
-
-	t.Run("should parse Azure DevOps HTTPS URL", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		url := "https://dev.azure.com/myorg/myproject/_git/myrepo"
-
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
-
-		// then
-		assert.Equal(t, "myorg", repo.Organization)
-		assert.Equal(t, "myproject", repo.Project)
-		assert.Equal(t, "myrepo", repo.Name)
-	})
+			// then
+			assert.Equal(t, testCase.organization, repo.Organization)
+			assert.Equal(t, testCase.project, repo.Project)
+			assert.Equal(t, testCase.repository, repo.Name)
+			assert.Equal(t, testCase.url, repo.RemoteURL)
+		})
+	}
 }
 
 func TestServiceTypeToProviderName(t *testing.T) {

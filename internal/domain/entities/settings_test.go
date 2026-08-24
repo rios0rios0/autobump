@@ -883,81 +883,64 @@ func TestValidateGlobalConfig(t *testing.T) {
 func TestValidateProviders(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return nil when all providers are valid", func(t *testing.T) {
-		t.Parallel()
+	// One provider entry per rule, plus the two shapes that are valid. wantErrContains is
+	// empty when the entry is expected to validate.
+	testCases := []struct {
+		name            string
+		providers       []configEntities.ProviderConfig
+		wantErrContains string
+	}{
+		{
+			name: "should return nil when providers are valid",
+			providers: []configEntities.ProviderConfig{
+				{Type: "github", Token: "token", Organizations: []string{"org1"}},
+			},
+		},
+		{
+			name:      "should return nil when providers list is empty",
+			providers: []configEntities.ProviderConfig{},
+		},
+		{
+			name: "should return error when provider type is empty",
+			providers: []configEntities.ProviderConfig{
+				{Type: "", Token: "token", Organizations: []string{"org1"}},
+			},
+			wantErrContains: "providers[0].type",
+		},
+		{
+			name: "should return error when provider token is empty",
+			providers: []configEntities.ProviderConfig{
+				{Type: "github", Token: "", Organizations: []string{"org1"}},
+			},
+			wantErrContains: "providers[0].token",
+		},
+		{
+			name: "should return error when provider has no organizations",
+			providers: []configEntities.ProviderConfig{
+				{Type: "github", Token: "token", Organizations: []string{}},
+			},
+			wantErrContains: "organizations",
+		},
+	}
 
-		// given
-		providers := []configEntities.ProviderConfig{
-			{Type: "github", Token: "ghp_token", Organizations: []string{"org1"}},
-		}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-		// when
-		err := entities.ValidateProviders(providers)
+			// when
+			err := entities.ValidateProviders(testCase.providers)
 
-		// then
-		assert.NoError(t, err)
-	})
+			// then
+			if testCase.wantErrContains == "" {
+				require.NoError(t, err)
 
-	t.Run("should return error when provider type is empty", func(t *testing.T) {
-		t.Parallel()
+				return
+			}
 
-		// given
-		providers := []configEntities.ProviderConfig{
-			{Type: "", Token: "token", Organizations: []string{"org1"}},
-		}
-
-		// when
-		err := entities.ValidateProviders(providers)
-
-		// then
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "providers[0].type")
-	})
-
-	t.Run("should return error when provider token is empty", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		providers := []configEntities.ProviderConfig{
-			{Type: "github", Token: "", Organizations: []string{"org1"}},
-		}
-
-		// when
-		err := entities.ValidateProviders(providers)
-
-		// then
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "providers[0].token")
-	})
-
-	t.Run("should return error when provider has no organizations", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		providers := []configEntities.ProviderConfig{
-			{Type: "github", Token: "token", Organizations: []string{}},
-		}
-
-		// when
-		err := entities.ValidateProviders(providers)
-
-		// then
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "organizations")
-	})
-
-	t.Run("should return nil when providers list is empty", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		providers := []configEntities.ProviderConfig{}
-
-		// when
-		err := entities.ValidateProviders(providers)
-
-		// then
-		assert.NoError(t, err)
-	})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), testCase.wantErrContains)
+		})
+	}
 }
 
 func TestReadConfig(t *testing.T) {
