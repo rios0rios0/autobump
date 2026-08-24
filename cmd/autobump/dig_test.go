@@ -1,5 +1,3 @@
-//go:build unit
-
 package main
 
 import (
@@ -13,6 +11,8 @@ func TestInjectAppContext(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should create app context without panic", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		app := injectAppContext()
 
@@ -26,6 +26,8 @@ func TestInjectLocalController(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should inject local controller without panic", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		ctrl := injectLocalController()
 
@@ -38,6 +40,8 @@ func TestInjectProviderRegistry(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should inject provider registry without panic", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		registry := injectProviderRegistry()
 
@@ -50,6 +54,8 @@ func TestBuildRootCommand(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should create root command with expected metadata", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := injectLocalController()
 
@@ -69,6 +75,8 @@ func TestAddSubcommands(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should add subcommands to root command", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := injectLocalController()
 		appCtx := injectAppContext()
@@ -82,6 +90,8 @@ func TestAddSubcommands(t *testing.T) {
 	})
 
 	t.Run("should register run and local subcommands", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := injectLocalController()
 		appCtx := injectAppContext()
@@ -102,6 +112,8 @@ func TestAddSubcommands(t *testing.T) {
 	})
 
 	t.Run("should register batch as hidden deprecated command", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := injectLocalController()
 		appCtx := injectAppContext()
@@ -119,6 +131,8 @@ func TestAddSubcommands(t *testing.T) {
 	})
 
 	t.Run("should register discover as hidden deprecated command", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := injectLocalController()
 		appCtx := injectAppContext()
@@ -140,6 +154,8 @@ func TestSubcommandExecution(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should execute run subcommand without panic", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := injectLocalController()
 		appCtx := injectAppContext()
@@ -160,6 +176,8 @@ func TestSubcommandExecution(t *testing.T) {
 	})
 
 	t.Run("should execute local subcommand without panic", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := injectLocalController()
 		appCtx := injectAppContext()
@@ -180,6 +198,8 @@ func TestSubcommandExecution(t *testing.T) {
 	})
 
 	t.Run("should execute deprecated batch command without panic", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := injectLocalController()
 		appCtx := injectAppContext()
@@ -201,6 +221,8 @@ func TestSubcommandExecution(t *testing.T) {
 	})
 
 	t.Run("should execute deprecated discover command without panic", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := injectLocalController()
 		appCtx := injectAppContext()
@@ -225,6 +247,8 @@ func TestBuildRootCommandRunE(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should show help when no args provided", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := injectLocalController()
 		cmd := buildRootCommand(ctrl)
@@ -237,6 +261,8 @@ func TestBuildRootCommandRunE(t *testing.T) {
 	})
 
 	t.Run("should delegate to local controller when args provided", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := injectLocalController()
 		cmd := buildRootCommand(ctrl)

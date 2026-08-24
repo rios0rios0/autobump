@@ -22,10 +22,19 @@ make sast           # Security analysis (CodeQL, Semgrep, Trivy, Hadolint, Gitle
 
 Run a single test during development:
 ```bash
-go test -tags unit -run "TestDetectProjectLanguage" ./internal/domain/commands/
+go test -run "TestDetectProjectLanguage" ./internal/domain/commands/
 ```
 
-All unit test files use the `//go:build unit` build tag.
+Unit tests carry **no build tag**. `//go:build unit` only hid them from plain `go test ./...`
+and from IDE runs while buying nothing, because an untagged file compiles under a `-tags`
+build too — the shared pipeline's phase 1 (`-tags test,unit`) still runs every one of them.
+Phase 2 (`-tags integration`) selects only packages where the tag makes a test file *appear*,
+so untagged tests are not run twice. Reserve `//go:build integration` for tests that need
+real infrastructure; this repository has none today.
+
+A test that cannot run in parallel says so in a comment above it — "is deliberately not
+parallel: it mutates package-level globals", or `t.Setenv`, which the runtime forbids in a
+parallel test. Do not add `t.Parallel()` to one of those without reading why it is absent.
 
 ## Architecture
 
@@ -83,7 +92,7 @@ Three-stage fallback in `DetectProjectLanguage`:
 
 - BDD structure with `// given`, `// when`, `// then` comment blocks
 - Test names: `t.Run("should ... when ...", ...)` format
-- Unit tests use `t.Parallel()` and `//go:build unit` tag
+- Unit tests use `t.Parallel()` at both the parent and subtest level, and carry no build tag. The exceptions are documented in a comment on the test function
 - Assertions via `testify/assert` and `testify/require`
 - Test data via Builder pattern in `test/domain/entitybuilders/`
 - White-box testing via `export_test.go` files that expose unexported functions

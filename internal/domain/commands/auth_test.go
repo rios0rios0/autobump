@@ -1,5 +1,3 @@
-//go:build unit
-
 package commands_test
 
 import (
@@ -25,6 +23,8 @@ func TestCollectSSHAuthMethodsExtended(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should not panic when no SSH config is set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
 
@@ -35,6 +35,8 @@ func TestCollectSSHAuthMethodsExtended(t *testing.T) {
 	})
 
 	t.Run("should not panic when SSH key path does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithSSHKeyPath("/nonexistent/key").
@@ -47,6 +49,8 @@ func TestCollectSSHAuthMethodsExtended(t *testing.T) {
 	})
 
 	t.Run("should return methods when SSH key exists", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		keyData := generateTestSSHKey(t)
 		tmpDir := t.TempDir()
@@ -69,6 +73,8 @@ func TestDetectSSHAgentSocketsExtended(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should not panic when detecting sockets", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when / then
 		assert.NotPanics(t, func() {
 			_ = commands.DetectSSHAgentSockets()
@@ -76,8 +82,8 @@ func TestDetectSSHAgentSocketsExtended(t *testing.T) {
 	})
 }
 
-func TestCollectAuthMethods(t *testing.T) { //nolint:tparallel // mutates package-level globals
-
+// TestCollectAuthMethods is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestCollectAuthMethods(t *testing.T) {
 	t.Run("should return nil when service type is unknown", func(t *testing.T) {
 		// given
 		registry := repositories.NewProviderRegistry()
@@ -134,6 +140,8 @@ func TestSSHAgentAuthFromSocket(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return nil when socket does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		socketPath := filepath.Join(t.TempDir(), "nonexistent.sock")
 
@@ -145,6 +153,8 @@ func TestSSHAgentAuthFromSocket(t *testing.T) {
 	})
 
 	t.Run("should return PublicKeysCallback when socket is valid", func(t *testing.T) {
+		t.Parallel()
+
 		// given -- create a real Unix socket listener
 		socketPath := filepath.Join(t.TempDir(), "test-agent.sock")
 		listener, err := net.Listen("unix", socketPath)
@@ -159,8 +169,8 @@ func TestSSHAgentAuthFromSocket(t *testing.T) {
 	})
 }
 
-func TestDetectSSHAgentSocketsWithEnv(t *testing.T) { //nolint:tparallel // uses t.Setenv
-
+// TestDetectSSHAgentSocketsWithEnv is deliberately not parallel: it calls t.Setenv, which the runtime forbids in a parallel test.
+func TestDetectSSHAgentSocketsWithEnv(t *testing.T) {
 	t.Run("should detect SSH_AUTH_SOCK when it points to a valid socket", func(t *testing.T) {
 		// given
 		socketPath := filepath.Join(t.TempDir(), "test.sock")
@@ -188,8 +198,8 @@ func TestDetectSSHAgentSocketsWithEnv(t *testing.T) { //nolint:tparallel // uses
 	})
 }
 
-func TestCollectSSHAuthMethodsWithSocket(t *testing.T) { //nolint:tparallel // uses t.Setenv
-
+// TestCollectSSHAuthMethodsWithSocket is deliberately not parallel: it calls t.Setenv, which the runtime forbids in a parallel test.
+func TestCollectSSHAuthMethodsWithSocket(t *testing.T) {
 	t.Run("should return methods from explicit SSH auth sock", func(t *testing.T) {
 		// given
 		socketPath := filepath.Join(t.TempDir(), "test-agent.sock")
@@ -226,8 +236,8 @@ func TestCollectSSHAuthMethodsWithSocket(t *testing.T) { //nolint:tparallel // u
 	})
 }
 
-func TestDiscoverAndProcess(t *testing.T) { //nolint:tparallel // mutates package-level globals
-
+// TestDiscoverAndProcess is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestDiscoverAndProcess(t *testing.T) {
 	t.Run("should complete without error when no providers are configured", func(t *testing.T) {
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()

@@ -1,5 +1,3 @@
-//go:build unit
-
 package commands_test
 
 import (
@@ -12,9 +10,17 @@ import (
 	"github.com/rios0rios0/autobump/internal/domain/commands"
 )
 
+// TestVersionCommand is deliberately not parallel, at either level. Both cases assign
+// the AutobumpVersion package global and swap [os.Stdout], which is process-wide: running
+// them alongside anything else makes the version one case asserts depend on when the
+// other case happened to write it.
+//
+// The command reads AutobumpVersion and prints to stdout, so assigning the first and
+// swapping the second is the only way to observe what it does — hence the reassign
+// suppression.
+//
+//nolint:reassign // see the paragraph above
 func TestVersionCommand(t *testing.T) {
-	t.Parallel()
-
 	t.Run("should print the version to stdout when executed", func(t *testing.T) {
 		// given
 		commands.AutobumpVersion = "1.2.3"

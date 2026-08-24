@@ -1,8 +1,8 @@
-//go:build integration || unit || test
-
-package entitybuilders //nolint:revive,staticcheck // Test package naming follows established project structure
+package entitybuilders
 
 import (
+	"maps"
+
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	testkit "github.com/rios0rios0/testkit/pkg/test"
 )
@@ -10,6 +10,7 @@ import (
 // GlobalConfigBuilder helps create test GlobalConfig instances with a fluent interface.
 type GlobalConfigBuilder struct {
 	*testkit.BaseBuilder
+
 	providers              []entities.ProviderConfig
 	projects               []entities.ProjectConfig
 	languagesConfig        map[string]entities.LanguageConfig
@@ -156,7 +157,7 @@ func (b *GlobalConfigBuilder) WithGitLabCIJobToken(token string) *GlobalConfigBu
 }
 
 // Build creates the GlobalConfig (satisfies testkit.Builder interface).
-func (b *GlobalConfigBuilder) Build() interface{} {
+func (b *GlobalConfigBuilder) Build() any {
 	return b.BuildGlobalConfig()
 }
 
@@ -223,9 +224,7 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 	}
 
 	languagesConfigCopy := make(map[string]entities.LanguageConfig, len(b.languagesConfig))
-	for k, v := range b.languagesConfig {
-		languagesConfigCopy[k] = v
-	}
+	maps.Copy(languagesConfigCopy, b.languagesConfig)
 
 	// The clone gets its own bool so the two builders never share the pointer:
 	// a deep copy that hands out the same address is not a deep copy.
@@ -236,7 +235,7 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 	}
 
 	return &GlobalConfigBuilder{
-		BaseBuilder:            b.BaseBuilder.Clone().(*testkit.BaseBuilder),
+		BaseBuilder:            cloneBase(b.BaseBuilder),
 		providers:              providersCopy,
 		projects:               projectsCopy,
 		languagesConfig:        languagesConfigCopy,

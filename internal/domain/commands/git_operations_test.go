@@ -1,5 +1,3 @@
-//go:build unit
-
 package commands_test
 
 import (
@@ -55,6 +53,8 @@ func TestSetupRepo(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should set worktree and head when repo is valid", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 		ctx := &commands.RepoContext{
@@ -74,6 +74,8 @@ func TestSetupRepo(t *testing.T) {
 	})
 
 	t.Run("should open repo from path when repo is nil", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, _ := createTestRepo(t)
 		ctx := &commands.RepoContext{
@@ -94,6 +96,8 @@ func TestSetupRepo(t *testing.T) {
 	})
 
 	t.Run("should return error when repo path is invalid", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctx := &commands.RepoContext{
 			Repo: nil,
@@ -114,6 +118,8 @@ func TestCreateBumpBranch(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should create bump branch when changelog has unreleased entries", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
@@ -145,6 +151,8 @@ func TestCreateBumpBranch(t *testing.T) {
 	})
 
 	t.Run("should return BranchExistsNoPR when branch already exists", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
@@ -191,6 +199,8 @@ func TestCheckoutToMainBranch(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should checkout to main branch when main exists", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 
@@ -231,6 +241,8 @@ func TestResolveDefaultBranch(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return main when no remote HEAD exists", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		_, repo := createTestRepo(t)
 
@@ -246,6 +258,8 @@ func TestAddFilesToWorktree(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should add version files to worktree when they exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 		wt, err := repo.Worktree()
@@ -290,6 +304,8 @@ func TestUpdateChangelogAndVersionFiles(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should update changelog and version files when both exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 		wt, err := repo.Worktree()
@@ -300,7 +316,10 @@ func TestUpdateChangelogAndVersionFiles(t *testing.T) {
 		require.NoError(t, os.WriteFile(changelogPath, []byte(changelogContent), 0o644))
 
 		pomPath := filepath.Join(repoPath, "pom.xml")
-		require.NoError(t, os.WriteFile(pomPath, []byte("<project>\n    <version>1.0.0</version>\n</project>\n"), 0o644))
+		require.NoError(
+			t,
+			os.WriteFile(pomPath, []byte("<project>\n    <version>1.0.0</version>\n</project>\n"), 0o644),
+		)
 
 		ctx := &commands.RepoContext{
 			Repo:     repo,
@@ -332,6 +351,8 @@ func TestUpdateChangelogAndVersionFiles(t *testing.T) {
 	})
 
 	t.Run("should stage the refreshed file when a refresh command regenerates it", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		// Copying the rewritten version out of package.json is what proves the command
 		// ran after the rewrite rather than before it.
@@ -358,6 +379,8 @@ func TestUpdateChangelogAndVersionFiles(t *testing.T) {
 	})
 
 	t.Run("should fail the release when a refresh command fails", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, wt, ctx := buildRefreshCtx(t, []string{"sh", "-c", "exit 1"})
 
@@ -457,6 +480,8 @@ func TestCommitChanges(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should create a commit when changes are staged", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 		ctx := buildCommitCtx(t, repo, repoPath, "Test User", "test@test.com")
@@ -473,6 +498,8 @@ func TestCommitChanges(t *testing.T) {
 	})
 
 	t.Run("should use the local repo identity over the global one when set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 
@@ -502,6 +529,8 @@ func TestAddCurrentVersionWithTag(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should skip gracefully when repo has no tags", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
@@ -522,6 +551,8 @@ func TestAddCurrentVersionWithTag(t *testing.T) {
 	})
 
 	t.Run("should append version to changelog when repo has a lightweight tag", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 		head, err := repo.Head()
@@ -558,6 +589,8 @@ func TestIterateProjects(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return error when project path does not exist and is not remote", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithProjects([]entities.ProjectConfig{
@@ -578,6 +611,8 @@ func TestHostKeyCallback(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should not panic when called", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when / then
 		assert.NotPanics(t, func() {
 			_ = commands.HostKeyCallback()
@@ -585,6 +620,8 @@ func TestHostKeyCallback(t *testing.T) {
 	})
 
 	t.Run("should return nil when home has no known_hosts", func(t *testing.T) {
+		t.Parallel()
+
 		// given -- the test runs with HOME pointing to a dir without .ssh/known_hosts
 		// (most CI environments don't have known_hosts)
 		// when
@@ -595,7 +632,8 @@ func TestHostKeyCallback(t *testing.T) {
 	})
 }
 
-func TestCloneRepoIfNeeded(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestCloneRepoIfNeeded is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestCloneRepoIfNeeded(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
@@ -669,7 +707,8 @@ func TestCloneRepoIfNeeded(t *testing.T) { //nolint:tparallel // mutates package
 	})
 }
 
-func TestPushChanges(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestPushChanges is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestPushChanges(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
@@ -697,7 +736,8 @@ func TestPushChanges(t *testing.T) { //nolint:tparallel // mutates package-level
 	})
 }
 
-func TestCreatePullRequest(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestCreatePullRequest is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestCreatePullRequest(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
@@ -739,7 +779,8 @@ func TestCreatePullRequest(t *testing.T) { //nolint:tparallel // mutates package
 	})
 }
 
-func TestCreateAndCheckoutPullRequest(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestCreateAndCheckoutPullRequest is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestCreateAndCheckoutPullRequest(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
@@ -767,7 +808,8 @@ func TestCreateAndCheckoutPullRequest(t *testing.T) { //nolint:tparallel // muta
 	})
 }
 
-func TestHandleExistingBranchWithoutPR(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestHandleExistingBranchWithoutPR is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestHandleExistingBranchWithoutPR(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
@@ -795,7 +837,8 @@ func TestHandleExistingBranchWithoutPR(t *testing.T) { //nolint:tparallel // mut
 	})
 }
 
-func TestCheckPullRequestExists(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestCheckPullRequestExists is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestCheckPullRequestExists(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
@@ -822,6 +865,8 @@ func TestGeneratePRDescriptionExtended(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should use custom changelog path when set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctx := &commands.RepoContext{
 			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
@@ -843,7 +888,8 @@ func TestGeneratePRDescriptionExtended(t *testing.T) {
 	})
 }
 
-func TestCommitAndPushChanges(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestCommitAndPushChanges is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestCommitAndPushChanges(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
@@ -877,8 +923,9 @@ func TestCommitAndPushChanges(t *testing.T) { //nolint:tparallel // mutates pack
 	})
 }
 
-// createTestRepoWithRemote creates a local repo with a bare remote for testing push/PR operations.
-func createTestRepoWithRemote(t *testing.T) (string, *git.Repository, string) {
+// createTestRepoWithRemote creates a local repo with a bare remote for testing push/PR
+// operations, returning the repository and the path of the bare remote.
+func createTestRepoWithRemote(t *testing.T) (*git.Repository, string) {
 	t.Helper()
 
 	// Create bare remote
@@ -914,17 +961,18 @@ func createTestRepoWithRemote(t *testing.T) (string, *git.Repository, string) {
 	err = repo.Push(&git.PushOptions{RemoteName: "origin"})
 	require.NoError(t, err)
 
-	return workDir, repo, bareDir
+	return repo, bareDir
 }
 
-func TestPushChangesWithRemote(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestPushChangesWithRemote is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestPushChangesWithRemote(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
 
 	t.Run("should return error for unsupported remote URL scheme", func(t *testing.T) {
 		// given a remote whose URL uses a scheme no transport knows how to reach
-		_, repo, _ := createTestRepoWithRemote(t)
+		repo, _ := createTestRepoWithRemote(t)
 		require.NoError(t, repo.DeleteRemote("origin"))
 		_, err := repo.CreateRemote(&config.RemoteConfig{
 			Name: "origin",
@@ -949,7 +997,7 @@ func TestPushChangesWithRemote(t *testing.T) { //nolint:tparallel // mutates pac
 
 	t.Run("should push to a remote living on the local filesystem", func(t *testing.T) {
 		// given a bare remote reachable by path, which needs no transport authentication
-		_, repo, bareDir := createTestRepoWithRemote(t)
+		repo, bareDir := createTestRepoWithRemote(t)
 		head, err := repo.Head()
 		require.NoError(t, err)
 
@@ -986,7 +1034,8 @@ func newTestGlobalGitConfig() *config.Config {
 	return globalGitConfig
 }
 
-func TestCreatePullRequestWithRemote(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestCreatePullRequestWithRemote is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestCreatePullRequestWithRemote(t *testing.T) {
 	container := dig.New()
 	require.NoError(t, repositories.RegisterProviders(container))
 	var registry *repositories.ProviderRegistry
@@ -998,7 +1047,7 @@ func TestCreatePullRequestWithRemote(t *testing.T) { //nolint:tparallel // mutat
 
 	t.Run("should attempt PR creation with token and remote", func(t *testing.T) {
 		// given
-		_, repo, _ := createTestRepoWithRemote(t)
+		repo, _ := createTestRepoWithRemote(t)
 		ctx := &commands.RepoContext{
 			Repo: repo,
 			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
@@ -1019,7 +1068,8 @@ func TestCreatePullRequestWithRemote(t *testing.T) { //nolint:tparallel // mutat
 	})
 }
 
-func TestCheckPullRequestExistsWithToken(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestCheckPullRequestExistsWithToken is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestCheckPullRequestExistsWithToken(t *testing.T) {
 	container := dig.New()
 	require.NoError(t, repositories.RegisterProviders(container))
 	var registry *repositories.ProviderRegistry
@@ -1031,7 +1081,7 @@ func TestCheckPullRequestExistsWithToken(t *testing.T) { //nolint:tparallel // m
 
 	t.Run("should check PR existence with token for GitHub remote", func(t *testing.T) {
 		// given
-		_, repo, _ := createTestRepoWithRemote(t)
+		repo, _ := createTestRepoWithRemote(t)
 		ctx := &commands.RepoContext{
 			Repo: repo,
 			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
@@ -1052,6 +1102,8 @@ func TestAddFilesToWorktreeExtended(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should skip non-existent version files without error", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 		wt, err := repo.Worktree()
@@ -1084,6 +1136,8 @@ func TestAddFilesToWorktreeExtended(t *testing.T) {
 	})
 
 	t.Run("should add changelog when no version files configured", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repoPath, repo := createTestRepo(t)
 		wt, err := repo.Worktree()
@@ -1111,7 +1165,8 @@ func TestAddFilesToWorktreeExtended(t *testing.T) {
 	})
 }
 
-func TestCheckPullRequestExistsWithRemote(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestCheckPullRequestExistsWithRemote is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestCheckPullRequestExistsWithRemote(t *testing.T) {
 	container := dig.New()
 	require.NoError(t, repositories.RegisterProviders(container))
 	var registry *repositories.ProviderRegistry
@@ -1123,7 +1178,7 @@ func TestCheckPullRequestExistsWithRemote(t *testing.T) { //nolint:tparallel // 
 
 	t.Run("should return false with no token for local bare remote", func(t *testing.T) {
 		// given
-		_, repo, _ := createTestRepoWithRemote(t)
+		repo, _ := createTestRepoWithRemote(t)
 		ctx := &commands.RepoContext{
 			Repo:          repo,
 			GlobalConfig:  entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
@@ -1139,7 +1194,8 @@ func TestCheckPullRequestExistsWithRemote(t *testing.T) { //nolint:tparallel // 
 	})
 }
 
-func TestHandleExistingBranchWithRemote(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestHandleExistingBranchWithRemote is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestHandleExistingBranchWithRemote(t *testing.T) {
 	container := dig.New()
 	require.NoError(t, repositories.RegisterProviders(container))
 	var registry *repositories.ProviderRegistry
@@ -1151,7 +1207,7 @@ func TestHandleExistingBranchWithRemote(t *testing.T) { //nolint:tparallel // mu
 
 	t.Run("should attempt to create PR when no PR exists for branch", func(t *testing.T) {
 		// given
-		_, repo, _ := createTestRepoWithRemote(t)
+		repo, _ := createTestRepoWithRemote(t)
 		wt, err := repo.Worktree()
 		require.NoError(t, err)
 
@@ -1181,8 +1237,10 @@ func TestResolveDefaultBranchWithRemote(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should resolve branch from remote HEAD when set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
-		_, repo, _ := createTestRepoWithRemote(t)
+		repo, _ := createTestRepoWithRemote(t)
 
 		// Set remote HEAD
 		head, err := repo.Head()
@@ -1200,7 +1258,8 @@ func TestResolveDefaultBranchWithRemote(t *testing.T) {
 	})
 }
 
-func TestIterateProjectsExtended(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestIterateProjectsExtended is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestIterateProjectsExtended(t *testing.T) {
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
 	require.NoError(t, os.WriteFile(

@@ -1,10 +1,9 @@
-//go:build unit
-
 package commands_test
 
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,81 +14,72 @@ import (
 	"github.com/rios0rios0/autobump/test/domain/entitybuilders"
 )
 
+// writeChangelog writes lines as a CHANGELOG.md in dir, one per line and with a trailing
+// newline, and returns its path. An empty slice writes an empty file, which is what the
+// cases covering a missing or unreadable changelog rely on.
 func writeChangelog(t *testing.T, dir string, lines []string) string {
 	t.Helper()
-	p := filepath.Join(dir, "CHANGELOG.md")
-	content := ""
-	for _, l := range lines {
-		content += l + "\n"
+
+	var content strings.Builder
+	for _, line := range lines {
+		content.WriteString(line)
+		content.WriteString("\n")
 	}
-	require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
-	return p
+
+	path := filepath.Join(dir, "CHANGELOG.md")
+	require.NoError(t, os.WriteFile(path, []byte(content.String()), 0o644))
+
+	return path
 }
 
 func TestShouldBumpProject(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return true when unreleased section has entries", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		changelogPath := writeChangelog(t, tmpDir, []string{
-			"# Changelog",
-			"",
-			"## [Unreleased]",
-			"",
-			"### Added",
-			"",
-			"- added new feature",
-			"",
-			"## [1.0.0] - 2026-01-01",
-			"",
-			"### Added",
-			"",
-			"- added initial release",
+	// The two cases differ only in whether [Unreleased] has entries under it, which is
+	// the entire question ShouldBumpProject answers.
+	testCases := []struct {
+		name       string
+		unreleased []string
+		expected   bool
+	}{
+		{
+			name:       "should return true when unreleased section has entries",
+			unreleased: []string{"### Added", "", "- added new feature", ""},
+			expected:   true,
+		},
+		{
+			name:       "should return false when unreleased section is empty",
+			unreleased: nil,
+			expected:   false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			// given
+			lines := append([]string{"# Changelog", "", "## [Unreleased]", ""}, testCase.unreleased...)
+			lines = append(lines, "## [1.0.0] - 2026-01-01", "", "### Added", "", "- added initial release")
+			changelogPath := writeChangelog(t, t.TempDir(), lines)
+			ctx := &commands.RepoContext{
+				ProjectConfig: entitybuilders.NewProjectConfigBuilder().
+					WithName("test-project").
+					BuildProjectConfig(),
+			}
+
+			// when
+			result, err := commands.ShouldBumpProject(ctx, changelogPath)
+
+			// then
+			require.NoError(t, err)
+			assert.Equal(t, testCase.expected, result)
 		})
-		ctx := &commands.RepoContext{
-			ProjectConfig: entitybuilders.NewProjectConfigBuilder().
-				WithName("test-project").
-				BuildProjectConfig(),
-		}
-
-		// when
-		result, err := commands.ShouldBumpProject(ctx, changelogPath)
-
-		// then
-		require.NoError(t, err)
-		assert.True(t, result)
-	})
-
-	t.Run("should return false when unreleased section is empty", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		changelogPath := writeChangelog(t, tmpDir, []string{
-			"# Changelog",
-			"",
-			"## [Unreleased]",
-			"",
-			"## [1.0.0] - 2026-01-01",
-			"",
-			"### Added",
-			"",
-			"- added initial release",
-		})
-		ctx := &commands.RepoContext{
-			ProjectConfig: entitybuilders.NewProjectConfigBuilder().
-				WithName("test-project").
-				BuildProjectConfig(),
-		}
-
-		// when
-		result, err := commands.ShouldBumpProject(ctx, changelogPath)
-
-		// then
-		require.NoError(t, err)
-		assert.False(t, result)
-	})
+	}
 
 	t.Run("should return error when changelog file does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctx := &commands.RepoContext{
 			ProjectConfig: entitybuilders.NewProjectConfigBuilder().BuildProjectConfig(),
@@ -108,6 +98,8 @@ func TestUpdateChangelogFile(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should extract version and update changelog when unreleased entries exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -136,6 +128,8 @@ func TestUpdateChangelogFile(t *testing.T) {
 	})
 
 	t.Run("should return error when changelog has no unreleased entries", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -159,6 +153,8 @@ func TestUpdateChangelogFile(t *testing.T) {
 	})
 
 	t.Run("should return error when file does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		version, err := commands.UpdateChangelogFile(nil, nil, "/nonexistent/CHANGELOG.md")
 
@@ -172,6 +168,8 @@ func TestGetNextVersion(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return next minor version when changelog has existing versions", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -199,6 +197,8 @@ func TestGetNextVersion(t *testing.T) {
 	})
 
 	t.Run("should return initial version when changelog has no versions", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -220,6 +220,8 @@ func TestGetNextVersion(t *testing.T) {
 	})
 
 	t.Run("should return error when file does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		version, err := commands.GetNextVersion(nil, nil, "/nonexistent/CHANGELOG.md")
 
@@ -233,6 +235,8 @@ func TestGeneratePRDescription(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should generate description when version files are configured", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(
@@ -269,6 +273,8 @@ func TestGeneratePRDescription(t *testing.T) {
 	})
 
 	t.Run("should generate description without version file checklist when no version files", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctx := &commands.RepoContext{
 			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
@@ -291,6 +297,8 @@ func TestGeneratePRDescription(t *testing.T) {
 	})
 
 	t.Run("should use custom changelog path when configured", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctx := &commands.RepoContext{
 			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
@@ -316,6 +324,8 @@ func TestEnsureProjectLanguage(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should detect language when not already set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0o644))
@@ -338,6 +348,8 @@ func TestEnsureProjectLanguage(t *testing.T) {
 	})
 
 	t.Run("should keep existing language when already set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctx := &commands.RepoContext{
 			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
@@ -354,6 +366,8 @@ func TestEnsureProjectLanguage(t *testing.T) {
 	})
 
 	t.Run("should set language to empty when detection fails", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		ctx := &commands.RepoContext{

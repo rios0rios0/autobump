@@ -1,5 +1,3 @@
-//go:build unit
-
 package internal_test
 
 import (
@@ -17,6 +15,8 @@ func TestNewAppInternal(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should create AppInternal when controllers are provided", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		controllers := &[]entities.Controller{}
 
@@ -33,6 +33,8 @@ func TestGetControllers(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return the controllers passed during construction", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		controllers := &[]entities.Controller{}
 		app := internal.NewAppInternal(controllers)
@@ -49,6 +51,8 @@ func TestRegisterProviders(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should register all providers without error", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		container := dig.New()
 
@@ -60,6 +64,8 @@ func TestRegisterProviders(t *testing.T) {
 	})
 
 	t.Run("should allow invoking AppInternal after registration", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		container := dig.New()
 		require.NoError(t, internal.RegisterProviders(container))

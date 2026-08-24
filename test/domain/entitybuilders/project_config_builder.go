@@ -1,6 +1,4 @@
-//go:build integration || unit || test
-
-package entitybuilders //nolint:revive,staticcheck // Test package naming follows established project structure
+package entitybuilders
 
 import (
 	"github.com/rios0rios0/autobump/internal/domain/entities"
@@ -10,6 +8,7 @@ import (
 // ProjectConfigBuilder helps create test ProjectConfig instances with a fluent interface.
 type ProjectConfigBuilder struct {
 	*testkit.BaseBuilder
+
 	path               string
 	name               string
 	language           string
@@ -76,7 +75,7 @@ func (b *ProjectConfigBuilder) WithVersioning(mode string) *ProjectConfigBuilder
 }
 
 // Build creates the ProjectConfig (satisfies testkit.Builder interface).
-func (b *ProjectConfigBuilder) Build() interface{} {
+func (b *ProjectConfigBuilder) Build() any {
 	return b.BuildProjectConfig()
 }
 
@@ -109,7 +108,7 @@ func (b *ProjectConfigBuilder) Reset() testkit.Builder {
 // Clone creates a deep copy.
 func (b *ProjectConfigBuilder) Clone() testkit.Builder {
 	return &ProjectConfigBuilder{
-		BaseBuilder:        b.BaseBuilder.Clone().(*testkit.BaseBuilder),
+		BaseBuilder:        cloneBase(b.BaseBuilder),
 		path:               b.path,
 		name:               b.name,
 		language:           b.language,

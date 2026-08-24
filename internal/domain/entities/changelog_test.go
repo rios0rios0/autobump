@@ -1,5 +1,3 @@
-//go:build unit
-
 package entities_test
 
 import (
@@ -531,6 +529,8 @@ func TestFindLatestVersion(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return latest version when changelog has multiple versions", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"# Changelog",
@@ -560,6 +560,8 @@ func TestFindLatestVersion(t *testing.T) {
 	})
 
 	t.Run("should return error when changelog has no versions", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"# Changelog",
@@ -581,6 +583,8 @@ func TestFindLatestVersion(t *testing.T) {
 	})
 
 	t.Run("should return single version when changelog has only one release", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"# Changelog",
@@ -608,6 +612,8 @@ func TestIsChangelogUnreleasedEmpty(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return true when unreleased section is empty", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"# Changelog",
@@ -630,6 +636,8 @@ func TestIsChangelogUnreleasedEmpty(t *testing.T) {
 	})
 
 	t.Run("should return false when unreleased section has entries", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"# Changelog",

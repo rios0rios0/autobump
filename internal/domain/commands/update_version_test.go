@@ -1,5 +1,3 @@
-//go:build unit
-
 package commands_test
 
 import (
@@ -20,6 +18,8 @@ func TestUpdateVersion(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should update only project version in pom.xml when version has SNAPSHOT suffix", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		pomContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -44,13 +44,7 @@ func TestUpdateVersion(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "pom.xml", Patterns: []string{`(\s*<version>)[^<]+(</version>)`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(mavenLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -71,10 +65,12 @@ func TestUpdateVersion(t *testing.T) {
 		assert.Contains(t, content, "<version>4.13.2</version>")
 	})
 
-	t.Run("should update project version and not parent version in pom.xml when parent block exists", func(t *testing.T) {
-		// given
-		tmpDir := t.TempDir()
-		pomContent := `<?xml version="1.0" encoding="UTF-8"?>
+	t.Run(
+		"should update project version and not parent version in pom.xml when parent block exists",
+		func(t *testing.T) {
+			// given
+			tmpDir := t.TempDir()
+			pomContent := `<?xml version="1.0" encoding="UTF-8"?>
 <project>
     <parent>
         <groupId>org.springframework.boot</groupId>
@@ -94,38 +90,35 @@ func TestUpdateVersion(t *testing.T) {
         </dependency>
     </dependencies>
 </project>`
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomContent), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomContent), 0o644))
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "pom.xml", Patterns: []string{`(\s*<version>)[^<]+(</version>)`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			globalConfig := entitybuilders.NewGlobalConfigBuilder().
+				WithLanguagesConfig(mavenLanguagesConfig()).BuildGlobalConfig()
 
-		projectConfig := entitybuilders.NewProjectConfigBuilder().
-			WithPath(tmpDir).
-			WithLanguage("java").
-			WithNewVersion("0.1.0").
-			BuildProjectConfig()
+			projectConfig := entitybuilders.NewProjectConfigBuilder().
+				WithPath(tmpDir).
+				WithLanguage("java").
+				WithNewVersion("0.1.0").
+				BuildProjectConfig()
 
-		// when
-		err := commands.UpdateVersion(globalConfig, projectConfig)
+			// when
+			err := commands.UpdateVersion(globalConfig, projectConfig)
 
-		// then
-		require.NoError(t, err)
-		result, err := os.ReadFile(filepath.Join(tmpDir, "pom.xml"))
-		require.NoError(t, err)
-		content := string(result)
-		assert.Contains(t, content, "<version>3.2.0</version>")
-		assert.Contains(t, content, "<version>0.1.0</version>")
-		assert.Contains(t, content, "<version>1.18.34</version>")
-		assert.NotContains(t, content, "<version>0.0.1-SNAPSHOT</version>")
-	})
+			// then
+			require.NoError(t, err)
+			result, err := os.ReadFile(filepath.Join(tmpDir, "pom.xml"))
+			require.NoError(t, err)
+			content := string(result)
+			assert.Contains(t, content, "<version>3.2.0</version>")
+			assert.Contains(t, content, "<version>0.1.0</version>")
+			assert.Contains(t, content, "<version>1.18.34</version>")
+			assert.NotContains(t, content, "<version>0.0.1-SNAPSHOT</version>")
+		},
+	)
 
 	t.Run("should update only project version in pom.xml when dependencies have clean semver", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		pomContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -153,13 +146,7 @@ func TestUpdateVersion(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "pom.xml", Patterns: []string{`(\s*<version>)[^<]+(</version>)`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(mavenLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -181,6 +168,8 @@ func TestUpdateVersion(t *testing.T) {
 	})
 
 	t.Run("should update project version and not plugin version in build.gradle", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		gradleContent := `plugins {
@@ -198,13 +187,7 @@ repositories {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build.gradle"), []byte(gradleContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "build.gradle", Patterns: []string{`(?m)(^\s*version\s*[=:]?\s*["'])[^"']+(["'])`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(gradleLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -242,13 +225,7 @@ repositories {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build.gradle"), []byte(gradleContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "build.gradle", Patterns: []string{`(?m)(^\s*version\s*[=:]?\s*["'])[^"']+(["'])`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(gradleLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -284,13 +261,7 @@ repositories {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build.gradle"), []byte(gradleContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "build.gradle", Patterns: []string{`(?m)(^\s*version\s*[=:]?\s*["'])[^"']+(["'])`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(gradleLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -322,13 +293,7 @@ appVersion: "1.0.0"
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), []byte(chartContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"helm": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)[^\s'"]+(['"]?)`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(helmLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -362,13 +327,7 @@ appVersion: '1.0.0'
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), []byte(chartContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"helm": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)[^\s'"]+(['"]?)`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(helmLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -401,13 +360,7 @@ appVersion: "1.0.0-beta.2"
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), []byte(chartContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"helm": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)[^\s'"]+(['"]?)`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(helmLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -525,13 +478,7 @@ repositories {
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "build.gradle"), []byte(gradleContent), 0o644))
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"java": {
-					VersionFiles: []entities.VersionFile{
-						{Path: "build.gradle", Patterns: []string{`(?m)(^\s*version\s*[=:]?\s*["'])[^"']+(["'])`}},
-					},
-				},
-			}).BuildGlobalConfig()
+			WithLanguagesConfig(gradleLanguagesConfig()).BuildGlobalConfig()
 
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath(tmpDir).
@@ -553,6 +500,40 @@ repositories {
 
 // goSwaggerLanguagesConfig mirrors the default Go version_files from configs/autobump.yaml,
 // where the version lives in the swaggo "@version" annotation and in the generated docs.
+// Each of these is one language with one version file, repeated across the cases that
+// exercise the same rewrite against different file contents. They sit beside the
+// goSwagger and dart ones the file already had.
+
+func mavenLanguagesConfig() map[string]entities.LanguageConfig {
+	return map[string]entities.LanguageConfig{
+		"java": {
+			VersionFiles: []entities.VersionFile{
+				{Path: "pom.xml", Patterns: []string{`(\s*<version>)[^<]+(</version>)`}},
+			},
+		},
+	}
+}
+
+func gradleLanguagesConfig() map[string]entities.LanguageConfig {
+	return map[string]entities.LanguageConfig{
+		"java": {
+			VersionFiles: []entities.VersionFile{
+				{Path: "build.gradle", Patterns: []string{`(?m)(^\s*version\s*[=:]?\s*["'])[^"']+(["'])`}},
+			},
+		},
+	}
+}
+
+func helmLanguagesConfig() map[string]entities.LanguageConfig {
+	return map[string]entities.LanguageConfig{
+		"helm": {
+			VersionFiles: []entities.VersionFile{
+				{Path: "Chart.yaml", Patterns: []string{`(?m)(^version:\s*['"]?)[^\s'"]+(['"]?)`}},
+			},
+		},
+	}
+}
+
 func goSwaggerLanguagesConfig() map[string]entities.LanguageConfig {
 	annotationPatterns := []string{`(?m)(^//\s*@version\s+)\S+`}
 	docsGoPatterns := []string{`(\bVersion:\s*")[^"]*(")`}
@@ -687,7 +668,12 @@ func assertGoSwaggerProjectBumped(t *testing.T, projectPath, mainRelPath, docsRe
 	swaggerYAML, err := os.ReadFile(filepath.Join(projectPath, docsRelDir, "swagger.yaml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(swaggerYAML), "  version: 2.0.0")
-	assert.Contains(t, string(swaggerYAML), "      version:", "the definition property named version must not be touched")
+	assert.Contains(
+		t,
+		string(swaggerYAML),
+		"      version:",
+		"the definition property named version must not be touched",
+	)
 	assert.NotContains(t, string(swaggerYAML), "1.2.3")
 }
 
@@ -714,25 +700,34 @@ func TestUpdateVersionGoSwagger(t *testing.T) {
 		docsRelDir  string
 	}{
 		{name: "docs at the root", mainRelPath: "main.go", docsRelDir: "docs"},
-		{name: "docs under cmd", mainRelPath: filepath.Join("cmd", "main.go"), docsRelDir: filepath.Join("cmd", "docs")},
+		{
+			name:        "docs under cmd",
+			mainRelPath: filepath.Join("cmd", "main.go"),
+			docsRelDir:  filepath.Join("cmd", "docs"),
+		},
 	}
 	for _, layout := range layouts {
-		t.Run("should update Swagger annotation and generated docs when Go project keeps "+layout.name, func(t *testing.T) {
-			// given
-			tmpDir := t.TempDir()
-			writeGoSwaggerProject(t, tmpDir, layout.mainRelPath, layout.docsRelDir)
-			globalConfig, projectConfig := newGoSwaggerBumpConfigs(tmpDir)
+		t.Run(
+			"should update Swagger annotation and generated docs when Go project keeps "+layout.name,
+			func(t *testing.T) {
+				// given
+				tmpDir := t.TempDir()
+				writeGoSwaggerProject(t, tmpDir, layout.mainRelPath, layout.docsRelDir)
+				globalConfig, projectConfig := newGoSwaggerBumpConfigs(tmpDir)
 
-			// when
-			err := commands.UpdateVersion(globalConfig, projectConfig)
+				// when
+				err := commands.UpdateVersion(globalConfig, projectConfig)
 
-			// then
-			require.NoError(t, err)
-			assertGoSwaggerProjectBumped(t, tmpDir, layout.mainRelPath, layout.docsRelDir)
-		})
+				// then
+				require.NoError(t, err)
+				assertGoSwaggerProjectBumped(t, tmpDir, layout.mainRelPath, layout.docsRelDir)
+			},
+		)
 	}
 
 	t.Run("should update tab-separated Swagger annotation when swag fmt formatting is used", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		mainGoContent := "package main\n\n//\t@title\t\tExample API\n//\t@version\t1.2.3\nfunc main() {}\n"
@@ -750,6 +745,8 @@ func TestUpdateVersionGoSwagger(t *testing.T) {
 	})
 
 	t.Run("should keep main.go untouched when Go project has no Swagger annotation", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		mainGoContent := "package main\n\nfunc main() {}\n"
@@ -863,6 +860,8 @@ flutter:
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
 			// given
 			tmpDir := t.TempDir()
 			path := filepath.Join(tmpDir, "pubspec.yaml")
@@ -885,6 +884,8 @@ func TestGetVersionFiles(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return only files whose content matches a version pattern when globbing", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		// A directory needs the owner execute bit; 0o700 is least-privilege (rule's 0o600 is file-only).
@@ -912,6 +913,8 @@ func TestGetVersionFiles(t *testing.T) {
 	})
 
 	t.Run("should return an error when a version pattern is invalid", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "version.rb"), []byte("version = '1.2.3'\n"), 0o644))

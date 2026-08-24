@@ -1,5 +1,3 @@
-//go:build unit
-
 package commands_test
 
 import (
@@ -20,7 +18,8 @@ import (
 	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 )
 
-func TestProcessRepoIntegration(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestProcessRepoIntegration is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestProcessRepoIntegration(t *testing.T) {
 	// Create a minimal .gitconfig so GetGlobalGitConfig() succeeds on CI where ~/.gitconfig doesn't exist
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
@@ -184,7 +183,8 @@ func (f bumpFixture) readChangelog(t *testing.T) string {
 	return string(content)
 }
 
-func TestProcessRepoAdditionalBranches(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestProcessRepoAdditionalBranches is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestProcessRepoAdditionalBranches(t *testing.T) {
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
 	require.NoError(t, os.WriteFile(
@@ -295,8 +295,8 @@ func TestProcessRepoAdditionalBranches(t *testing.T) { //nolint:tparallel // mut
 	})
 }
 
-func TestSetGitOperations(t *testing.T) { //nolint:tparallel // mutates package-level globals
-
+// TestSetGitOperations is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestSetGitOperations(t *testing.T) {
 	t.Run("should not panic when setting git operations", func(t *testing.T) {
 		// given
 		registry := repositories.NewProviderRegistry()
@@ -313,6 +313,8 @@ func TestGetLanguageInterface(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return Python language interface when language is python", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(
@@ -327,7 +329,10 @@ func TestGetLanguageInterface(t *testing.T) {
 					Extensions:      []string{"py"},
 					SpecialPatterns: []string{"pyproject.toml"},
 					VersionFiles: []entities.VersionFile{
-						{Path: "{project_name}/__init__.py", Patterns: []string{`(__version__\s*=\s*")\d+\.\d+\.\d+(")`}},
+						{
+							Path:     "{project_name}/__init__.py",
+							Patterns: []string{`(__version__\s*=\s*")\d+\.\d+\.\d+(")`},
+						},
 					},
 				},
 			}).BuildGlobalConfig()
@@ -342,6 +347,6 @@ func TestGetLanguageInterface(t *testing.T) {
 
 		// then
 		require.NoError(t, err)
-		assert.Len(t, versionFiles, 0) // file doesn't exist but no error
+		assert.Empty(t, versionFiles) // file doesn't exist but no error
 	})
 }

@@ -1,5 +1,3 @@
-//go:build unit
-
 package commands_test
 
 import (
@@ -7,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/rios0rios0/autobump/internal/domain/commands"
 )
@@ -15,6 +14,8 @@ func TestSelfUpdateCommand(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should delegate to runner when executed successfully", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		var calledDryRun, calledForce bool
 		runnerFn := commands.SelfUpdateRunnerFunc(func(dryRun, force bool) error {
@@ -28,12 +29,14 @@ func TestSelfUpdateCommand(t *testing.T) {
 		err := command.Execute(true, false)
 
 		// then
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, calledDryRun)
 		assert.False(t, calledForce)
 	})
 
 	t.Run("should propagate runner error when update fails", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		expectedErr := errors.New("network error")
 		var calledDryRun, calledForce bool
@@ -48,7 +51,7 @@ func TestSelfUpdateCommand(t *testing.T) {
 		err := command.Execute(false, true)
 
 		// then
-		assert.ErrorIs(t, err, expectedErr)
+		require.ErrorIs(t, err, expectedErr)
 		assert.False(t, calledDryRun)
 		assert.True(t, calledForce)
 	})

@@ -1,5 +1,3 @@
-//go:build unit
-
 package commands_test
 
 import (
@@ -111,6 +109,8 @@ func TestDetectProjectLanguage(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
 			// given
 			tmpDir := t.TempDir()
 			for name, content := range testCase.files {
@@ -125,7 +125,7 @@ func TestDetectProjectLanguage(t *testing.T) {
 
 			// then
 			if testCase.expectedErr != nil {
-				assert.ErrorIs(t, err, testCase.expectedErr)
+				require.ErrorIs(t, err, testCase.expectedErr)
 				assert.Empty(t, language)
 
 				return
@@ -140,6 +140,8 @@ func TestResolveConfigKey(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return direct match when langforge name is a config key", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
@@ -155,12 +157,10 @@ func TestResolveConfigKey(t *testing.T) {
 	})
 
 	t.Run("should return alias when langforge name is not a config key", func(t *testing.T) {
+		t.Parallel()
+
 		// given
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 
 		// when
 		result := commands.ResolveConfigKey(globalConfig, langEntities.LanguageGo)
@@ -170,6 +170,8 @@ func TestResolveConfigKey(t *testing.T) {
 	})
 
 	t.Run("should return the flutter alias when dart is not a config key", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
@@ -185,6 +187,8 @@ func TestResolveConfigKey(t *testing.T) {
 	})
 
 	t.Run("should return direct match for terraform langforge constant", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
@@ -200,6 +204,8 @@ func TestResolveConfigKey(t *testing.T) {
 	})
 
 	t.Run("should return empty string when no match found", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
@@ -218,86 +224,78 @@ func TestResolveConfigKey(t *testing.T) {
 func TestBuildGitforgeRepo(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should parse GitHub SSH URL", func(t *testing.T) {
-		// given
-		url := "git@github.com:myorg/myrepo.git"
+	// One URL per vendor and transport. The assertions are identical, so the table is the
+	// test: what each case contributes is a shape the parser has to recognise. Project is
+	// empty everywhere except Azure DevOps, which is the only vendor that has one.
+	testCases := []struct {
+		name         string
+		url          string
+		organization string
+		project      string
+		repository   string
+	}{
+		{
+			name:         "should parse GitHub SSH URL",
+			url:          "git@github.com:myorg/myrepo.git",
+			organization: "myorg",
+			repository:   "myrepo",
+		},
+		{
+			name:         "should parse GitHub HTTPS URL",
+			url:          "https://github.com/myorg/myrepo.git",
+			organization: "myorg",
+			repository:   "myrepo",
+		},
+		{
+			name:         "should parse GitLab SSH URL",
+			url:          "git@gitlab.com:group/subgroup/project.git",
+			organization: "group/subgroup",
+			repository:   "project",
+		},
+		{
+			name:         "should parse GitLab HTTPS URL",
+			url:          "https://gitlab.com/group/subgroup/project.git",
+			organization: "group/subgroup",
+			repository:   "project",
+		},
+		{
+			name:         "should parse Azure DevOps SSH URL",
+			url:          "git@ssh.dev.azure.com:v3/myorg/myproject/myrepo",
+			organization: "myorg",
+			project:      "myproject",
+			repository:   "myrepo",
+		},
+		{
+			name:         "should parse Azure DevOps HTTPS URL",
+			url:          "https://dev.azure.com/myorg/myproject/_git/myrepo",
+			organization: "myorg",
+			project:      "myproject",
+			repository:   "myrepo",
+		},
+	}
 
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-		// then
-		assert.Equal(t, "myorg", repo.Organization)
-		assert.Equal(t, "myrepo", repo.Name)
-		assert.Equal(t, url, repo.RemoteURL)
-	})
+			// when
+			repo := commands.BuildGitforgeRepo(testCase.url, "main")
 
-	t.Run("should parse GitHub HTTPS URL", func(t *testing.T) {
-		// given
-		url := "https://github.com/myorg/myrepo.git"
-
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
-
-		// then
-		assert.Equal(t, "myorg", repo.Organization)
-		assert.Equal(t, "myrepo", repo.Name)
-	})
-
-	t.Run("should parse GitLab SSH URL", func(t *testing.T) {
-		// given
-		url := "git@gitlab.com:group/subgroup/project.git"
-
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
-
-		// then
-		assert.Equal(t, "group/subgroup", repo.Organization)
-		assert.Equal(t, "project", repo.Name)
-	})
-
-	t.Run("should parse GitLab HTTPS URL", func(t *testing.T) {
-		// given
-		url := "https://gitlab.com/group/subgroup/project.git"
-
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
-
-		// then
-		assert.Equal(t, "group/subgroup", repo.Organization)
-		assert.Equal(t, "project", repo.Name)
-	})
-
-	t.Run("should parse Azure DevOps SSH URL", func(t *testing.T) {
-		// given
-		url := "git@ssh.dev.azure.com:v3/myorg/myproject/myrepo"
-
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
-
-		// then
-		assert.Equal(t, "myorg", repo.Organization)
-		assert.Equal(t, "myproject", repo.Project)
-		assert.Equal(t, "myrepo", repo.Name)
-	})
-
-	t.Run("should parse Azure DevOps HTTPS URL", func(t *testing.T) {
-		// given
-		url := "https://dev.azure.com/myorg/myproject/_git/myrepo"
-
-		// when
-		repo := commands.BuildGitforgeRepo(url, "main")
-
-		// then
-		assert.Equal(t, "myorg", repo.Organization)
-		assert.Equal(t, "myproject", repo.Project)
-		assert.Equal(t, "myrepo", repo.Name)
-	})
+			// then
+			assert.Equal(t, testCase.organization, repo.Organization)
+			assert.Equal(t, testCase.project, repo.Project)
+			assert.Equal(t, testCase.repository, repo.Name)
+			assert.Equal(t, testCase.url, repo.RemoteURL)
+		})
+	}
 }
 
 func TestServiceTypeToProviderName(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return github for GITHUB type", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		serviceType := gitforgeEntities.GITHUB
 
@@ -309,6 +307,8 @@ func TestServiceTypeToProviderName(t *testing.T) {
 	})
 
 	t.Run("should return gitlab for GITLAB type", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		serviceType := gitforgeEntities.GITLAB
 
@@ -320,6 +320,8 @@ func TestServiceTypeToProviderName(t *testing.T) {
 	})
 
 	t.Run("should return azuredevops for AZUREDEVOPS type", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		serviceType := gitforgeEntities.AZUREDEVOPS
 
@@ -331,6 +333,8 @@ func TestServiceTypeToProviderName(t *testing.T) {
 	})
 
 	t.Run("should return empty string for unknown type", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		serviceType := gitforgeEntities.UNKNOWN
 
@@ -346,6 +350,8 @@ func TestResolveToken(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return project access token when set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithGitHubAccessToken("global-token").
@@ -362,6 +368,8 @@ func TestResolveToken(t *testing.T) {
 	})
 
 	t.Run("should return GitHub global token when project token is empty", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithGitHubAccessToken("github-global").
@@ -376,6 +384,8 @@ func TestResolveToken(t *testing.T) {
 	})
 
 	t.Run("should return GitLab CI job token as fallback", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithGitLabCIJobToken("ci-job-token").
@@ -390,6 +400,8 @@ func TestResolveToken(t *testing.T) {
 	})
 
 	t.Run("should return empty string for unknown service type", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
@@ -406,6 +418,8 @@ func TestCollectTokens(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return project access token first when set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithGitHubAccessToken("global-github").
@@ -424,6 +438,8 @@ func TestCollectTokens(t *testing.T) {
 	})
 
 	t.Run("should return GitLab access token and CI job token", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithGitLabAccessToken("gitlab-pat").
@@ -441,6 +457,8 @@ func TestCollectTokens(t *testing.T) {
 	})
 
 	t.Run("should return Azure DevOps token", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithAzureDevOpsAccessToken("ado-token").
@@ -456,6 +474,8 @@ func TestCollectTokens(t *testing.T) {
 	})
 
 	t.Run("should return empty slice when no tokens configured", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
@@ -468,6 +488,8 @@ func TestCollectTokens(t *testing.T) {
 	})
 
 	t.Run("should return empty slice for unknown service type", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithGitHubAccessToken("github-token").
@@ -482,7 +504,9 @@ func TestCollectTokens(t *testing.T) {
 	})
 }
 
-func TestCollectSSHAuthMethods(t *testing.T) { //nolint:paralleltest // t.Setenv is incompatible with t.Parallel
+// TestCollectSSHAuthMethods is deliberately not parallel: it calls t.Setenv, which the runtime
+// forbids in a parallel test.
+func TestCollectSSHAuthMethods(t *testing.T) {
 	t.Run("should return empty slice when no SSH config and no agent", func(t *testing.T) {
 		// given
 		t.Setenv("SSH_AUTH_SOCK", "")
@@ -532,17 +556,17 @@ func TestCollectSSHAuthMethods(t *testing.T) { //nolint:paralleltest // t.Setenv
 	})
 }
 
-func TestDetectSSHAgentSockets(t *testing.T) { //nolint:paralleltest // t.Setenv is incompatible with t.Parallel
+// TestDetectSSHAgentSockets is deliberately not parallel: it calls t.Setenv, which the runtime
+// forbids in a parallel test.
+func TestDetectSSHAgentSockets(t *testing.T) {
 	t.Run("should return SSH_AUTH_SOCK from environment when set to a valid socket", func(t *testing.T) {
 		// given
-		sockDir, err := os.MkdirTemp("", "s-*")
-		require.NoError(t, err)
-		defer os.RemoveAll(sockDir) //nolint:errcheck // test cleanup
+		sockDir := t.TempDir()
 
 		sockPath := filepath.Join(sockDir, "a.sock")
 		listener, err := net.Listen("unix", sockPath)
 		require.NoError(t, err)
-		defer listener.Close() //nolint:errcheck // test cleanup
+		defer listener.Close()
 
 		t.Setenv("SSH_AUTH_SOCK", sockPath)
 		t.Setenv("HOME", t.TempDir())
@@ -560,6 +584,8 @@ func TestGetForgeProvider(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return error for unsupported service type", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		provider, err := commands.GetForgeProvider(gitforgeEntities.UNKNOWN, "some-token")
 
@@ -570,6 +596,8 @@ func TestGetForgeProvider(t *testing.T) {
 	})
 
 	t.Run("should return error when provider registry is nil", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		commands.SetProviderRegistry(nil)
 
@@ -586,6 +614,8 @@ func TestRepoToProjectConfig(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should convert repository and provider config to project config", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		repo := entitybuilders.NewRepositoryBuilder().
 			WithName("my-repo").
@@ -607,17 +637,43 @@ func TestRepoToProjectConfig(t *testing.T) {
 	})
 }
 
+// golangOnlyConfig is the smallest global config these cases need: a single language, so
+// a per-project override can be seen to add another without the result being ambiguous.
+func golangOnlyConfig() *entities.GlobalConfig {
+	return entitybuilders.NewGlobalConfigBuilder().
+		WithLanguagesConfig(map[string]entities.LanguageConfig{
+			"golang": {Extensions: []string{"go"}},
+		}).
+		BuildGlobalConfig()
+}
+
+// writeNamedProjectConfig writes a per-project config under the given file name, which is
+// the only thing that varies between the cases covering the four names AutoBump accepts.
+func writeNamedProjectConfig(t *testing.T, dir, name, content string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
+}
+
+// golangConfigWithToken is golangOnlyConfig plus a GitHub token, for the cases asserting
+// that a per-project file cannot replace the operator's credentials.
+func golangConfigWithToken(token string) *entities.GlobalConfig {
+	return entitybuilders.NewGlobalConfigBuilder().
+		WithGitHubAccessToken(token).
+		WithLanguagesConfig(map[string]entities.LanguageConfig{
+			"golang": {Extensions: []string{"go"}},
+		}).
+		BuildGlobalConfig()
+}
+
 func TestLoadProjectConfigOverrides(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return original config when no per-project config exists", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -628,20 +684,14 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 	})
 
 	t.Run("should merge per-project language overrides into global config", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  python:\n    extensions:\n      - 'py'\n    version_files:\n      - path: 'custom_version.py'\n        patterns:\n          - '(__version__\\s*=\\s*\")\\d+\\.\\d+\\.\\d+(\")'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -654,21 +704,14 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 	})
 
 	t.Run("should return original config when per-project config has no languages key", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		configContent := "github_access_token: 'ignored-token'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithGitHubAccessToken("original-token").
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangConfigWithToken("original-token")
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -680,6 +723,8 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 	})
 
 	t.Run("should not mutate global config when per-project config is invalid YAML", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(
@@ -688,11 +733,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 			0o644,
 		))
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -703,20 +744,14 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 	})
 
 	t.Run("should not mutate global config when merging overrides", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  ruby:\n    extensions:\n      - 'rb'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 		originalLangsCount := len(globalConfig.LanguagesConfig)
 
@@ -730,14 +765,12 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 	})
 
 	t.Run("should override version file patterns for existing language", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  typescript:\n    version_files:\n      - path: 'opensearch_dashboards.json'\n        patterns:\n          - '(\"version\":\\s*\")\\d+\\.\\d+\\.\\d+(\")'  \n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
@@ -761,14 +794,12 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 	})
 
 	t.Run("should add new language from per-project config while keeping global languages", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  java:\n    extensions:\n      - 'java'\n    special_patterns:\n      - 'pom.xml'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
@@ -788,20 +819,14 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 	})
 
 	t.Run("should handle .autobump.yml variant", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  ruby:\n    extensions:\n      - 'rb'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -812,20 +837,14 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 	})
 
 	t.Run("should handle autobump.yaml variant without dot prefix", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  ruby:\n    extensions:\n      - 'rb'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, "autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, "autobump.yaml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -836,21 +855,14 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 	})
 
 	t.Run("should preserve global tokens even if per-project config contains tokens", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		configContent := "github_access_token: 'project-token'\nlanguages:\n  ruby:\n    extensions:\n      - 'rb'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithGitHubAccessToken("global-token").
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangConfigWithToken("global-token")
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -862,14 +874,12 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 	})
 
 	t.Run("should merge changelog_path from per-project config into project config", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		configContent := "changelog_path: 'docs/CHANGELOG.md'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
@@ -882,14 +892,12 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 	})
 
 	t.Run("should not override project config changelog_path when already set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		configContent := "changelog_path: 'docs/CHANGELOG.md'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
@@ -908,12 +916,10 @@ func TestProcessRepo(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return error when git repo cannot be opened", func(t *testing.T) {
+		t.Parallel()
+
 		// given
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath("/nonexistent/path/that/does/not/exist").
 			BuildProjectConfig()
@@ -1040,40 +1046,48 @@ func TestAddCurrentVersion(t *testing.T) {
 		assert.Contains(t, string(content), "## [0.1.0]", "changelog should contain the tag version")
 	})
 
-	t.Run("should return nil and leave changelog unchanged when annotated tag cannot be dereferenced", func(t *testing.T) {
-		t.Parallel()
+	t.Run(
+		"should return nil and leave changelog unchanged when annotated tag cannot be dereferenced",
+		func(t *testing.T) {
+			t.Parallel()
 
-		// given
-		repo, dir := initTestRepo(t)
-		ctx := buildTestRepoContext(t, repo, dir)
+			// given
+			repo, dir := initTestRepo(t)
+			ctx := buildTestRepoContext(t, repo, dir)
 
-		head, err := repo.Head()
-		require.NoError(t, err)
-		_, err = repo.CreateTag("v0.1.0", head.Hash(), &git.CreateTagOptions{
-			Message: "Release v0.1.0",
-			Tagger: &object.Signature{
-				Name:  "Test User",
-				Email: "test@example.com",
-				When:  time.Now(),
-			},
-		})
-		require.NoError(t, err)
+			head, err := repo.Head()
+			require.NoError(t, err)
+			_, err = repo.CreateTag("v0.1.0", head.Hash(), &git.CreateTagOptions{
+				Message: "Release v0.1.0",
+				Tagger: &object.Signature{
+					Name:  "Test User",
+					Email: "test@example.com",
+					When:  time.Now(),
+				},
+			})
+			require.NoError(t, err)
 
-		changelogPath := filepath.Join(dir, "CHANGELOG.md")
-		originalContent := "## [Unreleased]\n\n### Added\n\n"
-		require.NoError(t, os.WriteFile(changelogPath, []byte(originalContent), 0o644))
+			changelogPath := filepath.Join(dir, "CHANGELOG.md")
+			originalContent := "## [Unreleased]\n\n### Added\n\n"
+			require.NoError(t, os.WriteFile(changelogPath, []byte(originalContent), 0o644))
 
-		// when
-		// Note: gitforge's GetLatestTag may fail to dereference annotated tags via go-git.
-		// After our fix, addCurrentVersion() returns nil and leaves the changelog unchanged.
-		err = commands.AddCurrentVersion(ctx, changelogPath)
+			// when
+			// Note: gitforge's GetLatestTag may fail to dereference annotated tags via go-git.
+			// After our fix, addCurrentVersion() returns nil and leaves the changelog unchanged.
+			err = commands.AddCurrentVersion(ctx, changelogPath)
 
-		// then
-		require.NoError(t, err)
-		content, readErr := os.ReadFile(changelogPath)
-		require.NoError(t, readErr)
-		assert.Equal(t, originalContent, string(content), "changelog should be unchanged when annotated tag cannot be dereferenced")
-	})
+			// then
+			require.NoError(t, err)
+			content, readErr := os.ReadFile(changelogPath)
+			require.NoError(t, readErr)
+			assert.Equal(
+				t,
+				originalContent,
+				string(content),
+				"changelog should be unchanged when annotated tag cannot be dereferenced",
+			)
+		},
+	)
 }
 
 func TestSetupChangelog(t *testing.T) {
@@ -1211,7 +1225,11 @@ func TestFilterRepositories(t *testing.T) {
 		repos := []entities.Repository{
 			entitybuilders.NewRepositoryBuilder().WithName("fork").WithIsFork(true).BuildRepository(),
 			entitybuilders.NewRepositoryBuilder().WithName("archived").WithIsArchived(true).BuildRepository(),
-			entitybuilders.NewRepositoryBuilder().WithName("both").WithIsFork(true).WithIsArchived(true).BuildRepository(),
+			entitybuilders.NewRepositoryBuilder().
+				WithName("both").
+				WithIsFork(true).
+				WithIsArchived(true).
+				BuildRepository(),
 			entitybuilders.NewRepositoryBuilder().WithName("normal").BuildRepository(),
 		}
 		config := entitybuilders.NewGlobalConfigBuilder().
@@ -1258,6 +1276,8 @@ func TestResolveSSHProgram(t *testing.T) {
 	}
 
 	t.Run("should read gpg.ssh.program from the global config subsection", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		local := newCfg()
 		global := newCfg()
@@ -1272,6 +1292,8 @@ func TestResolveSSHProgram(t *testing.T) {
 	})
 
 	t.Run("should prefer the local config over the global config", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		local := newCfg()
 		local.Raw.Section("gpg").Subsection("ssh").SetOption("program", "/local/signer")
@@ -1286,6 +1308,8 @@ func TestResolveSSHProgram(t *testing.T) {
 	})
 
 	t.Run("should return empty when gpg.ssh.program is not configured", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		local := newCfg()
 		global := newCfg()
