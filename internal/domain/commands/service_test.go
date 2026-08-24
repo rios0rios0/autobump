@@ -160,11 +160,7 @@ func TestResolveConfigKey(t *testing.T) {
 		t.Parallel()
 
 		// given
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 
 		// when
 		result := commands.ResolveConfigKey(globalConfig, langEntities.LanguageGo)
@@ -659,6 +655,23 @@ func TestRepoToProjectConfig(t *testing.T) {
 	})
 }
 
+// golangOnlyConfig is the smallest global config these cases need: a single language, so
+// a per-project override can be seen to add another without the result being ambiguous.
+func golangOnlyConfig() *entities.GlobalConfig {
+	return entitybuilders.NewGlobalConfigBuilder().
+		WithLanguagesConfig(map[string]entities.LanguageConfig{
+			"golang": {Extensions: []string{"go"}},
+		}).
+		BuildGlobalConfig()
+}
+
+// writeNamedProjectConfig writes a per-project config under the given file name, which is
+// the only thing that varies between the cases covering the four names AutoBump accepts.
+func writeNamedProjectConfig(t *testing.T, dir, name, content string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
+}
+
 func TestLoadProjectConfigOverrides(t *testing.T) {
 	t.Parallel()
 
@@ -667,11 +680,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 
 		// given
 		tmpDir := t.TempDir()
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -687,17 +696,9 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  python:\n    extensions:\n      - 'py'\n    version_files:\n      - path: 'custom_version.py'\n        patterns:\n          - '(__version__\\s*=\\s*\")\\d+\\.\\d+\\.\\d+(\")'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -715,11 +716,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		configContent := "github_access_token: 'ignored-token'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithGitHubAccessToken("original-token").
@@ -748,11 +745,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 			0o644,
 		))
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -768,17 +761,9 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  ruby:\n    extensions:\n      - 'rb'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 		originalLangsCount := len(globalConfig.LanguagesConfig)
 
@@ -797,11 +782,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  typescript:\n    version_files:\n      - path: 'opensearch_dashboards.json'\n        patterns:\n          - '(\"version\":\\s*\")\\d+\\.\\d+\\.\\d+(\")'  \n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
@@ -830,11 +811,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  java:\n    extensions:\n      - 'java'\n    special_patterns:\n      - 'pom.xml'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
@@ -859,17 +836,9 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  ruby:\n    extensions:\n      - 'rb'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -885,17 +854,9 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		configContent := "languages:\n  ruby:\n    extensions:\n      - 'rb'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, "autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, "autobump.yaml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -911,11 +872,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		configContent := "github_access_token: 'project-token'\nlanguages:\n  ruby:\n    extensions:\n      - 'rb'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithGitHubAccessToken("global-token").
@@ -939,11 +896,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		configContent := "changelog_path: 'docs/CHANGELOG.md'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
@@ -961,11 +914,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		// given
 		tmpDir := t.TempDir()
 		configContent := "changelog_path: 'docs/CHANGELOG.md'\n"
-		require.NoError(t, os.WriteFile(
-			filepath.Join(tmpDir, ".autobump.yaml"),
-			[]byte(configContent),
-			0o644,
-		))
+		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
@@ -987,11 +936,7 @@ func TestProcessRepo(t *testing.T) {
 		t.Parallel()
 
 		// given
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangOnlyConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().
 			WithPath("/nonexistent/path/that/does/not/exist").
 			BuildProjectConfig()

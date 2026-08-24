@@ -567,122 +567,104 @@ func TestRunControllerExecute(t *testing.T) {
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
 
+	const languages = "languages:\n  golang:\n    extensions:\n      - 'go'\n"
+	const githubProvider = "providers:\n  - type: 'github'\n    token: 'fake-token'\n" +
+		"    organizations:\n      - 'nonexistent-org'\n"
+
+	// Every case asserts the same thing, because it is the only thing Execute exposes:
+	// it logs and returns rather than reporting failure to its caller, so "did not
+	// panic" is the whole observable contract. What varies is the config it is handed.
+	testCases := []struct {
+		name string
+		// config receives the path of a repository with a releasable changelog, for the
+		// cases that need one to appear under `projects:`.
+		config  func(repoPath string) string
+		verbose bool
+	}{
+		{
+			name:   "should not panic when config has no providers and no projects",
+			config: func(string) string { return languages },
+		},
+		{
+			name: "should iterate projects when projects are configured",
+			config: func(repoPath string) string {
+				return languages + "projects:\n  - path: '" + repoPath + "'\n    language: 'golang'\n"
+			},
+		},
+		{
+			name: "should log error on invalid provider validation",
+			config: func(string) string {
+				return languages + "providers:\n  - type: ''\n    token: ''\n    organizations: []\n"
+			},
+		},
+		{
+			name: "should run both when both providers and projects exist",
+			config: func(repoPath string) string {
+				return languages + githubProvider +
+					"projects:\n  - path: '" + repoPath + "'\n    language: 'golang'\n"
+			},
+		},
+		{
+			name:    "should set verbose log level when verbose flag is set",
+			config:  func(string) string { return languages },
+			verbose: true,
+		},
+		{
+			name:   "should attempt discovery when providers are configured with valid type",
+			config: func(string) string { return languages + githubProvider },
+		},
+	}
+
 	t.Run("should not panic when config file is invalid", func(t *testing.T) {
 		// given
-		ctrl := controllers.NewRunController(registry)
-		cmd := newTestCmd()
-		require.NoError(t, cmd.Flags().Set("config", "/nonexistent/config.yaml"))
+		cmd := newRunControllerCmd(t, "/nonexistent/config.yaml", false)
 
 		// when / then
-		assert.NotPanics(t, func() {
-			ctrl.Execute(cmd, []string{})
-		})
+		assertRunControllerSurvives(t, registry, cmd)
 	})
 
-	t.Run("should not panic when config has no providers and no projects", func(t *testing.T) {
-		// given
-		cfgPath := writeConfigFile(t, "languages:\n  golang:\n    extensions:\n      - 'go'\n")
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// given
+			repoPath, _ := createTestRepo(t)
+			changelog := "# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-01-01\n\n" +
+				"### Added\n\n- added initial release\n"
+			require.NoError(
+				t,
+				os.WriteFile(filepath.Join(repoPath, "CHANGELOG.md"), []byte(changelog), 0o644),
+			)
 
-		ctrl := controllers.NewRunController(registry)
-		cmd := newTestCmd()
-		require.NoError(t, cmd.Flags().Set("config", cfgPath))
+			cfgPath := writeConfigFile(t, testCase.config(repoPath))
+			cmd := newRunControllerCmd(t, cfgPath, testCase.verbose)
 
-		// when / then
-		assert.NotPanics(t, func() {
-			ctrl.Execute(cmd, []string{})
+			// when / then
+			assertRunControllerSurvives(t, registry, cmd)
 		})
-	})
+	}
+}
 
-	t.Run("should iterate projects when projects are configured", func(t *testing.T) {
-		// given
-		repoPath, _ := createTestRepo(t)
-		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
-		content := "# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
-		require.NoError(t, os.WriteFile(changelogPath, []byte(content), 0o644))
+// newRunControllerCmd builds the cobra command the RunController reads its flags from.
+func newRunControllerCmd(t *testing.T, cfgPath string, verbose bool) *cobra.Command {
+	t.Helper()
 
-		cfgPath := writeConfigFile(
-			t,
-			"languages:\n  golang:\n    extensions:\n      - 'go'\nprojects:\n  - path: '"+repoPath+"'\n    language: 'golang'\n",
-		)
-
-		ctrl := controllers.NewRunController(registry)
-		cmd := newTestCmd()
-		require.NoError(t, cmd.Flags().Set("config", cfgPath))
-
-		// when / then
-		assert.NotPanics(t, func() {
-			ctrl.Execute(cmd, []string{})
-		})
-	})
-
-	t.Run("should log error on invalid provider validation", func(t *testing.T) {
-		// given
-		cfgPath := writeConfigFile(
-			t,
-			"languages:\n  golang:\n    extensions:\n      - 'go'\nproviders:\n  - type: ''\n    token: ''\n    organizations: []\n",
-		)
-
-		ctrl := controllers.NewRunController(registry)
-		cmd := newTestCmd()
-		require.NoError(t, cmd.Flags().Set("config", cfgPath))
-
-		// when / then
-		assert.NotPanics(t, func() {
-			ctrl.Execute(cmd, []string{})
-		})
-	})
-
-	t.Run("should run both when both providers and projects exist", func(t *testing.T) {
-		// given
-		repoPath, _ := createTestRepo(t)
-		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
-		content := "# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
-		require.NoError(t, os.WriteFile(changelogPath, []byte(content), 0o644))
-
-		cfgPath := writeConfigFile(
-			t,
-			"languages:\n  golang:\n    extensions:\n      - 'go'\nproviders:\n  - type: 'github'\n    token: 'fake-token'\n    organizations:\n      - 'nonexistent-org'\nprojects:\n  - path: '"+repoPath+"'\n    language: 'golang'\n",
-		)
-
-		ctrl := controllers.NewRunController(registry)
-		cmd := newTestCmd()
-		require.NoError(t, cmd.Flags().Set("config", cfgPath))
-
-		// when / then
-		assert.NotPanics(t, func() {
-			ctrl.Execute(cmd, []string{})
-		})
-	})
-
-	t.Run("should set verbose log level when verbose flag is set", func(t *testing.T) {
-		// given
-		cfgPath := writeConfigFile(t, "languages:\n  golang:\n    extensions:\n      - 'go'\n")
-
-		ctrl := controllers.NewRunController(registry)
-		cmd := newTestCmd()
+	cmd := newTestCmd()
+	if verbose {
 		require.NoError(t, cmd.Flags().Set("verbose", "true"))
-		require.NoError(t, cmd.Flags().Set("config", cfgPath))
+	}
+	require.NoError(t, cmd.Flags().Set("config", cfgPath))
 
-		// when / then
-		assert.NotPanics(t, func() {
-			ctrl.Execute(cmd, []string{})
-		})
-	})
+	return cmd
+}
 
-	t.Run("should attempt discovery when providers are configured with valid type", func(t *testing.T) {
-		// given
-		cfgPath := writeConfigFile(
-			t,
-			"languages:\n  golang:\n    extensions:\n      - 'go'\nproviders:\n  - type: 'github'\n    token: 'fake-token'\n    organizations:\n      - 'nonexistent-org'\n",
-		)
+// assertRunControllerSurvives runs the controller and asserts it did not panic, which is
+// the only outcome Execute makes visible.
+func assertRunControllerSurvives(
+	t *testing.T, registry *repositories.ProviderRegistry, cmd *cobra.Command,
+) {
+	t.Helper()
 
-		ctrl := controllers.NewRunController(registry)
-		cmd := newTestCmd()
-		require.NoError(t, cmd.Flags().Set("config", cfgPath))
-
-		// when / then
-		assert.NotPanics(t, func() {
-			ctrl.Execute(cmd, []string{})
-		})
+	ctrl := controllers.NewRunController(registry)
+	assert.NotPanics(t, func() {
+		ctrl.Execute(cmd, []string{})
 	})
 }

@@ -24,6 +24,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - removed the `//go:build unit` constraint from every unit test and the `integration || unit || test` one from the `entitybuilders`, so `go test ./...` and an IDE's run button execute the suite the pipeline has been executing all along. The tag never gated anything: an untagged file compiles under a `-tags` build too, so phase 1 (`-tags test,unit`) is unaffected, and phase 2 selects only the packages where the `integration` tag makes a test file *appear*, so nothing runs twice. `//go:build integration` remains the right tag for a test that needs real infrastructure
 - changed 300 subtests to call `t.Parallel()`, matching the parent that already declared it. `tparallel` had been reporting every one of them the moment the files stopped being hidden behind the tag
+- changed the repeated setup in the run-controller, project-override and config-discovery tests into tables and helpers. Those blocks were duplicated before this branch touched them; adding one line inside each is what made SonarCloud count them as new
 
 ### Security
 
@@ -35,6 +36,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed `refresh_commands: []` reading as an omission rather than as a deliberate clear, which left a project unable to opt out of a refresh its language configured for everyone
 - fixed `TestVersionCommand` racing against itself. Both of its cases assign the `AutobumpVersion` package global and swap `os.Stdout`, which is process-wide, while the function declared `t.Parallel()`; the race detector reports it as soon as the file is visible. It is serial at both levels now, and the 23 other tests that cannot be parallel say why in a comment on the function rather than in a `//nolint` directive, where no reader looks
 - fixed the `errcheck`, `testifylint`, `unparam`, `usetesting`, `reassign`, `unlambda` and `nolintlint` findings the tag had been hiding from `make lint`: the four builders' unchecked type assertions now go through one `cloneBase` helper that panics on a mismatch instead of returning a nil builder, error assertions use `require`, two helpers no longer return a value nobody reads, and a temporary directory is `t.TempDir()`
+- fixed `TestFindProjectConfigFile` asserting with `assert.YAMLEq` on two file *paths*, which parses each as a YAML scalar and therefore passed regardless of what `FindProjectConfigFile` returned. It is `assert.Equal` now, and preference is checked against all three alternative names rather than two
 
 ## [2.36.3] - 2026-08-24
 

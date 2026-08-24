@@ -269,68 +269,56 @@ func TestMergeLanguagesConfig(t *testing.T) {
 	})
 }
 
+// writeNamedConfig writes a minimal per-project config under name and returns its path.
+func writeNamedConfig(t *testing.T, dir, name string) string {
+	t.Helper()
+
+	path := filepath.Join(dir, name)
+	require.NoError(t, os.WriteFile(path, []byte("languages: {}"), 0o644))
+
+	return path
+}
+
 func TestFindProjectConfigFile(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should find .autobump.yaml in project directory", func(t *testing.T) {
-		t.Parallel()
+	// The four names AutoBump accepts, in the order it prefers them.
+	acceptedNames := []string{".autobump.yaml", ".autobump.yml", "autobump.yaml", "autobump.yml"}
 
-		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, ".autobump.yaml")
-		require.NoError(t, os.WriteFile(configPath, []byte("languages: {}"), 0o644))
+	for _, name := range acceptedNames {
+		t.Run("should find "+name+" in project directory", func(t *testing.T) {
+			t.Parallel()
 
-		// when
-		result := entities.FindProjectConfigFile(tmpDir)
+			// given
+			tmpDir := t.TempDir()
+			configPath := writeNamedConfig(t, tmpDir, name)
 
-		// then
-		assert.Equal(t, configPath, result)
-	})
+			// when
+			result := entities.FindProjectConfigFile(tmpDir)
 
-	t.Run("should find .autobump.yml in project directory", func(t *testing.T) {
-		t.Parallel()
+			// then
+			assert.Equal(t, configPath, result)
+		})
+	}
 
-		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, ".autobump.yml")
-		require.NoError(t, os.WriteFile(configPath, []byte("languages: {}"), 0o644))
+	// Preference follows the order above, so every other name is checked against the
+	// first: whichever pair is on disk, .autobump.yaml has to win.
+	for _, lessPreferred := range acceptedNames[1:] {
+		t.Run("should prefer .autobump.yaml over "+lessPreferred, func(t *testing.T) {
+			t.Parallel()
 
-		// when
-		result := entities.FindProjectConfigFile(tmpDir)
+			// given
+			tmpDir := t.TempDir()
+			preferred := writeNamedConfig(t, tmpDir, ".autobump.yaml")
+			writeNamedConfig(t, tmpDir, lessPreferred)
 
-		// then
-		assert.Equal(t, configPath, result)
-	})
+			// when
+			result := entities.FindProjectConfigFile(tmpDir)
 
-	t.Run("should find autobump.yaml in project directory", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, "autobump.yaml")
-		require.NoError(t, os.WriteFile(configPath, []byte("languages: {}"), 0o644))
-
-		// when
-		result := entities.FindProjectConfigFile(tmpDir)
-
-		// then
-		assert.Equal(t, configPath, result)
-	})
-
-	t.Run("should find autobump.yml in project directory", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, "autobump.yml")
-		require.NoError(t, os.WriteFile(configPath, []byte("languages: {}"), 0o644))
-
-		// when
-		result := entities.FindProjectConfigFile(tmpDir)
-
-		// then
-		assert.Equal(t, configPath, result)
-	})
+			// then
+			assert.Equal(t, preferred, result)
+		})
+	}
 
 	t.Run("should return empty string when no config file exists", func(t *testing.T) {
 		t.Parallel()
@@ -343,40 +331,6 @@ func TestFindProjectConfigFile(t *testing.T) {
 
 		// then
 		assert.Empty(t, result)
-	})
-
-	t.Run("should prefer .autobump.yaml over .autobump.yml", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		yamlPath := filepath.Join(tmpDir, ".autobump.yaml")
-		ymlPath := filepath.Join(tmpDir, ".autobump.yml")
-		require.NoError(t, os.WriteFile(yamlPath, []byte("languages: {}"), 0o644))
-		require.NoError(t, os.WriteFile(ymlPath, []byte("languages: {}"), 0o644))
-
-		// when
-		result := entities.FindProjectConfigFile(tmpDir)
-
-		// then
-		assert.YAMLEq(t, yamlPath, result)
-	})
-
-	t.Run("should prefer .autobump.yaml over autobump.yaml", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		dotPath := filepath.Join(tmpDir, ".autobump.yaml")
-		plainPath := filepath.Join(tmpDir, "autobump.yaml")
-		require.NoError(t, os.WriteFile(dotPath, []byte("languages: {}"), 0o644))
-		require.NoError(t, os.WriteFile(plainPath, []byte("languages: {}"), 0o644))
-
-		// when
-		result := entities.FindProjectConfigFile(tmpDir)
-
-		// then
-		assert.Equal(t, dotPath, result)
 	})
 
 	t.Run("should return empty string when directory does not exist", func(t *testing.T) {
