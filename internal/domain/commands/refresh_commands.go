@@ -20,6 +20,17 @@ import (
 // batch and discover modes means every repository queued behind it.
 const refreshCommandTimeout = 10 * time.Minute
 
+// refreshCommandWaitDelay bounds how long Wait keeps reading output after the command
+// itself has exited.
+//
+// The timeout above only governs the process AutoBump starts. A command is free to
+// leave a descendant running — `sh -c` makes that a one-liner — and that descendant
+// inherits the write end of the output pipe, so Wait would keep blocking on a process
+// no cancellation reaches. WaitDelay is the standard-library answer: once the direct
+// child is gone, Wait gives the pipes this long and then abandons them, which is what
+// makes the advertised bound real rather than advisory.
+const refreshCommandWaitDelay = 10 * time.Second
+
 // ErrRefreshCommandEmpty is returned when a configured refresh command has no
 // executable. An empty `run` is a typo in the config rather than a repository state
 // worth tolerating, so it is reported instead of skipped.
@@ -48,7 +59,10 @@ func runRefreshCommands(
 
 	var refreshed []string
 	for _, refreshCommand := range languageConfig.RefreshCommands {
-		if err := runRefreshCommand(projectConfig.Path, refreshCommand); err != nil {
+		err := runRefreshCommand(
+			projectConfig.Path, refreshCommand, refreshCommandTimeout, refreshCommandWaitDelay,
+		)
+		if err != nil {
 			return nil, err
 		}
 
@@ -66,30 +80,53 @@ func runRefreshCommands(
 // directory. Output is captured rather than streamed so that a failure can report
 // what the command actually said — a package manager's diagnosis of an unresolvable
 // range is the only useful thing in the error.
-func runRefreshCommand(projectPath string, refreshCommand entities.RefreshCommand) error {
+//
+// timeout and waitDelay are parameters rather than reads of the two constants so the
+// tests can exercise both bounds without waiting minutes for them.
+func runRefreshCommand(
+	projectPath string,
+	refreshCommand entities.RefreshCommand,
+	timeout time.Duration,
+	waitDelay time.Duration,
+) error {
 	if len(refreshCommand.Run) == 0 {
 		return ErrRefreshCommandEmpty
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), refreshCommandTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	printable := strings.Join(refreshCommand.Run, " ")
 	logger.Infof("Running refresh command: %s", printable)
 
-	//nolint:gosec // G204: the command comes from the operator's own configuration file,
-	// which already names the repositories AutoBump clones, commits to and pushes.
+	//nolint:gosec // G204: refresh commands are only read from the operator's own global
+	// configuration. entities.SanitizeUntrustedLanguages drops any that a released
+	// repository declares in its own .autobump.yaml, so a discovered repository cannot
+	// reach this call.
 	command := exec.CommandContext(ctx, refreshCommand.Run[0], refreshCommand.Run[1:]...)
 	command.Dir = projectPath
+	command.WaitDelay = waitDelay
+	configureProcessGroup(command)
 
 	output, err := command.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf(
-			"refresh command %q failed: %w\n%s", printable, err, strings.TrimSpace(string(output)),
+	trimmed := strings.TrimSpace(string(output))
+
+	// A command that exited cleanly but left something behind holding the pipe reports
+	// ErrWaitDelay. The release is not in question — only the tail of the output is — so
+	// it is worth saying out loud and worth not failing over.
+	if errors.Is(err, exec.ErrWaitDelay) {
+		logger.Warnf(
+			"Refresh command %q exited but left a process holding its output open; "+
+				"stopped reading after %s", printable, waitDelay,
 		)
+		return nil
 	}
 
-	logger.Debugf("Refresh command %q output:\n%s", printable, strings.TrimSpace(string(output)))
+	if err != nil {
+		return fmt.Errorf("refresh command %q failed: %w\n%s", printable, err, trimmed)
+	}
+
+	logger.Debugf("Refresh command %q output:\n%s", printable, trimmed)
 	return nil
 }
 

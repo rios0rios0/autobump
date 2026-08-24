@@ -20,6 +20,15 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added `refresh_commands` to the language configuration, so a project can regenerate the files that derive from its version files — a lockfile above all — inside the bump commit. AutoBump rewrites version files by regex and never ran a package manager, so a bump that moved the range one workspace package declares on its sibling left `yarn.lock` holding the old resolution descriptor, and the first CI job running `yarn install --immutable` rejected the release the pull request was opened to validate. The commands run after the rewrite, only the files they declare are staged, and a failure aborts the release rather than opening a pull request that cannot pass
 
+### Security
+
+- restricted `refresh_commands` to the operator's global configuration. `loadProjectConfigOverrides` reads `.autobump.yaml` out of the repository being released, which in `run` mode is one AutoBump discovered rather than one anybody vetted, so a command declared there would have executed with the runner's provider credentials. `SanitizeUntrustedLanguages` drops any non-empty list arriving on that path; an empty list still passes, because clearing only ever removes execution and a project has to be able to opt out
+
+### Fixed
+
+- fixed a refresh command being able to outlive its timeout. The 10-minute context only ever governed the process AutoBump started, so a command that left a descendant running — one `sh -c` away — kept the output pipe open and blocked the call for as long as that descendant lived. The command now runs in its own process group and the group is killed on cancellation, with `WaitDelay` bounding the read at 10 seconds after the command itself exits
+- fixed `refresh_commands: []` reading as an omission rather than as a deliberate clear, which left a project unable to opt out of a refresh its language configured for everyone
+
 ## [2.36.3] - 2026-08-24
 
 ### Changed

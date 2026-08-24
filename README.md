@@ -258,7 +258,7 @@ The keys recognized in a per-project file are:
 | `changelog_path`   | Custom changelog filename relative to the project root (e.g. `CHANGELOG_PROPRIETARY.md`) |
 | `versioning`       | Versioning mode: `semver` (default), `fork-dot`, or `fork-dash`                      |
 | `detect_chlog`     | Set to `false` to ignore [chlog](#fragment-based-changelogs-chlog) fragments (detection is on by default) |
-| `languages`        | Per-language overrides for `extensions`, `special_patterns`, `version_files`, and `refresh_commands` |
+| `languages`        | Per-language overrides for `extensions`, `special_patterns`, and `version_files`. `refresh_commands` can only be *cleared* here — see [Refresh Commands](#refresh-commands) |
 
 ```yaml
 # .autobump.yaml at the root of a fork repository
@@ -299,6 +299,14 @@ languages:
 | `run`   | The command and its arguments. Executed directly, not through a shell — put `sh -c` in the list if you want one |
 | `files` | Glob patterns, relative to the project root, naming what the command regenerates. Only these are staged |
 
+> **Refresh commands are only read from your global configuration.** They are the one
+> language field a per-project `.autobump.yaml` cannot set, because AutoBump loads that
+> file *from the repository it is releasing* — in `run` mode, a repository it discovered
+> rather than one you wrote. Honouring a command from there would let anything in a
+> scanned organisation execute code with the runner's credentials. A project file may
+> still write `refresh_commands: []` to opt **out**, since clearing only ever removes
+> execution; a non-empty list is dropped with a warning.
+
 Notes worth knowing before you configure one:
 
 - **Scope the `files` narrowly.** Staging is limited to what you declare, so a refresh
@@ -314,7 +322,10 @@ Notes worth knowing before you configure one:
   write a `package-lock.json` into a repository that has no business carrying one.
 - **Fork versioning skips them**, because it rewrites no version file in the first place.
 - Each command is given 10 minutes before it is killed, so a resolution hanging on an
-  unreachable registry cannot stall every repository queued behind it.
+  unreachable registry cannot stall every repository queued behind it. The command runs in
+  its own process group and the whole group is killed, so a shell's children go with it;
+  on top of that, AutoBump stops reading output 10 seconds after the command itself exits,
+  which bounds the call even when something it spawned still holds the pipe open.
 
 Other ecosystems fit the same shape:
 

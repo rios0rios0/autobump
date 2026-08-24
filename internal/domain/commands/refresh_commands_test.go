@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -237,6 +238,61 @@ func TestRunRefreshCommands(t *testing.T) {
 		// then
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "autobump-no-such-package-manager")
+	})
+}
+
+// TestRunRefreshCommandBounds covers the two ways a command can outlive the call, both
+// of which need a real child process to reproduce. The bounds are passed in so the
+// cases finish in milliseconds instead of the ten minutes the constants specify.
+func TestRunRefreshCommandBounds(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should stop waiting when the command leaves a process holding its output", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		// The shell exits at once and leaves `sleep` holding the write end of the output
+		// pipe. Without a wait delay the call blocks for the sleep's full duration, which
+		// the command's own timeout never reaches because the process it names is gone.
+		refreshCommand := entities.RefreshCommand{
+			Run:   []string{"sh", "-c", "sleep 30 &"},
+			Files: []string{"yarn.lock"},
+		}
+
+		// when
+		started := time.Now()
+		err := commands.RunRefreshCommand(t.TempDir(), refreshCommand, time.Minute, 200*time.Millisecond)
+		elapsed := time.Since(started)
+
+		// then
+		require.NoError(t, err)
+		assert.Less(t, elapsed, 10*time.Second, "the call should have abandoned the pipe, not waited for the sleep")
+	})
+
+	t.Run("should kill the whole process group when the command outruns its timeout", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		// The shell waits, so the process that has to die is the grandchild. Killing only
+		// the process AutoBump started would leave it running and let it create the file.
+		dir := t.TempDir()
+		refreshCommand := entities.RefreshCommand{
+			Run:   []string{"sh", "-c", "(sleep 2; touch survivor.txt) & wait"},
+			Files: []string{"survivor.txt"},
+		}
+
+		// when
+		started := time.Now()
+		err := commands.RunRefreshCommand(dir, refreshCommand, 200*time.Millisecond, time.Second)
+		elapsed := time.Since(started)
+
+		// then
+		require.Error(t, err)
+		assert.Less(t, elapsed, 10*time.Second)
+
+		// The grandchild would have created the file by now had it survived the kill.
+		time.Sleep(3 * time.Second)
+		assert.NoFileExists(t, filepath.Join(dir, "survivor.txt"))
 	})
 }
 

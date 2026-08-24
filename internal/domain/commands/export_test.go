@@ -173,3 +173,6 @@ var RunRefreshCommands = runRefreshCommands //nolint:gochecknoglobals // test ex
 
 // ResolveRefreshedFiles exports resolveRefreshedFiles for testing.
 var ResolveRefreshedFiles = resolveRefreshedFiles //nolint:gochecknoglobals // test export
+
+// RunRefreshCommand exports runRefreshCommand for testing.
+var RunRefreshCommand = runRefreshCommand //nolint:gochecknoglobals // test export

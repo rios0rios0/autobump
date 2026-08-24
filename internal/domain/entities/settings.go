@@ -352,6 +352,11 @@ func ValidateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 // package manager, and appending one to another would run both: an `npm` default
 // left in place under a `yarn` override would write a `package-lock.json` into a
 // repository that has no business carrying one.
+//
+// Replacement is keyed on the field being *present*, not on it being non-empty, so
+// an explicit `refresh_commands: []` clears a globally configured command instead of
+// reading as an omission. Without that distinction a project could never opt out of
+// a refresh its language configures for everyone.
 func MergeLanguagesConfig(
 	defaults, overrides map[string]LanguageConfig,
 ) map[string]LanguageConfig {
@@ -374,7 +379,7 @@ func MergeLanguagesConfig(
 		if len(override.VersionFiles) > 0 {
 			base.VersionFiles = mergeVersionFiles(base.VersionFiles, override.VersionFiles)
 		}
-		if len(override.RefreshCommands) > 0 {
+		if override.RefreshCommands != nil {
 			base.RefreshCommands = slices.Clone(override.RefreshCommands)
 		}
 
@@ -447,13 +452,56 @@ func ReadProjectConfig(configPath string) (*GlobalConfig, error) {
 // CopyGlobalConfigWithLanguageOverrides creates a shallow copy of the given GlobalConfig
 // and replaces its LanguagesConfig with the result of merging the original languages
 // with the provided overrides. The original config is not mutated.
+//
+// The overrides here come from a `.autobump.yaml` inside the repository being released,
+// which in `run` mode is a repository AutoBump discovered rather than one the operator
+// wrote. They are therefore untrusted, and passed through SanitizeUntrustedLanguages
+// before the merge.
 func CopyGlobalConfigWithLanguageOverrides(
 	original *GlobalConfig,
 	languageOverrides map[string]LanguageConfig,
 ) *GlobalConfig {
 	copied := *original
-	copied.LanguagesConfig = MergeLanguagesConfig(original.LanguagesConfig, languageOverrides)
+	copied.LanguagesConfig = MergeLanguagesConfig(
+		original.LanguagesConfig, SanitizeUntrustedLanguages(languageOverrides),
+	)
 	return &copied
+}
+
+// SanitizeUntrustedLanguages strips what a repository-owned config file is not allowed
+// to say. It returns a copy; the input is not mutated.
+//
+// Only refresh commands are stripped, and only when they would *introduce* one. Every
+// other language field describes how to find and rewrite a version string, which is
+// bounded by what a regular expression can do to a file AutoBump was already going to
+// rewrite. A refresh command is different in kind: it is an executable, run with the
+// runner's environment and provider credentials, before the pull request is opened.
+// Honouring one from a discovered repository would let anything in a scanned
+// organisation execute code on the machine doing the release.
+//
+// Clearing is still allowed, because an empty list only ever removes execution: a
+// project that cannot use its language's configured refresh must be able to say so.
+// That is why the check is on the contents rather than on presence.
+func SanitizeUntrustedLanguages(overrides map[string]LanguageConfig) map[string]LanguageConfig {
+	if len(overrides) == 0 {
+		return overrides
+	}
+
+	sanitized := make(map[string]LanguageConfig, len(overrides))
+	for lang, override := range overrides {
+		if len(override.RefreshCommands) > 0 {
+			logger.Warnf(
+				"Ignoring %d refresh command(s) declared for language %q by the project's own "+
+					"config: refresh commands are executables and are only honoured from the "+
+					"global configuration",
+				len(override.RefreshCommands), lang,
+			)
+			override.RefreshCommands = nil
+		}
+		sanitized[lang] = override
+	}
+
+	return sanitized
 }
 
 // FindConfigOnMissing finds the config file if not manually set.
