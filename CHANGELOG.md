@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `refresh_commands` to the language configuration, so a project can regenerate the files that derive from its version files — a lockfile above all — inside the bump commit. AutoBump rewrites version files by regex and never ran a package manager, so a bump that moved the range one workspace package declares on its sibling left `yarn.lock` holding the old resolution descriptor, and the first CI job running `yarn install --immutable` rejected the release the pull request was opened to validate. The commands run after the rewrite, only the files they declare are staged, and a failure aborts the release rather than opening a pull request that cannot pass
+
 ## [2.36.3] - 2026-08-24
 
 ### Changed

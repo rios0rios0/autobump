@@ -64,15 +64,37 @@ type ProviderConfig = configEntities.ProviderConfig
 
 // LanguageConfig holds per-language detection and versioning rules.
 type LanguageConfig struct {
-	Extensions      []string      `yaml:"extensions"`
-	SpecialPatterns []string      `yaml:"special_patterns"`
-	VersionFiles    []VersionFile `yaml:"version_files"`
+	Extensions      []string         `yaml:"extensions"`
+	SpecialPatterns []string         `yaml:"special_patterns"`
+	VersionFiles    []VersionFile    `yaml:"version_files"`
+	RefreshCommands []RefreshCommand `yaml:"refresh_commands"`
 }
 
 // VersionFile describes a file that contains version information.
 type VersionFile struct {
 	Path     string   `yaml:"path"`
 	Patterns []string `yaml:"patterns"`
+}
+
+// RefreshCommand regenerates the files that derive from a version file AutoBump has
+// just rewritten, so they travel in the bump commit instead of drifting until a
+// pipeline rejects the release.
+//
+// A lockfile is the motivating case: bumping the range one workspace package declares
+// on its sibling invalidates the resolution descriptor recorded in `yarn.lock`, and a
+// CI job running `yarn install --immutable` then refuses the install the bump PR was
+// opened to validate. AutoBump cannot know that relationship — only the package
+// manager does — so it runs the command that does and stages what the command wrote.
+type RefreshCommand struct {
+	// Run is the command and its arguments, executed directly rather than through a
+	// shell so that quoting and interpolation cannot change what runs.
+	Run []string `yaml:"run"`
+
+	// Files are glob patterns, relative to the project root, naming what the command
+	// regenerates. Only these are staged: a refresh must not sweep unrelated work
+	// into the release commit, which is a real risk in `local` mode where the
+	// operator's own uncommitted changes sit in the same worktree.
+	Files []string `yaml:"files"`
 }
 
 // ProjectConfig holds per-project configuration.
@@ -325,6 +347,11 @@ func ValidateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 // Version files with the same path are replaced; new paths are appended.
 // Extensions and special patterns from defaults are preserved when the user
 // provides only version files. New languages are added wholesale.
+//
+// Refresh commands are the one field that replaces rather than merges. They name a
+// package manager, and appending one to another would run both: an `npm` default
+// left in place under a `yarn` override would write a `package-lock.json` into a
+// repository that has no business carrying one.
 func MergeLanguagesConfig(
 	defaults, overrides map[string]LanguageConfig,
 ) map[string]LanguageConfig {
@@ -346,6 +373,9 @@ func MergeLanguagesConfig(
 		}
 		if len(override.VersionFiles) > 0 {
 			base.VersionFiles = mergeVersionFiles(base.VersionFiles, override.VersionFiles)
+		}
+		if len(override.RefreshCommands) > 0 {
+			base.RefreshCommands = slices.Clone(override.RefreshCommands)
 		}
 
 		result[lang] = base

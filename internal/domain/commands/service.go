@@ -498,6 +498,10 @@ func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) erro
 
 	ctx.ProjectConfig.NewVersion = version
 	mode := entities.ResolveVersioning(ctx.GlobalConfig, ctx.ProjectConfig)
+
+	// Refresh commands regenerate what the version files derive; fork mode rewrites no
+	// version file, so there is nothing derived for them to catch up with.
+	var refreshedFiles []string
 	if IsForkVersioning(mode) {
 		logger.Infof(
 			"Fork versioning mode %q is active; skipping language-specific version file updates for %s",
@@ -506,6 +510,11 @@ func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) erro
 	} else {
 		logger.Infof("Updating version to %s", ctx.ProjectConfig.NewVersion)
 		err = updateVersion(ctx.GlobalConfig, ctx.ProjectConfig)
+		if err != nil {
+			return err
+		}
+
+		refreshedFiles, err = runRefreshCommands(ctx.GlobalConfig, ctx.ProjectConfig)
 		if err != nil {
 			return err
 		}
@@ -518,7 +527,7 @@ func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) erro
 		return err
 	}
 
-	return addFilesToWorktree(ctx, changelogPath, consumedFragments)
+	return addFilesToWorktree(ctx, changelogPath, refreshedFiles, consumedFragments)
 }
 
 // consumeChlogFragments deletes the chlog fragments that were just released and returns
@@ -543,7 +552,12 @@ func consumeChlogFragments(ctx *RepoContext) ([]string, error) {
 	return deleted, nil
 }
 
-func addFilesToWorktree(ctx *RepoContext, changelogPath string, removedPaths []string) error {
+func addFilesToWorktree(
+	ctx *RepoContext,
+	changelogPath string,
+	refreshedPaths []string,
+	removedPaths []string,
+) error {
 	versionFiles, err := getVersionFiles(ctx.GlobalConfig, ctx.ProjectConfig)
 	if err != nil {
 		return err
@@ -566,6 +580,22 @@ func addFilesToWorktree(ctx *RepoContext, changelogPath string, removedPaths []s
 		_, err = ctx.Worktree.Add(versionFileRelativePath)
 		if err != nil {
 			return fmt.Errorf("failed to add version file: %w", err)
+		}
+	}
+
+	// The refreshed files are staged separately from the version files because nothing
+	// AutoBump rewrote points at them: they are whatever the refresh command declared,
+	// and only the command knows they moved.
+	for _, refreshedPath := range refreshedPaths {
+		var refreshedRelativePath string
+		refreshedRelativePath, err = filepath.Rel(projectPath, refreshedPath)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path for refreshed file: %w", err)
+		}
+
+		logger.Infof("Adding refreshed file %s", refreshedRelativePath)
+		if _, err = ctx.Worktree.Add(refreshedRelativePath); err != nil {
+			return fmt.Errorf("failed to add refreshed file: %w", err)
 		}
 	}
 

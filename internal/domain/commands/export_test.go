@@ -167,3 +167,9 @@ var GetLanguageInterface = getLanguageInterface //nolint:gochecknoglobals // tes
 
 // FilterStaleBumpBranches exports filterStaleBumpBranches for testing.
 var FilterStaleBumpBranches = filterStaleBumpBranches //nolint:gochecknoglobals // test export
+
+// RunRefreshCommands exports runRefreshCommands for testing.
+var RunRefreshCommands = runRefreshCommands //nolint:gochecknoglobals // test export
+
+// ResolveRefreshedFiles exports resolveRefreshedFiles for testing.
+var ResolveRefreshedFiles = resolveRefreshedFiles //nolint:gochecknoglobals // test export

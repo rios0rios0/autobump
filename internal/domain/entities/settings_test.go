@@ -181,6 +181,52 @@ func TestMergeLanguagesConfig(t *testing.T) {
 		ts := result["typescript"]
 		assert.Equal(t, []string{"ts", "tsx"}, ts.Extensions)
 	})
+
+	t.Run("should replace refresh commands when user provides their own", func(t *testing.T) {
+		// given
+		withDefaultCommand := map[string]entities.LanguageConfig{
+			"typescript": {
+				RefreshCommands: []entities.RefreshCommand{
+					{Run: []string{"npm", "install", "--package-lock-only"}, Files: []string{"package-lock.json"}},
+				},
+			},
+		}
+		overrides := map[string]entities.LanguageConfig{
+			"typescript": {
+				RefreshCommands: []entities.RefreshCommand{
+					{Run: []string{"yarn", "install", "--mode=update-lockfile"}, Files: []string{"yarn.lock"}},
+				},
+			},
+		}
+
+		// when
+		result := entities.MergeLanguagesConfig(withDefaultCommand, overrides)
+
+		// then
+		ts := result["typescript"]
+		assert.Equal(t, overrides["typescript"].RefreshCommands, ts.RefreshCommands)
+	})
+
+	t.Run("should keep default refresh commands when user provides none", func(t *testing.T) {
+		// given
+		withDefaultCommand := map[string]entities.LanguageConfig{
+			"typescript": {
+				RefreshCommands: []entities.RefreshCommand{
+					{Run: []string{"npm", "install", "--package-lock-only"}, Files: []string{"package-lock.json"}},
+				},
+			},
+		}
+		overrides := map[string]entities.LanguageConfig{
+			"typescript": {Extensions: []string{"tsx"}},
+		}
+
+		// when
+		result := entities.MergeLanguagesConfig(withDefaultCommand, overrides)
+
+		// then
+		ts := result["typescript"]
+		assert.Equal(t, withDefaultCommand["typescript"].RefreshCommands, ts.RefreshCommands)
+	})
 }
 
 func TestFindProjectConfigFile(t *testing.T) {

@@ -275,7 +275,7 @@ func TestAddFilesToWorktree(t *testing.T) {
 		}
 
 		// when
-		err = commands.AddFilesToWorktree(ctx, changelogPath, nil)
+		err = commands.AddFilesToWorktree(ctx, changelogPath, nil, nil)
 
 		// then
 		require.NoError(t, err)
@@ -329,6 +329,107 @@ func TestUpdateChangelogAndVersionFiles(t *testing.T) {
 		pomContent, readErr := os.ReadFile(pomPath)
 		require.NoError(t, readErr)
 		assert.Contains(t, string(pomContent), "<version>1.1.0</version>")
+	})
+
+	t.Run("should stage the refreshed file when a refresh command regenerates it", func(t *testing.T) {
+		// given
+		repoPath, repo := createTestRepo(t)
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+
+		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
+		changelogContent := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- added feature\n\n" +
+			"## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
+		require.NoError(t, os.WriteFile(changelogPath, []byte(changelogContent), 0o644))
+
+		packagePath := filepath.Join(repoPath, "package.json")
+		require.NoError(t, os.WriteFile(packagePath, []byte("{\n  \"version\": \"1.0.0\",\n}\n"), 0o644))
+
+		ctx := &commands.RepoContext{
+			Repo:     repo,
+			Worktree: wt,
+			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
+				WithLanguagesConfig(map[string]entities.LanguageConfig{
+					"typescript": {
+						VersionFiles: []entities.VersionFile{
+							{Path: "package.json", Patterns: []string{`(\s*"version":\s*")\d+\.\d+\.\d+(",)`}},
+						},
+						// Copying the rewritten version out of package.json is what proves the
+						// command ran after the rewrite rather than before it.
+						RefreshCommands: []entities.RefreshCommand{
+							{
+								Run:   []string{"sh", "-c", "grep version package.json > yarn.lock"},
+								Files: []string{"yarn.lock"},
+							},
+						},
+					},
+				}).BuildGlobalConfig(),
+			ProjectConfig: entitybuilders.NewProjectConfigBuilder().
+				WithPath(repoPath).
+				WithLanguage("typescript").
+				BuildProjectConfig(),
+		}
+
+		// when
+		err = commands.UpdateChangelogAndVersionFiles(ctx, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "1.1.0", ctx.ProjectConfig.NewVersion)
+
+		lockContent, readErr := os.ReadFile(filepath.Join(repoPath, "yarn.lock"))
+		require.NoError(t, readErr)
+		assert.Contains(t, string(lockContent), "1.1.0")
+
+		status, statusErr := wt.Status()
+		require.NoError(t, statusErr)
+		assert.Contains(t, status, "yarn.lock")
+		assert.Contains(t, status, "package.json")
+		assert.Contains(t, status, "CHANGELOG.md")
+	})
+
+	t.Run("should fail the release when a refresh command fails", func(t *testing.T) {
+		// given
+		repoPath, repo := createTestRepo(t)
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+
+		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
+		changelogContent := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- added feature\n\n" +
+			"## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
+		require.NoError(t, os.WriteFile(changelogPath, []byte(changelogContent), 0o644))
+
+		packagePath := filepath.Join(repoPath, "package.json")
+		require.NoError(t, os.WriteFile(packagePath, []byte("{\n  \"version\": \"1.0.0\",\n}\n"), 0o644))
+
+		ctx := &commands.RepoContext{
+			Repo:     repo,
+			Worktree: wt,
+			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
+				WithLanguagesConfig(map[string]entities.LanguageConfig{
+					"typescript": {
+						VersionFiles: []entities.VersionFile{
+							{Path: "package.json", Patterns: []string{`(\s*"version":\s*")\d+\.\d+\.\d+(",)`}},
+						},
+						RefreshCommands: []entities.RefreshCommand{
+							{Run: []string{"sh", "-c", "exit 1"}, Files: []string{"yarn.lock"}},
+						},
+					},
+				}).BuildGlobalConfig(),
+			ProjectConfig: entitybuilders.NewProjectConfigBuilder().
+				WithPath(repoPath).
+				WithLanguage("typescript").
+				BuildProjectConfig(),
+		}
+
+		// when
+		err = commands.UpdateChangelogAndVersionFiles(ctx, changelogPath)
+
+		// then
+		require.Error(t, err)
+		status, statusErr := wt.Status()
+		require.NoError(t, statusErr)
+		assert.NotContains(t, status, "yarn.lock")
 	})
 }
 
@@ -988,7 +1089,7 @@ func TestAddFilesToWorktreeExtended(t *testing.T) {
 		}
 
 		// when
-		err = commands.AddFilesToWorktree(ctx, changelogPath, nil)
+		err = commands.AddFilesToWorktree(ctx, changelogPath, nil, nil)
 
 		// then
 		require.NoError(t, err)
@@ -1015,7 +1116,7 @@ func TestAddFilesToWorktreeExtended(t *testing.T) {
 		}
 
 		// when
-		err = commands.AddFilesToWorktree(ctx, changelogPath, nil)
+		err = commands.AddFilesToWorktree(ctx, changelogPath, nil, nil)
 
 		// then
 		require.NoError(t, err)
