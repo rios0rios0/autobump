@@ -258,7 +258,7 @@ The keys recognized in a per-project file are:
 | `changelog_path`   | Custom changelog filename relative to the project root (e.g. `CHANGELOG_PROPRIETARY.md`) |
 | `versioning`       | Versioning mode: `semver` (default), `fork-dot`, or `fork-dash`                      |
 | `detect_chlog`     | Set to `false` to ignore [chlog](#fragment-based-changelogs-chlog) fragments (detection is on by default) |
-| `languages`        | Per-language overrides for `extensions`, `special_patterns`, and `version_files`     |
+| `languages`        | Per-language overrides for `extensions`, `special_patterns`, and `version_files`. `refresh_commands` can only be *cleared* here — see [Refresh Commands](#refresh-commands) |
 
 ```yaml
 # .autobump.yaml at the root of a fork repository
@@ -269,6 +269,81 @@ versioning: 'fork-dot'
 The same keys can also be set at the global level in `~/.config/autobump.yaml`
 (under the project entry, or as top-level defaults applied to every project).
 Project-level values always win over global ones.
+
+## Refresh Commands
+
+AutoBump rewrites version files with regular expressions. It never runs a package
+manager, so anything *derived* from a version file is left behind — and a lockfile is
+derived from one. Bump the range a workspace package declares on its sibling and
+`yarn.lock` still records the old resolution descriptor, at which point the first CI job
+running `yarn install --immutable` rejects the very pull request the bump opened:
+
+```
+YN0028: The lockfile would have been modified by this install, which is explicitly forbidden.
+```
+
+`refresh_commands` closes that gap. Each entry names a command and the files it
+regenerates; the commands run after the version files are rewritten and before anything
+is committed, and only the declared files are staged:
+
+```yaml
+languages:
+  typescript:
+    refresh_commands:
+      - run: ['yarn', 'install', '--mode=update-lockfile']
+        files: ['yarn.lock']
+```
+
+| Key     | Purpose                                                                                          |
+|---------|--------------------------------------------------------------------------------------------------|
+| `run`   | The command and its arguments. Executed directly, not through a shell — put `sh -c` in the list if you want one |
+| `files` | Glob patterns, relative to the project root, naming what the command regenerates. Only these are staged |
+
+> **Refresh commands are only read from your global configuration.** They are the one
+> language field a per-project `.autobump.yaml` cannot set, because AutoBump loads that
+> file *from the repository it is releasing* — in `run` mode, a repository it discovered
+> rather than one you wrote. Honouring a command from there would let anything in a
+> scanned organisation execute code with the runner's credentials. A project file may
+> still write `refresh_commands: []` to opt **out**, since clearing only ever removes
+> execution; a non-empty list is dropped with a warning.
+
+Notes worth knowing before you configure one:
+
+- **Scope the `files` narrowly.** Staging is limited to what you declare, so a refresh
+  cannot sweep unrelated work into the release commit — which matters in `local` mode,
+  where your own uncommitted changes sit in the same worktree.
+- **A failure aborts the release.** The commands exist to keep a derived file in step
+  with the version files; continuing past one would open exactly the broken pull request
+  the feature prevents.
+- **A pattern that matches nothing is fine.** The same language config is reused across
+  every project, and a repository with no lockfile still has to release.
+- **Overrides replace, they do not merge.** These name a package manager, and appending
+  one to another would run both — an `npm` default left under a `yarn` override would
+  write a `package-lock.json` into a repository that has no business carrying one.
+- **Fork versioning skips them**, because it rewrites no version file in the first place.
+- Each command is given 10 minutes before it is killed, so a resolution hanging on an
+  unreachable registry cannot stall every repository queued behind it. The command runs in
+  its own process group and the whole group is killed, so a shell's children go with it;
+  on top of that, AutoBump stops reading output 10 seconds after the command itself exits,
+  which bounds the call even when something it spawned still holds the pipe open.
+
+Other ecosystems fit the same shape:
+
+```yaml
+languages:
+  golang:
+    refresh_commands:
+      - run: ['go', 'mod', 'tidy']
+        files: ['go.mod', 'go.sum']
+  python:
+    refresh_commands:
+      - run: ['pdm', 'lock', '--update-reuse']
+        files: ['pdm.lock']
+```
+
+The command has to be on `PATH` wherever AutoBump runs. In `run` mode across many
+repositories, that means every package manager you configure must be installed on that
+machine.
 
 ## Fragment-Based Changelogs (`chlog`)
 
@@ -351,9 +426,10 @@ versioning: 'fork-dot'
 2. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
 3. **Version Detection**: Reads the current version from CHANGELOG.md
 4. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
-5. **CHANGELOG Update**: Moves unreleased changes to the new version section with the current date, deduplicating semantically overlapping entries and folding in any pending [chlog](#fragment-based-changelogs-chlog) fragments
-6. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
-7. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
+5. **Refresh**: Runs any configured [refresh commands](#refresh-commands) so lockfiles and other derived files travel in the same commit
+6. **CHANGELOG Update**: Moves unreleased changes to the new version section with the current date, deduplicating semantically overlapping entries and folding in any pending [chlog](#fragment-based-changelogs-chlog) fragments
+7. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
+8. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
 
 ## Contributing
 

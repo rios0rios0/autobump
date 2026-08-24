@@ -275,7 +275,7 @@ func TestAddFilesToWorktree(t *testing.T) {
 		}
 
 		// when
-		err = commands.AddFilesToWorktree(ctx, changelogPath, nil)
+		err = commands.AddFilesToWorktree(ctx, changelogPath, nil, nil)
 
 		// then
 		require.NoError(t, err)
@@ -330,6 +330,95 @@ func TestUpdateChangelogAndVersionFiles(t *testing.T) {
 		require.NoError(t, readErr)
 		assert.Contains(t, string(pomContent), "<version>1.1.0</version>")
 	})
+
+	t.Run("should stage the refreshed file when a refresh command regenerates it", func(t *testing.T) {
+		// given
+		// Copying the rewritten version out of package.json is what proves the command
+		// ran after the rewrite rather than before it.
+		repoPath, wt, ctx := buildRefreshCtx(
+			t, []string{"sh", "-c", "grep version package.json > yarn.lock"},
+		)
+
+		// when
+		err := commands.UpdateChangelogAndVersionFiles(ctx, filepath.Join(repoPath, "CHANGELOG.md"))
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "1.1.0", ctx.ProjectConfig.NewVersion)
+
+		lockContent, readErr := os.ReadFile(filepath.Join(repoPath, "yarn.lock"))
+		require.NoError(t, readErr)
+		assert.Contains(t, string(lockContent), "1.1.0")
+
+		status, statusErr := wt.Status()
+		require.NoError(t, statusErr)
+		assert.Contains(t, status, "yarn.lock")
+		assert.Contains(t, status, "package.json")
+		assert.Contains(t, status, "CHANGELOG.md")
+	})
+
+	t.Run("should fail the release when a refresh command fails", func(t *testing.T) {
+		// given
+		repoPath, wt, ctx := buildRefreshCtx(t, []string{"sh", "-c", "exit 1"})
+
+		// when
+		err := commands.UpdateChangelogAndVersionFiles(ctx, filepath.Join(repoPath, "CHANGELOG.md"))
+
+		// then
+		require.Error(t, err)
+		status, statusErr := wt.Status()
+		require.NoError(t, statusErr)
+		assert.NotContains(t, status, "yarn.lock")
+	})
+}
+
+// buildRefreshCtx creates a TypeScript repository holding a releasable changelog and a
+// package.json at 1.0.0, wired to a single refresh command. Shared by the
+// TestUpdateChangelogAndVersionFiles sub-tests that exercise refresh commands.
+func buildRefreshCtx(
+	t *testing.T, run []string,
+) (string, *git.Worktree, *commands.RepoContext) {
+	t.Helper()
+
+	repoPath, repo := createTestRepo(t)
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	changelogContent := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- added feature\n\n" +
+		"## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
+	require.NoError(
+		t, os.WriteFile(filepath.Join(repoPath, "CHANGELOG.md"), []byte(changelogContent), 0o644),
+	)
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(repoPath, "package.json"),
+			[]byte("{\n  \"version\": \"1.0.0\",\n}\n"),
+			0o644,
+		),
+	)
+
+	ctx := &commands.RepoContext{
+		Repo:     repo,
+		Worktree: wt,
+		GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
+			WithLanguagesConfig(map[string]entities.LanguageConfig{
+				"typescript": {
+					VersionFiles: []entities.VersionFile{
+						{Path: "package.json", Patterns: []string{`(\s*"version":\s*")\d+\.\d+\.\d+(",)`}},
+					},
+					RefreshCommands: []entities.RefreshCommand{
+						{Run: run, Files: []string{"yarn.lock"}},
+					},
+				},
+			}).BuildGlobalConfig(),
+		ProjectConfig: entitybuilders.NewProjectConfigBuilder().
+			WithPath(repoPath).
+			WithLanguage("typescript").
+			BuildProjectConfig(),
+	}
+
+	return repoPath, wt, ctx
 }
 
 // buildCommitCtx stages a file in repo and returns a RepoContext whose global Git
@@ -988,7 +1077,7 @@ func TestAddFilesToWorktreeExtended(t *testing.T) {
 		}
 
 		// when
-		err = commands.AddFilesToWorktree(ctx, changelogPath, nil)
+		err = commands.AddFilesToWorktree(ctx, changelogPath, nil, nil)
 
 		// then
 		require.NoError(t, err)
@@ -1015,7 +1104,7 @@ func TestAddFilesToWorktreeExtended(t *testing.T) {
 		}
 
 		// when
-		err = commands.AddFilesToWorktree(ctx, changelogPath, nil)
+		err = commands.AddFilesToWorktree(ctx, changelogPath, nil, nil)
 
 		// then
 		require.NoError(t, err)
