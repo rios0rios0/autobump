@@ -1,5 +1,3 @@
-//go:build unit
-
 package controllers_test
 
 import (
@@ -26,6 +24,8 @@ func TestNewLocalController(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should create a non-nil controller", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		ctrl := controllers.NewLocalController()
 
@@ -38,6 +38,8 @@ func TestLocalControllerGetBind(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return bind with local command metadata", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := controllers.NewLocalController()
 
@@ -55,6 +57,8 @@ func TestLocalControllerAddFlags(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should add language flag to command", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctrl := controllers.NewLocalController()
 		cmd := &cobra.Command{}
@@ -73,6 +77,8 @@ func TestNewRunController(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should create a non-nil controller", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		registry := repositories.NewProviderRegistry()
 
@@ -88,6 +94,8 @@ func TestRunControllerGetBind(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return bind with run command metadata", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		registry := repositories.NewProviderRegistry()
 		ctrl := controllers.NewRunController(registry)
@@ -106,6 +114,8 @@ func TestRunControllerAddFlags(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should not panic when adding flags", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		registry := repositories.NewProviderRegistry()
 		ctrl := controllers.NewRunController(registry)
@@ -123,6 +133,8 @@ func TestNewControllers(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should aggregate controllers into a slice", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		local := controllers.NewLocalController()
 		run := controllers.NewRunController(repositories.NewProviderRegistry())
@@ -181,6 +193,8 @@ func TestRegisterProviders(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should register all providers without error", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		container := dig.New()
 		require.NoError(t, repositories.RegisterProviders(container))
@@ -193,6 +207,8 @@ func TestRegisterProviders(t *testing.T) {
 	})
 
 	t.Run("should allow resolving controllers after registration", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		container := dig.New()
 		require.NoError(t, container.Provide(func() commands.SelfUpdateRunnerFunc {
@@ -215,6 +231,8 @@ func TestRegisterProviders(t *testing.T) {
 	})
 
 	t.Run("should return error when dependency is missing", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		container := dig.New()
 		require.NoError(t, controllers.RegisterProviders(container))
@@ -235,6 +253,8 @@ func TestFindReadAndValidateConfig(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should read and return config when valid config file exists with languages", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		configPath := writeConfigFile(t, `
 languages:
@@ -256,6 +276,8 @@ languages:
 	})
 
 	t.Run("should return error when config file does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		nonexistentPath := filepath.Join(t.TempDir(), "nonexistent.yaml")
 
@@ -268,6 +290,8 @@ languages:
 	})
 
 	t.Run("should return error when config has invalid YAML", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		configPath := writeConfigFile(t, `invalid: [yaml: broken`)
 
@@ -280,6 +304,8 @@ languages:
 	})
 
 	t.Run("should handle config with projects section", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		configContent := `
 languages:
@@ -305,6 +331,8 @@ projects:
 	})
 
 	t.Run("should handle config without languages key by using defaults", func(t *testing.T) {
+		t.Parallel()
+
 		// given -- config with no languages key triggers the ErrLanguagesKeyMissing path
 		configContent := `
 github_access_token: 'fake-token'
@@ -324,6 +352,8 @@ projects:
 	})
 
 	t.Run("should handle config with providers section", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		configContent := `
 languages:
@@ -350,13 +380,14 @@ providers:
 
 // newTestCmd creates a cobra.Command with the standard flags used by controllers.
 func newTestCmd() *cobra.Command {
-	cmd := &cobra.Command{} //nolint:exhaustruct
+	cmd := &cobra.Command{} //nolint:exhaustruct // a bare command is the point: the flags below are what the controllers read
 	cmd.Flags().Bool("verbose", false, "")
 	cmd.Flags().String("config", "", "")
 	return cmd
 }
 
-func TestLocalControllerExecute(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestLocalControllerExecute is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestLocalControllerExecute(t *testing.T) {
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
 	require.NoError(t, os.WriteFile(
@@ -522,7 +553,8 @@ func TestLocalControllerExecute(t *testing.T) { //nolint:tparallel // mutates pa
 	})
 }
 
-func TestRunControllerExecute(t *testing.T) { //nolint:tparallel // mutates package-level globals
+// TestRunControllerExecute is deliberately not parallel: it mutates package-level globals that other tests read.
+func TestRunControllerExecute(t *testing.T) {
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
 	require.NoError(t, os.WriteFile(
@@ -568,7 +600,10 @@ func TestRunControllerExecute(t *testing.T) { //nolint:tparallel // mutates pack
 		content := "# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
 		require.NoError(t, os.WriteFile(changelogPath, []byte(content), 0o644))
 
-		cfgPath := writeConfigFile(t, "languages:\n  golang:\n    extensions:\n      - 'go'\nprojects:\n  - path: '"+repoPath+"'\n    language: 'golang'\n")
+		cfgPath := writeConfigFile(
+			t,
+			"languages:\n  golang:\n    extensions:\n      - 'go'\nprojects:\n  - path: '"+repoPath+"'\n    language: 'golang'\n",
+		)
 
 		ctrl := controllers.NewRunController(registry)
 		cmd := newTestCmd()
@@ -582,7 +617,10 @@ func TestRunControllerExecute(t *testing.T) { //nolint:tparallel // mutates pack
 
 	t.Run("should log error on invalid provider validation", func(t *testing.T) {
 		// given
-		cfgPath := writeConfigFile(t, "languages:\n  golang:\n    extensions:\n      - 'go'\nproviders:\n  - type: ''\n    token: ''\n    organizations: []\n")
+		cfgPath := writeConfigFile(
+			t,
+			"languages:\n  golang:\n    extensions:\n      - 'go'\nproviders:\n  - type: ''\n    token: ''\n    organizations: []\n",
+		)
 
 		ctrl := controllers.NewRunController(registry)
 		cmd := newTestCmd()
@@ -601,7 +639,10 @@ func TestRunControllerExecute(t *testing.T) { //nolint:tparallel // mutates pack
 		content := "# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
 		require.NoError(t, os.WriteFile(changelogPath, []byte(content), 0o644))
 
-		cfgPath := writeConfigFile(t, "languages:\n  golang:\n    extensions:\n      - 'go'\nproviders:\n  - type: 'github'\n    token: 'fake-token'\n    organizations:\n      - 'nonexistent-org'\nprojects:\n  - path: '"+repoPath+"'\n    language: 'golang'\n")
+		cfgPath := writeConfigFile(
+			t,
+			"languages:\n  golang:\n    extensions:\n      - 'go'\nproviders:\n  - type: 'github'\n    token: 'fake-token'\n    organizations:\n      - 'nonexistent-org'\nprojects:\n  - path: '"+repoPath+"'\n    language: 'golang'\n",
+		)
 
 		ctrl := controllers.NewRunController(registry)
 		cmd := newTestCmd()
@@ -630,7 +671,10 @@ func TestRunControllerExecute(t *testing.T) { //nolint:tparallel // mutates pack
 
 	t.Run("should attempt discovery when providers are configured with valid type", func(t *testing.T) {
 		// given
-		cfgPath := writeConfigFile(t, "languages:\n  golang:\n    extensions:\n      - 'go'\nproviders:\n  - type: 'github'\n    token: 'fake-token'\n    organizations:\n      - 'nonexistent-org'\n")
+		cfgPath := writeConfigFile(
+			t,
+			"languages:\n  golang:\n    extensions:\n      - 'go'\nproviders:\n  - type: 'github'\n    token: 'fake-token'\n    organizations:\n      - 'nonexistent-org'\n",
+		)
 
 		ctrl := controllers.NewRunController(registry)
 		cmd := newTestCmd()

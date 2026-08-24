@@ -1,5 +1,3 @@
-//go:build unit
-
 package repositories_test
 
 import (
@@ -18,6 +16,8 @@ func TestNewProviderRegistry(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should create a non-nil registry", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		reg := repositories.NewProviderRegistry()
 
@@ -30,6 +30,8 @@ func TestGetAdapterByURL(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return nil when URL does not match any provider", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		reg := repositories.NewProviderRegistry()
 
@@ -41,6 +43,8 @@ func TestGetAdapterByURL(t *testing.T) {
 	})
 
 	t.Run("should not panic when URL matches a known provider", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		reg := repositories.NewProviderRegistry()
 
@@ -55,6 +59,8 @@ func TestGetAdapterByServiceType(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return nil when service type is unknown", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		reg := repositories.NewProviderRegistry()
 
@@ -66,6 +72,8 @@ func TestGetAdapterByServiceType(t *testing.T) {
 	})
 
 	t.Run("should not panic when service type is GitHub", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		reg := repositories.NewProviderRegistry()
 
@@ -80,6 +88,8 @@ func TestRegisterProviders(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should register providers without error", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		container := dig.New()
 
@@ -91,6 +101,8 @@ func TestRegisterProviders(t *testing.T) {
 	})
 
 	t.Run("should resolve ProviderRegistry after registration", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		container := dig.New()
 		require.NoError(t, repositories.RegisterProviders(container))
@@ -107,6 +119,8 @@ func TestRegisterProviders(t *testing.T) {
 	})
 
 	t.Run("should register all three provider adapters", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		container := dig.New()
 		require.NoError(t, repositories.RegisterProviders(container))
@@ -128,6 +142,8 @@ func TestRegisterProviders(t *testing.T) {
 	})
 
 	t.Run("should return nil adapter for unknown URL with full registry", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		container := dig.New()
 		require.NoError(t, repositories.RegisterProviders(container))
@@ -149,10 +165,10 @@ func TestNewDiscoverer(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return a factory that produces a RepositoryDiscoverer", func(t *testing.T) {
+		t.Parallel()
+
 		// given
-		factory := repositories.NewDiscoverer(func(token string) gitforgeEntities.ForgeProvider {
-			return github.NewProvider(token)
-		})
+		factory := repositories.NewDiscoverer(github.NewProvider)
 
 		// when
 		discoverer := factory("fake-token")
@@ -162,10 +178,10 @@ func TestNewDiscoverer(t *testing.T) {
 	})
 
 	t.Run("should produce discoverer with correct name", func(t *testing.T) {
+		t.Parallel()
+
 		// given
-		factory := repositories.NewDiscoverer(func(token string) gitforgeEntities.ForgeProvider {
-			return github.NewProvider(token)
-		})
+		factory := repositories.NewDiscoverer(github.NewProvider)
 
 		// when
 		discoverer := factory("fake-token")

@@ -1,5 +1,3 @@
-//go:build unit
-
 package commands_test
 
 import (
@@ -19,6 +17,8 @@ func TestGetNextVersionString(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should compute next semver version when versioning is empty", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -48,6 +48,8 @@ func TestGetNextVersionString(t *testing.T) {
 	})
 
 	t.Run("should compute next fork-dot version when project sets fork-dot", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -79,6 +81,8 @@ func TestGetNextVersionString(t *testing.T) {
 	})
 
 	t.Run("should compute next fork-dash version when global sets fork-dash", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -108,6 +112,8 @@ func TestGetNextVersionString(t *testing.T) {
 	})
 
 	t.Run("should let project versioning override global", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -139,6 +145,8 @@ func TestUpdateChangelogFileString(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should rewrite the changelog using fork-dot mode", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -178,6 +186,8 @@ func TestUpdateChangelogFileString(t *testing.T) {
 	})
 
 	t.Run("should rewrite the changelog using fork-dash mode", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -203,6 +213,8 @@ func TestUpdateChangelogFileString(t *testing.T) {
 	})
 
 	t.Run("should fall through to semver when no fork mode is set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -232,6 +244,8 @@ func TestLoadProjectConfigOverridesPropagatesVersioning(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should set versioning from per-project config when project has none", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeProjectConfig(t, tmpDir, "versioning: 'fork-dot'\nchangelog_path: 'CHANGELOG_PROPRIETARY.md'\n")
@@ -248,6 +262,8 @@ func TestLoadProjectConfigOverridesPropagatesVersioning(t *testing.T) {
 	})
 
 	t.Run("should keep project versioning when project already specifies one", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeProjectConfig(t, tmpDir, "versioning: 'fork-dot'\n")
@@ -265,6 +281,8 @@ func TestLoadProjectConfigOverridesPropagatesVersioning(t *testing.T) {
 	})
 
 	t.Run("should leave config unchanged when no .autobump.yaml file exists", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
@@ -280,9 +298,8 @@ func TestLoadProjectConfigOverridesPropagatesVersioning(t *testing.T) {
 	})
 }
 
-func writeProjectConfig(t *testing.T, dir, content string) string {
+func writeProjectConfig(t *testing.T, dir, content string) {
 	t.Helper()
-	p := filepath.Join(dir, ".autobump.yaml")
-	require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
-	return p
+	path := filepath.Join(dir, ".autobump.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }

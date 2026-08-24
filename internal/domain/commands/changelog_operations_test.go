@@ -1,10 +1,9 @@
-//go:build unit
-
 package commands_test
 
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,9 +18,11 @@ func writeChangelog(t *testing.T, dir string, lines []string) string {
 	t.Helper()
 	p := filepath.Join(dir, "CHANGELOG.md")
 	content := ""
+	var contentSb20 strings.Builder
 	for _, l := range lines {
-		content += l + "\n"
+		contentSb20.WriteString(l + "\n")
 	}
+	content += contentSb20.String()
 	require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
 	return p
 }
@@ -30,6 +31,8 @@ func TestShouldBumpProject(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return true when unreleased section has entries", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -62,6 +65,8 @@ func TestShouldBumpProject(t *testing.T) {
 	})
 
 	t.Run("should return false when unreleased section is empty", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -90,6 +95,8 @@ func TestShouldBumpProject(t *testing.T) {
 	})
 
 	t.Run("should return error when changelog file does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctx := &commands.RepoContext{
 			ProjectConfig: entitybuilders.NewProjectConfigBuilder().BuildProjectConfig(),
@@ -108,6 +115,8 @@ func TestUpdateChangelogFile(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should extract version and update changelog when unreleased entries exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -136,6 +145,8 @@ func TestUpdateChangelogFile(t *testing.T) {
 	})
 
 	t.Run("should return error when changelog has no unreleased entries", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -159,6 +170,8 @@ func TestUpdateChangelogFile(t *testing.T) {
 	})
 
 	t.Run("should return error when file does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		version, err := commands.UpdateChangelogFile(nil, nil, "/nonexistent/CHANGELOG.md")
 
@@ -172,6 +185,8 @@ func TestGetNextVersion(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return next minor version when changelog has existing versions", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -199,6 +214,8 @@ func TestGetNextVersion(t *testing.T) {
 	})
 
 	t.Run("should return initial version when changelog has no versions", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -220,6 +237,8 @@ func TestGetNextVersion(t *testing.T) {
 	})
 
 	t.Run("should return error when file does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		version, err := commands.GetNextVersion(nil, nil, "/nonexistent/CHANGELOG.md")
 
@@ -233,6 +252,8 @@ func TestGeneratePRDescription(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should generate description when version files are configured", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(
@@ -269,6 +290,8 @@ func TestGeneratePRDescription(t *testing.T) {
 	})
 
 	t.Run("should generate description without version file checklist when no version files", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctx := &commands.RepoContext{
 			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
@@ -291,6 +314,8 @@ func TestGeneratePRDescription(t *testing.T) {
 	})
 
 	t.Run("should use custom changelog path when configured", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctx := &commands.RepoContext{
 			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
@@ -316,6 +341,8 @@ func TestEnsureProjectLanguage(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should detect language when not already set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0o644))
@@ -338,6 +365,8 @@ func TestEnsureProjectLanguage(t *testing.T) {
 	})
 
 	t.Run("should keep existing language when already set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		ctx := &commands.RepoContext{
 			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
@@ -354,6 +383,8 @@ func TestEnsureProjectLanguage(t *testing.T) {
 	})
 
 	t.Run("should set language to empty when detection fails", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		ctx := &commands.RepoContext{

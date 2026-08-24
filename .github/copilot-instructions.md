@@ -221,8 +221,8 @@ The tool auto-detects and supports:
 - All tests follow **BDD** structure with `// given`, `// when`, `// then` comment blocks
 - Test descriptions use `"should ... when ..."` format via `t.Run()` subtests
 - Tests use `testify/assert` and `testify/require` for assertions
-- Tests use `t.Parallel()` at both parent and subtest level
-- Test files use build tags (`//go:build unit`) to separate unit from integration tests
+- Tests use `t.Parallel()` at both parent and subtest level. A test that mutates package-level globals, swaps `os.Stdout`, or calls `t.Setenv` is not parallel at either level and carries a comment saying why
+- Unit test files carry **no** build tag, so `go test ./...` runs them; the shared pipeline still runs them under `-tags test,unit` in phase 1, and phase 2 (`-tags integration`) skips every package because no file appears under that tag. Reserve `//go:build integration` for tests needing real infrastructure
 
 ### Test Files
 

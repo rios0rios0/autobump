@@ -1,5 +1,3 @@
-//go:build unit
-
 package python_test
 
 import (
@@ -18,6 +16,8 @@ func TestGetProjectName(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return project name when pyproject.toml exists", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		content := `[project]
@@ -36,6 +36,8 @@ version = "1.0.0"
 	})
 
 	t.Run("should return error when pyproject.toml does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		p := python.Python{ProjectConfig: entities.ProjectConfig{Path: tmpDir}}
@@ -44,12 +46,13 @@ version = "1.0.0"
 		name, err := p.GetProjectName()
 
 		// then
-		require.Error(t, err)
-		assert.ErrorIs(t, err, python.ErrPyprojectNotFound)
+		require.ErrorIs(t, err, python.ErrPyprojectNotFound)
 		assert.Empty(t, name)
 	})
 
 	t.Run("should return empty name when pyproject.toml has no project name", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		content := `[tool.pytest]
@@ -67,6 +70,8 @@ minversion = "6.0"
 	})
 
 	t.Run("should return error when pyproject.toml is malformed", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte("invalid toml [[["), 0o644))

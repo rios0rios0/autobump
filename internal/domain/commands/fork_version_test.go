@@ -1,9 +1,6 @@
-//go:build unit
-
 package commands_test
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -18,6 +15,8 @@ func TestParseForkVersion(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should parse 4-segment fork version when mode is fork-dot", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		input := "3.3.0.16"
 
@@ -33,6 +32,8 @@ func TestParseForkVersion(t *testing.T) {
 	})
 
 	t.Run("should parse dash-separated fork version when mode is fork-dash", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		input := "1.21.0-9"
 
@@ -47,6 +48,8 @@ func TestParseForkVersion(t *testing.T) {
 	})
 
 	t.Run("should accept either separator when mode is empty", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		dotInput := "v2.5.1.42"
 		dashInput := "v2.5.1-42"
@@ -65,6 +68,8 @@ func TestParseForkVersion(t *testing.T) {
 	})
 
 	t.Run("should reject 4-segment version when mode is fork-dash", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		input := "3.3.0.16"
 
@@ -73,10 +78,12 @@ func TestParseForkVersion(t *testing.T) {
 
 		// then
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, commands.ErrInvalidForkVersion))
+		assert.ErrorIs(t, err, commands.ErrInvalidForkVersion)
 	})
 
 	t.Run("should reject dash-separated version when mode is fork-dot", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		input := "1.21.0-9"
 
@@ -85,10 +92,12 @@ func TestParseForkVersion(t *testing.T) {
 
 		// then
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, commands.ErrInvalidForkVersion))
+		assert.ErrorIs(t, err, commands.ErrInvalidForkVersion)
 	})
 
 	t.Run("should reject malformed version strings", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		bogusInputs := []string{
 			"",
@@ -113,6 +122,8 @@ func TestNextForkVersion(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should bump only the trailing digit when mode is fork-dot", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		current := "3.3.0.16"
 
@@ -125,6 +136,8 @@ func TestNextForkVersion(t *testing.T) {
 	})
 
 	t.Run("should bump only the trailing digit when mode is fork-dash", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		current := "1.21.0-9"
 
@@ -137,6 +150,8 @@ func TestNextForkVersion(t *testing.T) {
 	})
 
 	t.Run("should seed initial version when current is empty for fork-dot", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		next, err := commands.NextForkVersion("", entities.VersioningForkDot)
 
@@ -146,6 +161,8 @@ func TestNextForkVersion(t *testing.T) {
 	})
 
 	t.Run("should seed initial version when current is empty for fork-dash", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		next, err := commands.NextForkVersion("", entities.VersioningForkDash)
 
@@ -155,12 +172,14 @@ func TestNextForkVersion(t *testing.T) {
 	})
 
 	t.Run("should fail when mode is not a fork mode", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		_, err := commands.NextForkVersion("1.0.0", entities.VersioningSemver)
 
 		// then
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, commands.ErrInvalidForkVersion))
+		assert.ErrorIs(t, err, commands.ErrInvalidForkVersion)
 	})
 }
 
@@ -168,12 +187,16 @@ func TestIsForkVersioning(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return true for fork-dot and fork-dash", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when / then
 		assert.True(t, commands.IsForkVersioning(entities.VersioningForkDot))
 		assert.True(t, commands.IsForkVersioning(entities.VersioningForkDash))
 	})
 
 	t.Run("should return false for semver and unknown modes", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when / then
 		assert.False(t, commands.IsForkVersioning(entities.VersioningSemver))
 		assert.False(t, commands.IsForkVersioning(""))
@@ -185,6 +208,8 @@ func TestFindLatestForkVersion(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should find latest fork-dot version while skipping unreleased", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"# Changelog",
@@ -205,6 +230,8 @@ func TestFindLatestForkVersion(t *testing.T) {
 	})
 
 	t.Run("should find latest fork-dash version while skipping unreleased", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"## [Unreleased]",
@@ -223,6 +250,8 @@ func TestFindLatestForkVersion(t *testing.T) {
 	})
 
 	t.Run("should ignore headers that do not match the requested mode", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"## [Unreleased]",
@@ -235,7 +264,7 @@ func TestFindLatestForkVersion(t *testing.T) {
 
 		// then
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, commands.ErrNoForkVersionFound))
+		assert.ErrorIs(t, err, commands.ErrNoForkVersionFound)
 	})
 }
 
@@ -243,6 +272,8 @@ func TestProcessForkChangelog(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should rewrite changelog with next fork-dot version", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"# Changelog",
@@ -278,6 +309,8 @@ func TestProcessForkChangelog(t *testing.T) {
 	})
 
 	t.Run("should rewrite changelog with next fork-dash version", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"## [Unreleased]",
@@ -305,6 +338,8 @@ func TestProcessForkChangelog(t *testing.T) {
 	})
 
 	t.Run("should seed initial version when no prior fork version exists", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"## [Unreleased]",
@@ -325,6 +360,8 @@ func TestProcessForkChangelog(t *testing.T) {
 	})
 
 	t.Run("should keep changelog unchanged when unreleased section is empty", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"## [Unreleased]",
@@ -348,6 +385,8 @@ func TestProcessForkChangelog(t *testing.T) {
 	})
 
 	t.Run("should fail when mode is not a fork mode", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		_, _, err := commands.ProcessForkChangelog([]string{"## [Unreleased]"}, entities.VersioningSemver)
 

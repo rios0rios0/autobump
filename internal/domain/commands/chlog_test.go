@@ -1,5 +1,3 @@
-//go:build unit
-
 package commands_test
 
 import (
@@ -68,6 +66,8 @@ func TestDetectChlog(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should report chlog when only the fragment directory exists", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		makeDir(t, filepath.Join(tmpDir, ".changes", "unreleased"))
@@ -84,6 +84,8 @@ func TestDetectChlog(t *testing.T) {
 	})
 
 	t.Run("should report chlog when only the configuration file exists", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeChlogConfig(t, tmpDir, "changelogPath: docs/CHANGELOG.md\n")
@@ -98,6 +100,8 @@ func TestDetectChlog(t *testing.T) {
 	})
 
 	t.Run("should honour custom directories when the configuration overrides them", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeChlogConfig(t, tmpDir, "changesDir: .notes\nunreleasedDir: pending\n")
@@ -113,6 +117,8 @@ func TestDetectChlog(t *testing.T) {
 	})
 
 	t.Run("should fall back to the defaults when the configuration omits keys", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeChlogConfig(t, tmpDir, "kinds:\n  - label: Added\n")
@@ -128,6 +134,8 @@ func TestDetectChlog(t *testing.T) {
 	})
 
 	t.Run("should not report chlog when the project uses neither marker", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 
@@ -140,6 +148,8 @@ func TestDetectChlog(t *testing.T) {
 	})
 
 	t.Run("should return an error when the configuration is malformed", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeChlogConfig(t, tmpDir, "changesDir: [this is not a string\n")
@@ -152,6 +162,8 @@ func TestDetectChlog(t *testing.T) {
 	})
 
 	t.Run("should reject a configured path that escapes the project root", func(t *testing.T) {
+		t.Parallel()
+
 		// given — .chlog.yaml is committed by the repository being released, and these
 		// values drive globbing, reading and deletion, so they are untrusted input
 		escaping := map[string]string{
@@ -175,6 +187,8 @@ func TestDetectChlog(t *testing.T) {
 	})
 
 	t.Run("should not report chlog when the fragment path is a file rather than a directory", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		makeDir(t, filepath.Join(tmpDir, ".changes"))
@@ -194,6 +208,8 @@ func TestReadChlogFragments(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should order fragments by configured kind when several are pending", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "300-c3d4.yaml", "kind: Fixed\nbody: fixed the retry backoff\n")
@@ -210,6 +226,8 @@ func TestReadChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should order fragments by timestamp when they share a kind", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "100-a1b2.yaml",
@@ -228,6 +246,8 @@ func TestReadChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should order an unconfigured kind last when kinds are mixed", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Performance\nbody: sped up the parser\n")
@@ -244,6 +264,8 @@ func TestReadChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should read .yml fragments when a fragment uses the short extension", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "100-a1b2.yml", "kind: Added\nbody: added OAuth2 login\n")
@@ -258,6 +280,8 @@ func TestReadChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should skip a fragment when it carries no body", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: \"\"\n")
@@ -271,6 +295,8 @@ func TestReadChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should skip a fragment when it is a symlink rather than a regular file", func(t *testing.T) {
+		t.Parallel()
+
 		// given — a repository can commit a symlink pointing anywhere on the host, and
 		// fragment bodies are published verbatim, so following one would leak host files
 		tmpDir := t.TempDir()
@@ -290,6 +316,8 @@ func TestReadChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should return an error when a fragment is malformed", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: [Added\n")
@@ -302,6 +330,8 @@ func TestReadChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should return no fragments when the unreleased directory is empty", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		makeDir(t, filepath.Join(tmpDir, ".changes", "unreleased"))
@@ -315,6 +345,8 @@ func TestReadChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should refuse to run when chlog has batched but unmerged version files", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
@@ -337,6 +369,8 @@ func TestChlogSectionForKind(t *testing.T) {
 	config := commands.DefaultChlogConfig()
 
 	t.Run("should map every default kind to its Keep a Changelog section", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		kinds := map[string]string{
 			"Added": "Added", "Changed": "Changed", "Deprecated": "Deprecated",
@@ -353,6 +387,8 @@ func TestChlogSectionForKind(t *testing.T) {
 	})
 
 	t.Run("should normalise casing when a fragment kind is lower-cased", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		section := commands.ChlogSectionForKind("  security  ", &config)
 
@@ -361,6 +397,8 @@ func TestChlogSectionForKind(t *testing.T) {
 	})
 
 	t.Run("should fall back to Changed when the kind has no matching section", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		custom := commands.ChlogConfig{Kinds: []commands.ChlogKind{{Label: "Performance"}}}
 
@@ -372,6 +410,8 @@ func TestChlogSectionForKind(t *testing.T) {
 	})
 
 	t.Run("should fall back to Changed when the fragment has no kind", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		section := commands.ChlogSectionForKind("", &config)
 
@@ -386,6 +426,8 @@ func TestRenderChlogFragments(t *testing.T) {
 	config := commands.DefaultChlogConfig()
 
 	t.Run("should group fragments under one heading when they share a kind", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		fragments := []commands.ChlogFragment{
 			{Kind: "Added", Body: "added OAuth2 login"},
@@ -410,6 +452,8 @@ func TestRenderChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should indent continuation lines when the body spans several lines", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		fragments := []commands.ChlogFragment{
 			{Kind: "Added", Body: "added OAuth2 login\nso that operators stop sharing passwords"},
@@ -428,6 +472,8 @@ func TestRenderChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should not double the bullet when the body already carries one", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		fragments := []commands.ChlogFragment{{Kind: "Fixed", Body: "- fixed the retry backoff"}}
 
@@ -439,6 +485,8 @@ func TestRenderChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should render nothing when there are no fragments", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when
 		rendered := commands.RenderChlogFragments(nil, &config)
 
@@ -451,6 +499,8 @@ func TestMergeChlogIntoUnreleased(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should fill the unreleased section when it is empty", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{"# Changelog", "", "## [Unreleased]", "", "## [1.0.0] - 2026-01-01"}
 		fragmentLines := []string{"### Added", "", "- added OAuth2 login"}
@@ -465,6 +515,8 @@ func TestMergeChlogIntoUnreleased(t *testing.T) {
 	})
 
 	t.Run("should keep hand-written entries when both sources hold work", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{
 			"# Changelog", "",
@@ -485,6 +537,8 @@ func TestMergeChlogIntoUnreleased(t *testing.T) {
 	})
 
 	t.Run("should create the unreleased section when the changelog has none", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{"# Changelog", "", "## [1.0.0] - 2026-01-01", "", "- added initial release"}
 		fragmentLines := []string{"### Added", "", "- added OAuth2 login"}
@@ -499,6 +553,8 @@ func TestMergeChlogIntoUnreleased(t *testing.T) {
 	})
 
 	t.Run("should leave the changelog untouched when there are no fragments", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		lines := []string{"# Changelog", "", "## [Unreleased]"}
 
@@ -514,6 +570,8 @@ func TestDeleteChlogFragments(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should remove the files when fragments are consumed", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		first := writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
@@ -532,6 +590,8 @@ func TestDeleteChlogFragments(t *testing.T) {
 	})
 
 	t.Run("should return an error when a fragment file is already gone", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		missing := filepath.Join(tmpDir, ".changes", "unreleased", "404-dead.yaml")
@@ -550,6 +610,8 @@ func TestReadChangelogLinesWithChlog(t *testing.T) {
 	baseChangelog := chlogBaseChangelog()
 
 	t.Run("should splice fragments into the unreleased section when the project uses chlog", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, baseChangelog)
@@ -564,6 +626,8 @@ func TestReadChangelogLinesWithChlog(t *testing.T) {
 	})
 
 	t.Run("should return the file verbatim when the project does not use chlog", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, baseChangelog)
@@ -577,6 +641,8 @@ func TestReadChangelogLinesWithChlog(t *testing.T) {
 	})
 
 	t.Run("should ignore the fragments when detection is disabled", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, baseChangelog)
@@ -600,6 +666,8 @@ func TestShouldBumpProjectWithChlog(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should compute a minor bump when only chlog fragments hold the changes", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, chlogBaseChangelog())
@@ -616,6 +684,8 @@ func TestShouldBumpProjectWithChlog(t *testing.T) {
 	})
 
 	t.Run("should compute a major bump when a fragment marks a breaking change", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, chlogBaseChangelog())
@@ -632,6 +702,8 @@ func TestShouldBumpProjectWithChlog(t *testing.T) {
 	})
 
 	t.Run("should write the fragment entries into the release when the changelog is updated", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		changelogPath := writeChangelog(t, tmpDir, []string{
@@ -671,6 +743,8 @@ func TestResolveChangelogPathWithChlog(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should use the chlog changelog path when the project declares one", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeChlogConfig(t, tmpDir, "changelogPath: docs/CHANGELOG.md\n")
@@ -685,6 +759,8 @@ func TestResolveChangelogPathWithChlog(t *testing.T) {
 	})
 
 	t.Run("should prefer changelog_path when both it and the chlog path are set", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeChlogConfig(t, tmpDir, "changelogPath: docs/CHANGELOG.md\n")
@@ -701,6 +777,8 @@ func TestResolveChangelogPathWithChlog(t *testing.T) {
 	})
 
 	t.Run("should reject a chlog path that escapes the project root", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		writeChlogConfig(t, tmpDir, "changelogPath: ../../etc/passwd\n")
@@ -714,6 +792,8 @@ func TestResolveChangelogPathWithChlog(t *testing.T) {
 	})
 
 	t.Run("should default to CHANGELOG.md when the project does not use chlog", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		ctx := &commands.RepoContext{ProjectConfig: &entities.ProjectConfig{Path: tmpDir}}
@@ -731,11 +811,15 @@ func TestChlogEnabled(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should be enabled when nothing is configured", func(t *testing.T) {
+		t.Parallel()
+
 		// given / when / then
 		assert.True(t, entities.ChlogEnabled(nil, nil))
 	})
 
 	t.Run("should be disabled when the global config turns detection off", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		disabled := false
 
@@ -744,6 +828,8 @@ func TestChlogEnabled(t *testing.T) {
 	})
 
 	t.Run("should let the project override the global setting", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		disabled := false
 		enabled := true

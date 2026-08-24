@@ -1,5 +1,3 @@
-//go:build unit
-
 package support_test
 
 import (
@@ -17,6 +15,8 @@ func TestReadLines(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should read all lines from a file when file exists", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "test.txt")
@@ -31,6 +31,8 @@ func TestReadLines(t *testing.T) {
 	})
 
 	t.Run("should return error when file does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		filePath := "/nonexistent/path/file.txt"
 
@@ -44,6 +46,8 @@ func TestReadLines(t *testing.T) {
 	})
 
 	t.Run("should return empty slice when file is empty", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "empty.txt")
@@ -62,6 +66,8 @@ func TestWriteLines(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should write lines to a file when path is valid", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "output.txt")
@@ -78,6 +84,8 @@ func TestWriteLines(t *testing.T) {
 	})
 
 	t.Run("should return error when path is not writable", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		filePath := "/nonexistent/dir/output.txt"
 		lines := []string{"line1"}
@@ -91,6 +99,8 @@ func TestWriteLines(t *testing.T) {
 	})
 
 	t.Run("should write empty file when lines is empty", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "empty.txt")
@@ -102,6 +112,6 @@ func TestWriteLines(t *testing.T) {
 		require.NoError(t, err)
 		content, readErr := os.ReadFile(filePath)
 		require.NoError(t, readErr)
-		assert.Equal(t, "", string(content))
+		assert.Empty(t, string(content))
 	})
 }
