@@ -504,7 +504,9 @@ func TestCollectTokens(t *testing.T) {
 	})
 }
 
-func TestCollectSSHAuthMethods(t *testing.T) { //nolint:paralleltest // t.Setenv is incompatible with t.Parallel
+// TestCollectSSHAuthMethods is deliberately not parallel: it calls t.Setenv, which the runtime
+// forbids in a parallel test.
+func TestCollectSSHAuthMethods(t *testing.T) {
 	t.Run("should return empty slice when no SSH config and no agent", func(t *testing.T) {
 		// given
 		t.Setenv("SSH_AUTH_SOCK", "")
@@ -554,7 +556,9 @@ func TestCollectSSHAuthMethods(t *testing.T) { //nolint:paralleltest // t.Setenv
 	})
 }
 
-func TestDetectSSHAgentSockets(t *testing.T) { //nolint:paralleltest // t.Setenv is incompatible with t.Parallel
+// TestDetectSSHAgentSockets is deliberately not parallel: it calls t.Setenv, which the runtime
+// forbids in a parallel test.
+func TestDetectSSHAgentSockets(t *testing.T) {
 	t.Run("should return SSH_AUTH_SOCK from environment when set to a valid socket", func(t *testing.T) {
 		// given
 		sockDir := t.TempDir()
