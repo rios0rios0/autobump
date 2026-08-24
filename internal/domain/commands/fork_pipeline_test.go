@@ -13,132 +13,125 @@ import (
 	"github.com/rios0rios0/autobump/test/domain/entitybuilders"
 )
 
+// forkVersioningCase describes one changelog and the versioning modes in play. Every
+// case runs the same three lines; only the changelog and where the mode is declared
+// change, which is the whole point of the table.
+type forkVersioningCase struct {
+	name              string
+	changelog         []string
+	globalVersioning  string
+	projectVersioning string
+	expected          string
+}
+
+func (c forkVersioningCase) configs() (*entities.GlobalConfig, *entities.ProjectConfig) {
+	globalBuilder := entitybuilders.NewGlobalConfigBuilder()
+	if c.globalVersioning != "" {
+		globalBuilder = globalBuilder.WithVersioning(c.globalVersioning)
+	}
+
+	projectBuilder := entitybuilders.NewProjectConfigBuilder()
+	if c.projectVersioning != "" {
+		projectBuilder = projectBuilder.WithVersioning(c.projectVersioning)
+	}
+
+	return globalBuilder.BuildGlobalConfig(), projectBuilder.BuildProjectConfig()
+}
+
 func TestGetNextVersionString(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should compute next semver version when versioning is empty", func(t *testing.T) {
-		t.Parallel()
+	testCases := []forkVersioningCase{
+		{
+			name: "should compute next semver version when versioning is empty",
+			changelog: []string{
+				"# Changelog",
+				"",
+				"## [Unreleased]",
+				"",
+				"### Added",
+				"",
+				"- added new feature",
+				"",
+				"## [2.3.0] - 2026-03-20",
+				"",
+				"### Added",
+				"",
+				"- added previous feature",
+			},
+			expected: "2.4.0",
+		},
+		{
+			name: "should compute next fork-dot version when project sets fork-dot",
+			changelog: []string{
+				"# Changelog",
+				"",
+				"## [Unreleased]",
+				"",
+				"### Fixed",
+				"",
+				"- fixed sidebar selected item background",
+				"",
+				"## [3.3.0.16] - 2026-04-20",
+				"",
+				"### Fixed",
+				"",
+				"- raised job timeout",
+			},
+			projectVersioning: entities.VersioningForkDot,
+			expected:          "3.3.0.17",
+		},
+		{
+			name: "should compute next fork-dash version when global sets fork-dash",
+			changelog: []string{
+				"## [Unreleased]",
+				"",
+				"### Changed",
+				"",
+				"- changed loading spinner color",
+				"",
+				"## [1.21.0-9] - 2026-01-12",
+				"",
+				"### Changed",
+				"",
+				"- changed link color",
+			},
+			globalVersioning: entities.VersioningForkDash,
+			expected:         "1.21.0-10",
+		},
+		{
+			name: "should let project versioning override global",
+			changelog: []string{
+				"## [Unreleased]",
+				"",
+				"### Added",
+				"",
+				"- added new feature",
+				"",
+				"## [3.3.0.16] - 2026-04-20",
+			},
+			globalVersioning:  entities.VersioningSemver,
+			projectVersioning: entities.VersioningForkDot,
+			expected:          "3.3.0.17",
+		},
+	}
 
-		// given
-		tmpDir := t.TempDir()
-		changelogPath := writeChangelog(t, tmpDir, []string{
-			"# Changelog",
-			"",
-			"## [Unreleased]",
-			"",
-			"### Added",
-			"",
-			"- added new feature",
-			"",
-			"## [2.3.0] - 2026-03-20",
-			"",
-			"### Added",
-			"",
-			"- added previous feature",
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			// given
+			changelogPath := writeChangelog(t, t.TempDir(), testCase.changelog)
+			globalConfig, projectConfig := testCase.configs()
+
+			// when
+			next, err := commands.GetNextVersionString(globalConfig, projectConfig, changelogPath)
+
+			// then
+			require.NoError(t, err)
+			assert.Equal(t, testCase.expected, next)
 		})
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
-		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
-
-		// when
-		next, err := commands.GetNextVersionString(globalConfig, projectConfig, changelogPath)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "2.4.0", next)
-	})
-
-	t.Run("should compute next fork-dot version when project sets fork-dot", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		changelogPath := writeChangelog(t, tmpDir, []string{
-			"# Changelog",
-			"",
-			"## [Unreleased]",
-			"",
-			"### Fixed",
-			"",
-			"- fixed sidebar selected item background",
-			"",
-			"## [3.3.0.16] - 2026-04-20",
-			"",
-			"### Fixed",
-			"",
-			"- raised job timeout",
-		})
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
-		projectConfig := entitybuilders.NewProjectConfigBuilder().
-			WithVersioning(entities.VersioningForkDot).
-			BuildProjectConfig()
-
-		// when
-		next, err := commands.GetNextVersionString(globalConfig, projectConfig, changelogPath)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "3.3.0.17", next)
-	})
-
-	t.Run("should compute next fork-dash version when global sets fork-dash", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		changelogPath := writeChangelog(t, tmpDir, []string{
-			"## [Unreleased]",
-			"",
-			"### Changed",
-			"",
-			"- changed loading spinner color",
-			"",
-			"## [1.21.0-9] - 2026-01-12",
-			"",
-			"### Changed",
-			"",
-			"- changed link color",
-		})
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithVersioning(entities.VersioningForkDash).
-			BuildGlobalConfig()
-		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
-
-		// when
-		next, err := commands.GetNextVersionString(globalConfig, projectConfig, changelogPath)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "1.21.0-10", next)
-	})
-
-	t.Run("should let project versioning override global", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		changelogPath := writeChangelog(t, tmpDir, []string{
-			"## [Unreleased]",
-			"",
-			"### Added",
-			"",
-			"- added new feature",
-			"",
-			"## [3.3.0.16] - 2026-04-20",
-		})
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithVersioning(entities.VersioningSemver).
-			BuildGlobalConfig()
-		projectConfig := entitybuilders.NewProjectConfigBuilder().
-			WithVersioning(entities.VersioningForkDot).
-			BuildProjectConfig()
-
-		// when
-		next, err := commands.GetNextVersionString(globalConfig, projectConfig, changelogPath)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "3.3.0.17", next)
-	})
+	}
 }
 
 func TestUpdateChangelogFileString(t *testing.T) {

@@ -269,14 +269,22 @@ func TestMergeLanguagesConfig(t *testing.T) {
 	})
 }
 
-// writeNamedConfig writes a minimal per-project config under name and returns its path.
-func writeNamedConfig(t *testing.T, dir, name string) string {
+// writeNamedConfig writes a per-project config under name and returns its path.
+func writeNamedConfig(t *testing.T, dir, name, content string) string {
 	t.Helper()
 
 	path := filepath.Join(dir, name)
-	require.NoError(t, os.WriteFile(path, []byte("languages: {}"), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
 	return path
+}
+
+// readProjectConfigFrom writes content as a per-project config and reads it back. Every
+// ReadProjectConfig case shares that preamble and differs only in the content.
+func readProjectConfigFrom(t *testing.T, content string) (*entities.GlobalConfig, error) {
+	t.Helper()
+
+	return entities.ReadProjectConfig(writeNamedConfig(t, t.TempDir(), ".autobump.yaml", content))
 }
 
 func TestFindProjectConfigFile(t *testing.T) {
@@ -291,7 +299,7 @@ func TestFindProjectConfigFile(t *testing.T) {
 
 			// given
 			tmpDir := t.TempDir()
-			configPath := writeNamedConfig(t, tmpDir, name)
+			configPath := writeNamedConfig(t, tmpDir, name, "languages: {}")
 
 			// when
 			result := entities.FindProjectConfigFile(tmpDir)
@@ -309,8 +317,8 @@ func TestFindProjectConfigFile(t *testing.T) {
 
 			// given
 			tmpDir := t.TempDir()
-			preferred := writeNamedConfig(t, tmpDir, ".autobump.yaml")
-			writeNamedConfig(t, tmpDir, lessPreferred)
+			preferred := writeNamedConfig(t, tmpDir, ".autobump.yaml", "languages: {}")
+			writeNamedConfig(t, tmpDir, lessPreferred, "languages: {}")
 
 			// when
 			result := entities.FindProjectConfigFile(tmpDir)
@@ -354,13 +362,10 @@ func TestReadProjectConfig(t *testing.T) {
 		t.Parallel()
 
 		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, ".autobump.yaml")
 		content := "languages:\n  python:\n    extensions:\n      - 'py'\n"
-		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
 
 		// when
-		cfg, err := entities.ReadProjectConfig(configPath)
+		cfg, err := readProjectConfigFrom(t, content)
 
 		// then
 		require.NoError(t, err)
@@ -373,13 +378,10 @@ func TestReadProjectConfig(t *testing.T) {
 		t.Parallel()
 
 		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, ".autobump.yaml")
 		content := "github_access_token: 'some-token'\n"
-		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
 
 		// when
-		cfg, err := entities.ReadProjectConfig(configPath)
+		cfg, err := readProjectConfigFrom(t, content)
 
 		// then
 		require.NoError(t, err)
@@ -421,13 +423,10 @@ func TestReadProjectConfig(t *testing.T) {
 		t.Parallel()
 
 		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, ".autobump.yaml")
 		content := "custom_unknown_field: 'value'\nlanguages:\n  go:\n    extensions:\n      - 'go'\n"
-		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
 
 		// when
-		cfg, err := entities.ReadProjectConfig(configPath)
+		cfg, err := readProjectConfigFrom(t, content)
 
 		// then
 		require.NoError(t, err)
@@ -439,13 +438,10 @@ func TestReadProjectConfig(t *testing.T) {
 		t.Parallel()
 
 		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, ".autobump.yaml")
 		content := "versioning: 'fork-dot'\nchangelog_path: 'CHANGELOG_PROPRIETARY.md'\n"
-		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
 
 		// when
-		cfg, err := entities.ReadProjectConfig(configPath)
+		cfg, err := readProjectConfigFrom(t, content)
 
 		// then
 		require.NoError(t, err)

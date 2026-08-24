@@ -672,6 +672,17 @@ func writeNamedProjectConfig(t *testing.T, dir, name, content string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
 }
 
+// golangConfigWithToken is golangOnlyConfig plus a GitHub token, for the cases asserting
+// that a per-project file cannot replace the operator's credentials.
+func golangConfigWithToken(token string) *entities.GlobalConfig {
+	return entitybuilders.NewGlobalConfigBuilder().
+		WithGitHubAccessToken(token).
+		WithLanguagesConfig(map[string]entities.LanguageConfig{
+			"golang": {Extensions: []string{"go"}},
+		}).
+		BuildGlobalConfig()
+}
+
 func TestLoadProjectConfigOverrides(t *testing.T) {
 	t.Parallel()
 
@@ -718,12 +729,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		configContent := "github_access_token: 'ignored-token'\n"
 		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithGitHubAccessToken("original-token").
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangConfigWithToken("original-token")
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
@@ -874,12 +880,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		configContent := "github_access_token: 'project-token'\nlanguages:\n  ruby:\n    extensions:\n      - 'rb'\n"
 		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
 
-		globalConfig := entitybuilders.NewGlobalConfigBuilder().
-			WithGitHubAccessToken("global-token").
-			WithLanguagesConfig(map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			}).
-			BuildGlobalConfig()
+		globalConfig := golangConfigWithToken("global-token")
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when

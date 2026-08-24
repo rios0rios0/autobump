@@ -207,61 +207,73 @@ func TestDetectChlog(t *testing.T) {
 func TestReadChlogFragments(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should order fragments by configured kind when several are pending", func(t *testing.T) {
-		t.Parallel()
+	// The three ordering rules differ only in the fragments on disk and the order they
+	// have to come back in, so they are a table rather than three copies of the same body.
+	type writtenFragment struct{ name, content string }
+	type expectedFragment struct{ kind, body string }
 
-		// given
-		tmpDir := t.TempDir()
-		writeFragment(t, tmpDir, "300-c3d4.yaml", "kind: Fixed\nbody: fixed the retry backoff\n")
-		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
+	orderingCases := []struct {
+		name     string
+		written  []writtenFragment
+		expected []expectedFragment
+	}{
+		{
+			name: "should order fragments by configured kind when several are pending",
+			written: []writtenFragment{
+				{"300-c3d4.yaml", "kind: Fixed\nbody: fixed the retry backoff\n"},
+				{"100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n"},
+			},
+			expected: []expectedFragment{
+				{"Added", "added OAuth2 login"},
+				{"Fixed", "fixed the retry backoff"},
+			},
+		},
+		{
+			name: "should order fragments by timestamp when they share a kind",
+			written: []writtenFragment{
+				{"100-a1b2.yaml", "kind: Added\nbody: added SSO support\ntime: 2026-07-21T10:00:00Z\n"},
+				{"200-c3d4.yaml", "kind: Added\nbody: added OAuth2 login\ntime: 2026-07-20T10:00:00Z\n"},
+			},
+			expected: []expectedFragment{
+				{"Added", "added OAuth2 login"},
+				{"Added", "added SSO support"},
+			},
+		},
+		{
+			name: "should order an unconfigured kind last when kinds are mixed",
+			written: []writtenFragment{
+				{"100-a1b2.yaml", "kind: Performance\nbody: sped up the parser\n"},
+				{"200-c3d4.yaml", "kind: Added\nbody: added OAuth2 login\n"},
+			},
+			expected: []expectedFragment{
+				{"Added", "added OAuth2 login"},
+				{"Performance", "sped up the parser"},
+			},
+		},
+	}
 
-		// when
-		fragments, err := readFragments(t, tmpDir)
+	for _, testCase := range orderingCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-		// then
-		require.NoError(t, err)
-		require.Len(t, fragments, 2)
-		assert.Equal(t, "Added", fragments[0].Kind)
-		assert.Equal(t, "Fixed", fragments[1].Kind)
-	})
+			// given
+			tmpDir := t.TempDir()
+			for _, written := range testCase.written {
+				writeFragment(t, tmpDir, written.name, written.content)
+			}
 
-	t.Run("should order fragments by timestamp when they share a kind", func(t *testing.T) {
-		t.Parallel()
+			// when
+			fragments, err := readFragments(t, tmpDir)
 
-		// given
-		tmpDir := t.TempDir()
-		writeFragment(t, tmpDir, "100-a1b2.yaml",
-			"kind: Added\nbody: added SSO support\ntime: 2026-07-21T10:00:00Z\n")
-		writeFragment(t, tmpDir, "200-c3d4.yaml",
-			"kind: Added\nbody: added OAuth2 login\ntime: 2026-07-20T10:00:00Z\n")
-
-		// when
-		fragments, err := readFragments(t, tmpDir)
-
-		// then
-		require.NoError(t, err)
-		require.Len(t, fragments, 2)
-		assert.Equal(t, "added OAuth2 login", fragments[0].Body)
-		assert.Equal(t, "added SSO support", fragments[1].Body)
-	})
-
-	t.Run("should order an unconfigured kind last when kinds are mixed", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Performance\nbody: sped up the parser\n")
-		writeFragment(t, tmpDir, "200-c3d4.yaml", "kind: Added\nbody: added OAuth2 login\n")
-
-		// when
-		fragments, err := readFragments(t, tmpDir)
-
-		// then
-		require.NoError(t, err)
-		require.Len(t, fragments, 2)
-		assert.Equal(t, "Added", fragments[0].Kind)
-		assert.Equal(t, "Performance", fragments[1].Kind)
-	})
+			// then
+			require.NoError(t, err)
+			require.Len(t, fragments, len(testCase.expected))
+			for i, expected := range testCase.expected {
+				assert.Equal(t, expected.kind, fragments[i].Kind)
+				assert.Equal(t, expected.body, fragments[i].Body)
+			}
+		})
+	}
 
 	t.Run("should read .yml fragments when a fragment uses the short extension", func(t *testing.T) {
 		t.Parallel()
