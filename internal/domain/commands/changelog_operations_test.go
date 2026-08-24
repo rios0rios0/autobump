@@ -14,17 +14,22 @@ import (
 	"github.com/rios0rios0/autobump/test/domain/entitybuilders"
 )
 
+// writeChangelog writes lines as a CHANGELOG.md in dir, one per line and with a trailing
+// newline, and returns its path. An empty slice writes an empty file, which is what the
+// cases covering a missing or unreadable changelog rely on.
 func writeChangelog(t *testing.T, dir string, lines []string) string {
 	t.Helper()
-	p := filepath.Join(dir, "CHANGELOG.md")
-	content := ""
-	var contentSb20 strings.Builder
-	for _, l := range lines {
-		contentSb20.WriteString(l + "\n")
+
+	var content strings.Builder
+	for _, line := range lines {
+		content.WriteString(line)
+		content.WriteString("\n")
 	}
-	content += contentSb20.String()
-	require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
-	return p
+
+	path := filepath.Join(dir, "CHANGELOG.md")
+	require.NoError(t, os.WriteFile(path, []byte(content.String()), 0o644))
+
+	return path
 }
 
 func TestShouldBumpProject(t *testing.T) {
