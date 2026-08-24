@@ -118,70 +118,59 @@ func TestRunRefreshCommands(t *testing.T) {
 		assert.Equal(t, []string{filepath.Join(dir, "shared.lock")}, refreshed)
 	})
 
-	t.Run("should report nothing when the declared file was not produced", func(t *testing.T) {
-		t.Parallel()
+	// The four no-op paths differ only in what makes them a no-op, so they are a table
+	// rather than four near-identical bodies.
+	noopCases := []struct {
+		reason   string
+		commands []entities.RefreshCommand
+		language string
+	}{
+		{
+			reason:   "the declared file was not produced",
+			commands: []entities.RefreshCommand{{Run: []string{"sh", "-c", "true"}, Files: []string{"yarn.lock"}}},
+			language: "typescript",
+		},
+		{
+			reason:   "the language configures no refresh commands",
+			commands: nil,
+			language: "typescript",
+		},
+		{
+			reason: "the project language is unknown",
+			commands: []entities.RefreshCommand{
+				{Run: []string{"sh", "-c", "touch yarn.lock"}, Files: []string{"yarn.lock"}},
+			},
+			language: "",
+		},
+		{
+			reason: "the language is absent from the config",
+			commands: []entities.RefreshCommand{
+				{Run: []string{"sh", "-c", "touch yarn.lock"}, Files: []string{"yarn.lock"}},
+			},
+			language: "elixir",
+		},
+	}
 
-		// given
-		dir := t.TempDir()
-		globalConfig, projectConfig := configWithRefreshCommands(dir, []entities.RefreshCommand{
-			{Run: []string{"sh", "-c", "true"}, Files: []string{"yarn.lock"}},
+	for _, noopCase := range noopCases {
+		t.Run("should report nothing when "+noopCase.reason, func(t *testing.T) {
+			t.Parallel()
+
+			// given
+			dir := t.TempDir()
+			globalConfig, projectConfig := configWithRefreshCommands(dir, noopCase.commands)
+			projectConfig.Language = noopCase.language
+
+			// when
+			refreshed, err := commands.RunRefreshCommands(globalConfig, projectConfig)
+
+			// then
+			require.NoError(t, err)
+			assert.Empty(t, refreshed)
+			if noopCase.language != "typescript" {
+				assert.NoFileExists(t, filepath.Join(dir, "yarn.lock"))
+			}
 		})
-
-		// when
-		refreshed, err := commands.RunRefreshCommands(globalConfig, projectConfig)
-
-		// then
-		require.NoError(t, err)
-		assert.Empty(t, refreshed)
-	})
-
-	t.Run("should report nothing when the language configures no refresh commands", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		globalConfig, projectConfig := configWithRefreshCommands(t.TempDir(), nil)
-
-		// when
-		refreshed, err := commands.RunRefreshCommands(globalConfig, projectConfig)
-
-		// then
-		require.NoError(t, err)
-		assert.Empty(t, refreshed)
-	})
-
-	t.Run("should report nothing when the project language is unknown", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		globalConfig, projectConfig := configWithRefreshCommands(t.TempDir(), []entities.RefreshCommand{
-			{Run: []string{"sh", "-c", "echo refreshed > yarn.lock"}, Files: []string{"yarn.lock"}},
-		})
-		projectConfig.Language = ""
-
-		// when
-		refreshed, err := commands.RunRefreshCommands(globalConfig, projectConfig)
-
-		// then
-		require.NoError(t, err)
-		assert.Empty(t, refreshed)
-	})
-
-	t.Run("should report nothing when the language is absent from the config", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		globalConfig, projectConfig := configWithRefreshCommands(t.TempDir(), []entities.RefreshCommand{
-			{Run: []string{"sh", "-c", "echo refreshed > yarn.lock"}, Files: []string{"yarn.lock"}},
-		})
-		projectConfig.Language = "elixir"
-
-		// when
-		refreshed, err := commands.RunRefreshCommands(globalConfig, projectConfig)
-
-		// then
-		require.NoError(t, err)
-		assert.Empty(t, refreshed)
-	})
+	}
 
 	t.Run("should fail with the command output when the command exits non-zero", func(t *testing.T) {
 		t.Parallel()
