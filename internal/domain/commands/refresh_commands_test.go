@@ -258,8 +258,13 @@ func TestResolveRefreshedFiles(t *testing.T) {
 		t.Parallel()
 
 		// given
+		// The directory is created 0600 rather than the usual 0750 because anything
+		// above 0600 is a semgrep finding, and this test needs no more: Glob reads the
+		// parent and Stat needs no traversal into the directory itself. Reaching for
+		// os.MkdirTemp to dodge the literal instead trades the finding for a
+		// `usetesting` one, and t.TempDir cannot place the directory inside dir.
 		dir := t.TempDir()
-		require.NoError(t, os.Mkdir(filepath.Join(dir, "build"), 0o750))
+		require.NoError(t, os.Mkdir(filepath.Join(dir, "build"), 0o600))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "build.lock"), []byte("x"), 0o600))
 
 		// when
