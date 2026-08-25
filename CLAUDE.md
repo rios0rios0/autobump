@@ -110,3 +110,28 @@ Refresh commands (`refresh_commands` under a language) regenerate what the versi
 chlog support: projects using [chlog](https://github.com/luizjhonata/chlog) keep pending changes as YAML fragments in `.changes/unreleased/` and therefore have a permanently empty `[Unreleased]` section. `internal/domain/commands/chlog.go` detects the layout (a `.chlog.yaml` or the fragment directory), parses the fragments, and renders them as Keep a Changelog `### <Section>` entries; chlog is a command-only module, so its format is re-implemented rather than imported. The splice happens in `readChangelogLines` (`service.go`), the single boundary every changelog read goes through — so the emptiness check, SemVer calculation, and fork mode all keep operating on plain Keep a Changelog lines. Fragment entries are merged with anything already in `[Unreleased]`, and AutoBump's own SemVer rules decide the bump rather than chlog's `auto` mapping. `consumeChlogFragments` deletes the consumed fragments after the rewrite and `addFilesToWorktree` stages the removals. Detection is opt-out via `entities.ChlogEnabled` (`detect_chlog`). A pending `.changes/v*.md` left by `chlog batch` aborts the run with `ErrChlogPendingVersionFiles`.
 
 Stale branch cleanup: before creating the bump branch, `cleanupStaleBumpBranches` (`internal/domain/commands/cleanup.go`) deletes every remote branch matching the bump prefix and closes the PR/MR attached to each (Azure DevOps abandons). It runs only when a bump is needed, so a PR is never closed without a replacement. It is opt-out — `entities.CleanupEnabled` treats an unset `cleanup_stale_branches` as enabled, and the persistent `--skip-cleanup` flag (applied by `applySkipCleanupFlag` in `controllers/config_helpers.go`) overrides the config per run. `entities.ResolveBumpBranchPrefix` (`bump_branch_prefix`, default `chore/bump-`) drives both branch creation and cleanup so the two cannot diverge. Cleanup is best-effort: every failure is logged and skipped rather than aborting the release.
+
+<!-- chlog:start -->
+## Changelog (chlog) — MANDATORY
+
+If the repository you are working in uses chlog (a `.chlog.yaml` or `.chlog.yml`
+config file, or a `.changes/` directory, exists at the project root), the
+following is binding and ALWAYS applies: whenever you make ANY change, you MUST
+create a changelog fragment as part of the same change — automatically, without
+being asked, before committing.
+
+- Do NOT edit CHANGELOG.md directly; it is generated from fragments.
+- Create the fragment with:
+  `chlog new --kind <Kind> --body "<imperative description>"`
+- Valid kinds: Added, Changed, Deprecated, Removed, Fixed, Security
+- Choose the kind that best matches the change (e.g., new feature → Added,
+  bug fix → Fixed, behavior change → Changed, removal → Removed, security fix → Security).
+- If the change is backward-INCOMPATIBLE with the public API (a breaking
+  change), you MUST add the `--breaking` flag:
+  `chlog new --kind <Kind> --breaking --body "<description>"`.
+  This is the ONLY thing that triggers a major version bump — the kind alone
+  never does (per SemVer, major = incompatible change). When unsure whether a
+  change breaks compatibility, ask the user instead of guessing.
+- Fragments are YAML files in `.changes/unreleased/`; stage them with your commit.
+- `chlog check` fails the build when a fragment is missing — never skip it.
+<!-- chlog:end -->

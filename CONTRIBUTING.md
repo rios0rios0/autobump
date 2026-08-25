@@ -9,6 +9,7 @@ development practices, refer to the **[Development Guide](https://github.com/rio
 
 - [Go](https://go.dev/dl/) 1.26+
 - [Make](https://www.gnu.org/software/make/)
+- [chlog](https://github.com/luizjhonata/chlog) (`go install github.com/luizjhonata/chlog@latest`)
 
 ## Development Workflow
 
@@ -29,6 +30,9 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    make test
    make sast
    ```
-7. Update `CHANGELOG.md` under `[Unreleased]`
+7. Add a changelog fragment — never edit `CHANGELOG.md`, which is generated from them:
+   ```bash
+   chlog new --kind Added --body "added the thing that was not there before"
+   ```
 8. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
 9. Open a pull request against `main`
