@@ -25,6 +25,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - removed the `//go:build unit` constraint from every unit test and the `integration || unit || test` one from the `entitybuilders`, so `go test ./...` and an IDE's run button execute the suite the pipeline has been executing all along. The tag never gated anything: an untagged file compiles under a `-tags` build too, so phase 1 (`-tags test,unit`) is unaffected, and phase 2 selects only the packages where the `integration` tag makes a test file *appear*, so nothing runs twice. `//go:build integration` remains the right tag for a test that needs real infrastructure
 - changed 300 subtests to call `t.Parallel()`, matching the parent that already declared it. `tparallel` had been reporting every one of them the moment the files stopped being hidden behind the tag
 - changed the repeated setup across the test suite into tables and helpers — the run-controller, project-override, config-discovery, fork-versioning, chlog-ordering, URL-parsing, provider-validation and version-file cases. Those blocks were duplicated before this branch touched them; adding one line inside each is what made SonarCloud count them as new. Several now assert more than they did: every `BuildGitforgeRepo` case checks `Project` and `RemoteURL` rather than only the fields it happened to remember, and every chlog case checks kind and body together
+- changed the Go module dependencies to their latest versions
 
 ### Security
 
