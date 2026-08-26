@@ -538,74 +538,79 @@ func TestProcessChangelogAppliesTheRules(t *testing.T) {
 		return lines
 	}
 
-	t.Run("should release the entries when the heading is written at the wrong depth", func(t *testing.T) {
-		t.Parallel()
+	// The cases differ only in the [Unreleased] body and what has to come out of it, so they
+	// are a table rather than four copies of the same body. An empty `version` is not
+	// asserted; every `contains` must appear in the result and every `absent` must not.
+	cases := []struct {
+		name     string
+		body     []string
+		version  string
+		contains []string
+		absent   []string
+	}{
+		{
+			// The release renderer buckets by the exact string "### Added", so entries under
+			// a mis-written heading are dropped from the release without a word.
+			name:     "should release the entries when the heading is written at the wrong depth",
+			body:     []string{"#### added", "", "- added OAuth2 login"},
+			version:  "1.3.0",
+			contains: []string{"### Added\n\n- added OAuth2 login"},
+		},
+		{
+			// A continuation line read as an entry of its own is counted as a change,
+			// compared for duplication, and -- opening with a verb -- moved to a section of
+			// its own, orphaned from the bullet it explains.
+			name: "should keep an entry whole when it spans several lines",
+			body: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff",
+				"  removed the exponential cap while doing so",
+			},
+			contains: []string{
+				"- fixed the retry backoff\n  removed the exponential cap while doing so",
+			},
+			absent: []string{"### Removed"},
+		},
+		{
+			// The bump counter matches one spelling only.
+			name:     "should release a major version when an entry spells the marker plainly",
+			body:     []string{"### Changed", "", "- BREAKING CHANGE: dropped the v1 endpoint"},
+			version:  "2.0.0",
+			contains: []string{"- **BREAKING CHANGE:** dropped the v1 endpoint"},
+		},
+		{
+			// Multi-line entries travel as one line through the pipeline and are split apart
+			// again on the way out.
+			name:   "should leave no fold separator behind when entries are processed",
+			body:   []string{"### Fixed", "", "- fixed the retry backoff", "  and its logging"},
+			absent: []string{"\x00"},
+		},
+	}
 
-		// given the release renderer buckets by the exact string "### Added", so entries
-		// under a mis-written heading are dropped from the release without a word
-		lines := baseline("#### added", "", "- added OAuth2 login")
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-		// when
-		version, content, err := entities.ProcessChangelog(lines)
+			// given
+			lines := baseline(testCase.body...)
 
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "1.3.0", version.String())
-		assert.Contains(t, strings.Join(content, "\n"), "### Added\n\n- added OAuth2 login")
-	})
+			// when
+			version, content, err := entities.ProcessChangelog(lines)
 
-	t.Run("should keep an entry whole when it spans several lines", func(t *testing.T) {
-		t.Parallel()
-
-		// given a continuation line read as an entry of its own is counted as a change,
-		// compared for duplication, and -- opening with a verb -- moved to another section
-		lines := baseline(
-			"### Fixed", "",
-			"- fixed the retry backoff",
-			"  removed the exponential cap while doing so")
-
-		// when
-		_, content, err := entities.ProcessChangelog(lines)
-
-		// then
-		joined := strings.Join(content, "\n")
-		require.NoError(t, err)
-		assert.Contains(t, joined,
-			"- fixed the retry backoff\n  removed the exponential cap while doing so")
-		assert.NotContains(t, joined, "### Removed")
-	})
-
-	t.Run("should release a major version when an entry spells the marker plainly", func(t *testing.T) {
-		t.Parallel()
-
-		// given the bump counter matches one spelling only
-		lines := baseline("### Changed", "", "- BREAKING CHANGE: dropped the v1 endpoint")
-
-		// when
-		version, content, err := entities.ProcessChangelog(lines)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "2.0.0", version.String())
-		assert.Contains(t, strings.Join(content, "\n"), "- **BREAKING CHANGE:** dropped the v1 endpoint")
-	})
-
-	t.Run("should leave no fold separator behind when entries are processed", func(t *testing.T) {
-		t.Parallel()
-
-		// given multi-line entries travel as one line through the pipeline and are split
-		// apart again on the way out
-		lines := baseline("### Fixed", "", "- fixed the retry backoff", "  and its logging")
-
-		// when
-		_, content, err := entities.ProcessChangelog(lines)
-
-		// then
-		require.NoError(t, err)
-		for _, line := range content {
-			assert.NotContains(t, line, "\x00", "the fold separator must never reach the file")
-		}
-	})
+			// then
+			require.NoError(t, err)
+			joined := strings.Join(content, "\n")
+			if testCase.version != "" {
+				assert.Equal(t, testCase.version, version.String())
+			}
+			for _, expected := range testCase.contains {
+				assert.Contains(t, joined, expected)
+			}
+			for _, unexpected := range testCase.absent {
+				assert.NotContains(t, joined, unexpected)
+			}
+		})
+	}
 }
 
 func TestFindLatestVersion(t *testing.T) {
