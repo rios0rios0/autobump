@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed `DefaultChlogConfig()` returning `major` for `Changed` and `Removed` while its own doc comment promised "chlog''s own defaults". chlog moved both kinds to `minor` and no longer has an `autoMajor` constant at all, so the mirror had drifted from the tool it mirrors. No behaviour changes -- AutoBump derives the bump from the rendered Keep a Changelog sections and never reads the `auto` field -- but a stale mirror is exactly the kind of thing the next reader trusts'
-time: '2026-08-26T01:00:46.520167142Z'

@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the repeated test bodies of the changelog rules into tables. The rule tests differ only in what goes in and what has to come out, and SonarCloud normalises literals before comparing token streams — so a dozen structurally identical subtests read as duplicated code no matter how different their content was. Duplication on the new code goes from `13.4%` to none'
-time: '2026-08-26T16:46:16.794439325Z'

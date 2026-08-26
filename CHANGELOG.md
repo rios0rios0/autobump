@@ -22,6 +22,28 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.38.0] - 2026-08-26
+
+### Added
+
+- added a tailored `code-review` skill under `.github/skills/` so GitHub Copilot reviews changes against the [rios0rios0/guide](https://github.com/rios0rios0/guide/wiki) standards and this repository's own load-bearing invariants
+
+### Changed
+
+- changed the changelog to [chlog](https://github.com/luizjhonata/chlog) fragments: a change now writes its own YAML file under `.changes/unreleased/` through `chlog new --kind <Kind> --body "..."`, and `CHANGELOG.md` is GENERATED from them at release time by `chlog batch auto && chlog merge`. That is the one thing a single shared file cannot do — two branches each adding an entry no longer touch the same lines, so a rebase that used to conflict on `CHANGELOG.md` now conflicts on nothing. The `[Unreleased]` section was empty, so nothing had to be carried across. AutoBump already reads the fragments directly, so the release flow is unchanged.
+- changed the Go module dependencies to their latest versions
+- changed the repeated test bodies of the changelog rules into tables. The rule tests differ only in what goes in and what has to come out, and SonarCloud normalises literals before comparing token streams — so a dozen structurally identical subtests read as duplicated code no matter how different their content was. Duplication on the new code goes from `13.4%` to none
+
+### Fixed
+
+- fixed `DefaultChlogConfig()` returning `major` for `Changed` and `Removed` while its own doc comment promised "chlog's own defaults". chlog moved both kinds to `minor` and no longer has an `autoMajor` constant at all, so the mirror had drifted from the tool it mirrors. No behaviour changes -- AutoBump derives the bump from the rendered Keep a Changelog sections and never reads the `auto` field -- but a stale mirror is exactly the kind of thing the next reader trusts
+- fixed a fragment created with `chlog new --breaking` releasing as a minor version. chlog stores the flag only to force a major bump when it picks the version itself and never renders a marker, while AutoBump reads the bump off the rendered Keep a Changelog lines — so the flag was read by nobody. The entry is now written as `**BREAKING CHANGE:** <body>`, and a body that already opens with a breaking-change marker — in any spelling, including a doubled one — is not given a second one
+- fixed a section heading written at the wrong depth or in the wrong casing — `#### added` — silently dropping every entry underneath it from the release, since the renderer buckets entries by the exact string `### Added`
+- fixed an entry spanning several lines being torn apart by the release. Continuation lines were judged as entries of their own, so a wrapped sentence whose second line opened with a verb was published as an orphan under another section, and the ordering of the section it left was broken as well. An entry now moves as a unit
+- fixed the `main` pipeline, which every repository's `sast:gitleaks` job had been failing since the code-review skill landed: the skill's own security bullet listed credential prefixes verbatim to warn against writing them, and the scanner's second pass matches those prefixes on their own, so the warning tripped the rule it was describing. The bullet now names the vendors instead, and the commit that carried the original wording is allowlisted by fingerprint in `.gitleaksignore`, because the scan walks the whole history reachable from `HEAD` and no edit at the tip can clear a past commit. No credential was ever committed.
+- fixed the changelog rules — deduplication, near-duplicate collapsing, verb-based reclassification, heading repair and ordering — running only on the SemVer path. They now run at `readChangelogLines`, the single boundary every changelog read passes through, which is what applies them to the two cases that never had them: chlog fragments, where each change is written alone in its own file and nothing else ever sees the pending set side by side, and fork versioning, which rewrites the section without consulting the SemVer pipeline the rules used to live inside
+- fixed the pull request checklist, which told contributors to run `go test` even though the repository documentation says to never call `go test` directly and to validate with `make lint`, `make test` and `make sast`
+
 ## [2.37.0] - 2026-08-25
 
 ### Added
