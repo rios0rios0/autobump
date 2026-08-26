@@ -380,6 +380,10 @@ When fragments are pending, AutoBump:
 - honours the `changelogPath` declared in `.chlog.yaml`, unless `changelog_path` overrides it
 - deletes the consumed fragments and stages the removals in the same commit that publishes
   their content, so the next run does not release them twice
+- leaves a `.gitkeep` behind in `.changes/unreleased/` and stages it, because Git tracks
+  files rather than directories: without it, the commit that removes the last fragment also
+  removes the directory, and the next run clones a repository that no longer looks like a
+  chlog user
 
 If `chlog batch` has already produced a `.changes/v<version>.md` that was never merged,
 AutoBump stops with an error instead of releasing on top of it: that file carries a version

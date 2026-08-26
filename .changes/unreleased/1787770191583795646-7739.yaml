@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'kept the `.changes/unreleased/` directory in the release commit by staging a `.gitkeep` alongside the consumed fragments. Git tracks files rather than directories, so removing the last fragment also removed the directory — and with it the layout AutoBump detects [chlog](https://github.com/luizjhonata/chlog) by, leaving the next run to read the permanently empty `[Unreleased]` section as "nothing to release" and a contributor to recreate the directory before `chlog new` would work again.'
+time: '2026-08-26T18:49:51.583709463Z'

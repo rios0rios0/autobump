@@ -713,6 +713,166 @@ func TestDeleteChlogFragments(t *testing.T) {
 	})
 }
 
+func TestKeepChlogUnreleasedDirectory(t *testing.T) {
+	t.Parallel()
+
+	config := commands.DefaultChlogConfig()
+
+	t.Run("should create the placeholder when the directory has been emptied", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- Git tracks files, not directories, so an emptied fragment directory
+		// would vanish from the commit and take the layout chlog is detected by with it
+		tmpDir := t.TempDir()
+		makeDir(t, filepath.Join(tmpDir, ".changes", "unreleased"))
+
+		// when
+		kept, err := commands.KeepChlogUnreleasedDirectory(tmpDir, &config)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(tmpDir, ".changes", "unreleased", ".gitkeep"), kept)
+		assert.FileExists(t, kept)
+	})
+
+	t.Run("should create the directory when the project has none yet", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+
+		// when
+		kept, err := commands.KeepChlogUnreleasedDirectory(tmpDir, &config)
+
+		// then
+		require.NoError(t, err)
+		assert.FileExists(t, kept)
+	})
+
+	t.Run("should return the existing placeholder when one is already there", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- a placeholder left by an aborted run is still untracked, so the path is
+		// returned for staging even though nothing is written
+		tmpDir := t.TempDir()
+		unreleasedDir := makeDir(t, filepath.Join(tmpDir, ".changes", "unreleased"))
+		keepPath := filepath.Join(unreleasedDir, ".gitkeep")
+		require.NoError(t, os.WriteFile(keepPath, []byte("kept by hand\n"), 0o600))
+
+		// when
+		kept, err := commands.KeepChlogUnreleasedDirectory(tmpDir, &config)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, keepPath, kept)
+		content, readErr := os.ReadFile(keepPath)
+		require.NoError(t, readErr)
+		assert.Equal(t, "kept by hand\n", string(content))
+	})
+
+	t.Run("should leave the placeholder alone when it is not a regular file", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- writing through a symlink the repository committed would touch a file
+		// outside it, and the link itself already holds the directory open
+		tmpDir := t.TempDir()
+		outside := filepath.Join(tmpDir, "outside.txt")
+		require.NoError(t, os.WriteFile(outside, []byte("host content\n"), 0o600))
+		unreleasedDir := makeDir(t, filepath.Join(tmpDir, ".changes", "unreleased"))
+		require.NoError(t, os.Symlink(outside, filepath.Join(unreleasedDir, ".gitkeep")))
+
+		// when
+		kept, err := commands.KeepChlogUnreleasedDirectory(tmpDir, &config)
+
+		// then
+		require.NoError(t, err)
+		assert.Empty(t, kept)
+		content, readErr := os.ReadFile(outside)
+		require.NoError(t, readErr)
+		assert.Equal(t, "host content\n", string(content))
+	})
+
+	t.Run("should honour the directories configured in .chlog.yaml", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		custom := commands.ChlogConfig{ChangesDir: "docs/changes", UnreleasedDir: "pending"}
+
+		// when
+		kept, err := commands.KeepChlogUnreleasedDirectory(tmpDir, &custom)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(tmpDir, "docs", "changes", "pending", ".gitkeep"), kept)
+		assert.FileExists(t, kept)
+	})
+}
+
+func TestConsumeChlogFragments(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should keep the directory detectable when every fragment is consumed", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		fragment := writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
+		ctx := &commands.RepoContext{ProjectConfig: &entities.ProjectConfig{Path: tmpDir}}
+
+		// when
+		consumed, err := commands.ConsumeChlogFragments(ctx)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, consumed)
+		assert.Equal(t, []string{fragment}, consumed.Removed)
+		assert.NoFileExists(t, fragment)
+		assert.FileExists(t, consumed.Kept)
+
+		// then -- the next run still recognises the project as a chlog user
+		_, usesChlog, detectErr := commands.DetectChlog(tmpDir)
+		require.NoError(t, detectErr)
+		assert.True(t, usesChlog)
+	})
+
+	t.Run("should consume nothing when the project has no fragments", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		ctx := &commands.RepoContext{ProjectConfig: &entities.ProjectConfig{Path: tmpDir}}
+
+		// when
+		consumed, err := commands.ConsumeChlogFragments(ctx)
+
+		// then
+		require.NoError(t, err)
+		assert.Nil(t, consumed)
+		assert.NoDirExists(t, filepath.Join(tmpDir, ".changes", "unreleased"))
+	})
+
+	t.Run("should consume nothing when chlog detection is disabled", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		fragment := writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
+		disabled := false
+		ctx := &commands.RepoContext{
+			ProjectConfig: &entities.ProjectConfig{Path: tmpDir, DetectChlog: &disabled},
+		}
+
+		// when
+		consumed, err := commands.ConsumeChlogFragments(ctx)
+
+		// then
+		require.NoError(t, err)
+		assert.Nil(t, consumed)
+		assert.FileExists(t, fragment)
+	})
+}
+
 func TestReadChangelogLinesWithChlog(t *testing.T) {
 	t.Parallel()
 

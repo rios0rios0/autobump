@@ -522,41 +522,58 @@ func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) erro
 
 	// The fragments have been folded into the release section above, so they must go.
 	// Leaving them behind would ship the same entries again on the next run.
-	consumedFragments, err := consumeChlogFragments(ctx)
+	consumed, err := consumeChlogFragments(ctx)
 	if err != nil {
 		return err
 	}
 
-	return addFilesToWorktree(ctx, changelogPath, refreshedFiles, consumedFragments)
+	return addFilesToWorktree(ctx, changelogPath, refreshedFiles, consumed)
 }
 
-// consumeChlogFragments deletes the chlog fragments that were just released and returns
-// their paths so the deletions can be staged. The fragments are re-read rather than
-// threaded through the changelog writers: they are untouched on disk until this point,
-// and re-reading keeps the I/O wrappers free of chlog state.
-func consumeChlogFragments(ctx *RepoContext) ([]string, error) {
-	fragments, _, err := collectChlogFragments(ctx.GlobalConfig, ctx.ProjectConfig)
+// chlogConsumption is what a release did to the chlog fragment directory: the fragment
+// files it removed, and the placeholder it left behind so the emptied directory survives
+// the same commit. Both have to reach the worktree, one as a deletion and one as an
+// addition, which is why they travel together.
+type chlogConsumption struct {
+	Removed []string
+	Kept    string
+}
+
+// consumeChlogFragments deletes the chlog fragments that were just released and keeps
+// their directory alive, returning both so the worktree can stage them. The fragments are
+// re-read rather than threaded through the changelog writers: they are untouched on disk
+// until this point, and re-reading keeps the I/O wrappers free of chlog state.
+func consumeChlogFragments(ctx *RepoContext) (*chlogConsumption, error) {
+	fragments, config, err := collectChlogFragments(ctx.GlobalConfig, ctx.ProjectConfig)
 	if err != nil {
 		return nil, err
 	}
 	if len(fragments) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nothing was consumed, so there is nothing to stage
 	}
 
 	deleted, err := DeleteChlogFragments(fragments)
 	if err != nil {
 		return nil, err
 	}
-
 	logger.Infof("Removed %d consumed chlog fragment(s)", len(deleted))
-	return deleted, nil
+
+	// Removing the last fragment would otherwise remove the directory from the commit --
+	// Git tracks files, not directories -- and with it the layout the next run detects
+	// chlog by.
+	kept, err := KeepChlogUnreleasedDirectory(ctx.ProjectConfig.Path, config)
+	if err != nil {
+		return nil, err
+	}
+
+	return &chlogConsumption{Removed: deleted, Kept: kept}, nil
 }
 
 func addFilesToWorktree(
 	ctx *RepoContext,
 	changelogPath string,
 	refreshedPaths []string,
-	removedPaths []string,
+	consumed *chlogConsumption,
 ) error {
 	versionFiles, err := getVersionFiles(ctx.GlobalConfig, ctx.ProjectConfig)
 	if err != nil {
@@ -608,11 +625,24 @@ func addFilesToWorktree(
 		return fmt.Errorf("failed to add changelog file: %w", err)
 	}
 
-	// Staging a path that no longer exists on disk records its deletion, so the consumed
-	// chlog fragments disappear in the same commit that publishes their content.
-	for _, removedPath := range removedPaths {
-		var removedRelativePath string
-		removedRelativePath, err = filepath.Rel(projectPath, removedPath)
+	return stageChlogConsumption(ctx, consumed)
+}
+
+// stageChlogConsumption records the fragment directory's new state in the worktree: the
+// consumed fragments as deletions, and the placeholder that keeps the directory in the
+// tree as an addition.
+//
+// Staging a path that no longer exists on disk is what records its deletion, so the
+// fragments disappear in the same commit that publishes their content.
+func stageChlogConsumption(ctx *RepoContext, consumed *chlogConsumption) error {
+	if consumed == nil {
+		return nil
+	}
+
+	projectPath := ctx.ProjectConfig.Path
+
+	for _, removedPath := range consumed.Removed {
+		removedRelativePath, err := filepath.Rel(projectPath, removedPath)
 		if err != nil {
 			return fmt.Errorf("failed to get relative path for removed file: %w", err)
 		}
@@ -621,6 +651,20 @@ func addFilesToWorktree(
 		if _, err = ctx.Worktree.Add(removedRelativePath); err != nil {
 			return fmt.Errorf("failed to stage removal of %s: %w", removedRelativePath, err)
 		}
+	}
+
+	if consumed.Kept == "" {
+		return nil
+	}
+
+	keptRelativePath, err := filepath.Rel(projectPath, consumed.Kept)
+	if err != nil {
+		return fmt.Errorf("failed to get relative path for the chlog placeholder: %w", err)
+	}
+
+	logger.Infof("Adding chlog placeholder %s", keptRelativePath)
+	if _, err = ctx.Worktree.Add(keptRelativePath); err != nil {
+		return fmt.Errorf("failed to stage the chlog placeholder %s: %w", keptRelativePath, err)
 	}
 
 	return nil
