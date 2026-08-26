@@ -525,6 +525,94 @@ func TestProcessChangelog(t *testing.T) {
 	})
 }
 
+func TestProcessChangelogAppliesTheRules(t *testing.T) {
+	t.Parallel()
+
+	// baseline is a released changelog whose [Unreleased] body each case replaces.
+	baseline := func(body ...string) []string {
+		lines := []string{"# Changelog", "", "## [Unreleased]", ""}
+		lines = append(lines, body...)
+		lines = append(lines,
+			"", "## [1.2.0] - 2026-01-01", "", "### Added", "", "- added the first release")
+
+		return lines
+	}
+
+	// The cases differ only in the [Unreleased] body and what has to come out of it, so they
+	// are a table rather than four copies of the same body. An empty `version` is not
+	// asserted; every `contains` must appear in the result and every `absent` must not.
+	cases := []struct {
+		name     string
+		body     []string
+		version  string
+		contains []string
+		absent   []string
+	}{
+		{
+			// The release renderer buckets by the exact string "### Added", so entries under
+			// a mis-written heading are dropped from the release without a word.
+			name:     "should release the entries when the heading is written at the wrong depth",
+			body:     []string{"#### added", "", "- added OAuth2 login"},
+			version:  "1.3.0",
+			contains: []string{"### Added\n\n- added OAuth2 login"},
+		},
+		{
+			// A continuation line read as an entry of its own is counted as a change,
+			// compared for duplication, and -- opening with a verb -- moved to a section of
+			// its own, orphaned from the bullet it explains.
+			name: "should keep an entry whole when it spans several lines",
+			body: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff",
+				"  removed the exponential cap while doing so",
+			},
+			contains: []string{
+				"- fixed the retry backoff\n  removed the exponential cap while doing so",
+			},
+			absent: []string{"### Removed"},
+		},
+		{
+			// The bump counter matches one spelling only.
+			name:     "should release a major version when an entry spells the marker plainly",
+			body:     []string{"### Changed", "", "- BREAKING CHANGE: dropped the v1 endpoint"},
+			version:  "2.0.0",
+			contains: []string{"- **BREAKING CHANGE:** dropped the v1 endpoint"},
+		},
+		{
+			// Multi-line entries travel as one line through the pipeline and are split apart
+			// again on the way out.
+			name:   "should leave no fold separator behind when entries are processed",
+			body:   []string{"### Fixed", "", "- fixed the retry backoff", "  and its logging"},
+			absent: []string{"\x00"},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			// given
+			lines := baseline(testCase.body...)
+
+			// when
+			version, content, err := entities.ProcessChangelog(lines)
+
+			// then
+			require.NoError(t, err)
+			joined := strings.Join(content, "\n")
+			if testCase.version != "" {
+				assert.Equal(t, testCase.version, version.String())
+			}
+			for _, expected := range testCase.contains {
+				assert.Contains(t, joined, expected)
+			}
+			for _, unexpected := range testCase.absent {
+				assert.NotContains(t, joined, unexpected)
+			}
+		})
+	}
+}
+
 func TestFindLatestVersion(t *testing.T) {
 	t.Parallel()
 
