@@ -616,8 +616,9 @@ func DeleteChlogFragments(fragments []ChlogFragment) ([]string, error) {
 	return deleted, nil
 }
 
-// KeepChlogUnreleasedDirectory writes an empty placeholder into the unreleased fragment
-// directory and returns its path so the caller can stage it.
+// KeepChlogUnreleasedDirectory makes sure the unreleased fragment directory holds a
+// placeholder file, and returns the path the caller has to stage -- empty when there is
+// nothing to stage.
 //
 // Git tracks files, not directories, so the same commit that removes the last fragment
 // also removes .changes/unreleased/ from the tree. That breaks the layout AutoBump
@@ -626,8 +627,11 @@ func DeleteChlogFragments(fragments []ChlogFragment) ([]string, error) {
 // contributor's next "chlog new" has to recreate the directory by hand. A tracked
 // placeholder is what keeps an emptied directory in the tree.
 //
-// The path is returned even when the file already exists, because a placeholder left by an
-// aborted earlier run is still untracked and has to be staged to survive this commit.
+// An existing placeholder is returned rather than skipped, because one left by an aborted
+// earlier run is still untracked and has to be staged to survive this commit. The single
+// case that returns an empty path -- and no error -- is a placeholder that is not a
+// regular file: nothing is written, and there is nothing to stage either, since whatever
+// is there already holds the directory open.
 func KeepChlogUnreleasedDirectory(projectPath string, config *ChlogConfig) (string, error) {
 	unreleasedPath := config.UnreleasedPath(projectPath)
 	if err := os.MkdirAll(unreleasedPath, chlogUnreleasedDirMode); err != nil {
