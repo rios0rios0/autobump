@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the pull request checklist, which told contributors to run `go test` even though the repository documentation says to never call `go test` directly and to validate with `make lint`, `make test` and `make sast`'
-time: '2026-08-25T22:37:58.680334566Z'

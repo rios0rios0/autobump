@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the changelog rules — deduplication, near-duplicate collapsing, verb-based reclassification, heading repair and ordering — running only on the SemVer path. They now run at `readChangelogLines`, the single boundary every changelog read passes through, which is what applies them to the two cases that never had them: chlog fragments, where each change is written alone in its own file and nothing else ever sees the pending set side by side, and fork versioning, which rewrites the section without consulting the SemVer pipeline the rules used to live inside'
-time: '2026-08-26T16:29:48.297547025Z'

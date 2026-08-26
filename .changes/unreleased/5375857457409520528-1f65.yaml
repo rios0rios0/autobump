@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the `main` pipeline, which every repository''s `sast:gitleaks` job had been failing since the code-review skill landed: the skill''s own security bullet listed credential prefixes verbatim to warn against writing them, and the scanner''s second pass matches those prefixes on their own, so the warning tripped the rule it was describing. The bullet now names the vendors instead, and the commit that carried the original wording is allowlisted by fingerprint in `.gitleaksignore`, because the scan walks the whole history reachable from `HEAD` and no edit at the tip can clear a past commit. No credential was ever committed.'
-time: '2026-08-26T17:30:00.000000000Z'
