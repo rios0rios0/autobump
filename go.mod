@@ -6,11 +6,11 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/go-git/go-git/v5 v5.19.2
-	github.com/rios0rios0/cliforge v0.3.18
+	github.com/rios0rios0/cliforge v0.3.19
 	github.com/rios0rios0/gitforge v1.0.1-0.20260723213209-a16be141d1d4
-	github.com/rios0rios0/langforge v1.0.3
+	github.com/rios0rios0/langforge v1.0.4
 	github.com/rios0rios0/testkit v0.2.8
-	github.com/sirupsen/logrus v1.10.1
+	github.com/sirupsen/logrus v1.10.2
 	github.com/skeema/knownhosts v1.3.2
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
