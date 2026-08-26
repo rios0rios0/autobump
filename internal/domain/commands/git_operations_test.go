@@ -1135,6 +1135,52 @@ func TestAddFilesToWorktreeExtended(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("should stage the removed fragments and the placeholder that keeps their directory", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- a released chlog project: the fragments are committed, and consuming
+		// them empties the directory Git would otherwise drop from the tree
+		repoPath, repo := createTestRepo(t)
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+
+		fragment := writeFragment(t, repoPath, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
+		_, err = wt.Add(filepath.Join(".changes", "unreleased", "100-a1b2.yaml"))
+		require.NoError(t, err)
+		_, err = wt.Commit("added a fragment", &git.CommitOptions{
+			Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
+		})
+		require.NoError(t, err)
+
+		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n"), 0o644))
+
+		ctx := &commands.RepoContext{
+			Worktree: wt,
+			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
+				WithLanguagesConfig(map[string]entities.LanguageConfig{}).BuildGlobalConfig(),
+			ProjectConfig: entitybuilders.NewProjectConfigBuilder().
+				WithPath(repoPath).
+				WithLanguage("").
+				BuildProjectConfig(),
+		}
+
+		consumed, err := commands.ConsumeChlogFragments(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, consumed)
+		assert.NoFileExists(t, fragment)
+
+		// when
+		err = commands.AddFilesToWorktree(ctx, changelogPath, nil, consumed)
+
+		// then
+		require.NoError(t, err)
+		status, statusErr := wt.Status()
+		require.NoError(t, statusErr)
+		assert.Equal(t, git.Deleted, status.File(filepath.Join(".changes", "unreleased", "100-a1b2.yaml")).Staging)
+		assert.Equal(t, git.Added, status.File(filepath.Join(".changes", "unreleased", ".gitkeep")).Staging)
+	})
+
 	t.Run("should add changelog when no version files configured", func(t *testing.T) {
 		t.Parallel()
 

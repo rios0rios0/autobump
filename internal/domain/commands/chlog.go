@@ -66,6 +66,19 @@ const chlogContinuationIndent = "  "
 // chlogLinesPerFragment is a capacity hint: a heading plus a bullet per fragment.
 const chlogLinesPerFragment = 2
 
+// chlogKeepFileName is the placeholder AutoBump leaves behind once it has consumed every
+// fragment, so Git keeps tracking the directory the fragments lived in. ".gitkeep" is the
+// conventional name for that file and, unlike a fragment, it is never globbed as one.
+const chlogKeepFileName = ".gitkeep"
+
+// Modes for the placeholder and for the directory it lives in. Both are owner-writable
+// and world-readable, matching what "chlog new" creates: the fragment directory is
+// ordinary repository content, not a secret.
+const (
+	chlogKeepFileMode      = 0o644
+	chlogUnreleasedDirMode = 0o755
+)
+
 // ErrChlogPendingVersionFiles is returned when chlog has already batched fragments into
 // .changes/v<version>.md but nobody has merged them into the changelog yet. Those files
 // carry a version chlog has decided; releasing a different one would rewrite history.
@@ -601,4 +614,45 @@ func DeleteChlogFragments(fragments []ChlogFragment) ([]string, error) {
 	}
 
 	return deleted, nil
+}
+
+// KeepChlogUnreleasedDirectory writes an empty placeholder into the unreleased fragment
+// directory and returns its path so the caller can stage it.
+//
+// Git tracks files, not directories, so the same commit that removes the last fragment
+// also removes .changes/unreleased/ from the tree. That breaks the layout AutoBump
+// detects by: the next run clones a repository that no longer looks like a chlog user, so
+// its permanently empty [Unreleased] section reads as "nothing to release" -- and a
+// contributor's next "chlog new" has to recreate the directory by hand. A tracked
+// placeholder is what keeps an emptied directory in the tree.
+//
+// The path is returned even when the file already exists, because a placeholder left by an
+// aborted earlier run is still untracked and has to be staged to survive this commit.
+func KeepChlogUnreleasedDirectory(projectPath string, config *ChlogConfig) (string, error) {
+	unreleasedPath := config.UnreleasedPath(projectPath)
+	if err := os.MkdirAll(unreleasedPath, chlogUnreleasedDirMode); err != nil {
+		return "", fmt.Errorf(
+			"failed to create the chlog fragment directory %s: %w", unreleasedPath, err)
+	}
+
+	keepPath := filepath.Join(unreleasedPath, chlogKeepFileName)
+	info, err := os.Lstat(keepPath)
+	switch {
+	case err == nil:
+		// Anything that is not a plain file already holds the directory open, and writing
+		// through a symlink planted by the repository would touch a file outside it.
+		if !info.Mode().IsRegular() {
+			logger.Warnf("Leaving %s alone: it is not a regular file", keepPath)
+			return "", nil
+		}
+		return keepPath, nil
+	case !errors.Is(err, os.ErrNotExist):
+		return "", fmt.Errorf("failed to inspect %s: %w", keepPath, err)
+	}
+
+	if err = os.WriteFile(keepPath, nil, chlogKeepFileMode); err != nil {
+		return "", fmt.Errorf("failed to create %s: %w", keepPath, err)
+	}
+
+	return keepPath, nil
 }
