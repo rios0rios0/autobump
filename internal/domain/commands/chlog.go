@@ -71,12 +71,13 @@ const chlogLinesPerFragment = 2
 // conventional name for that file and, unlike a fragment, it is never globbed as one.
 const chlogKeepFileName = ".gitkeep"
 
-// Modes for the placeholder and for the directory it lives in. Both are owner-writable
-// and world-readable, matching what "chlog new" creates: the fragment directory is
-// ordinary repository content, not a secret.
+// Modes for the placeholder and for the directory it lives in, both owner-only: Git
+// records nothing but the executable bit for a file and nothing at all for a directory,
+// so the tighter mode costs the release commit nothing. 0700 rather than 0600 for the
+// directory because a directory needs its execute bit to be traversable at all.
 const (
-	chlogKeepFileMode      = 0o644
-	chlogUnreleasedDirMode = 0o755
+	chlogKeepFileMode      = 0o600
+	chlogUnreleasedDirMode = 0o700
 )
 
 // ErrChlogPendingVersionFiles is returned when chlog has already batched fragments into
@@ -634,6 +635,11 @@ func DeleteChlogFragments(fragments []ChlogFragment) ([]string, error) {
 // is there already holds the directory open.
 func KeepChlogUnreleasedDirectory(projectPath string, config *ChlogConfig) (string, error) {
 	unreleasedPath := config.UnreleasedPath(projectPath)
+	// The permission rule compares the mode against 0600 and cannot tell a directory from
+	// a file, so it flags the tightest mode a directory can have and still be entered.
+	// Same call, and same suppression, as makeDir in the tests. The marker has to sit on
+	// the line directly above the call for Semgrep to attach it.
+	// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 	if err := os.MkdirAll(unreleasedPath, chlogUnreleasedDirMode); err != nil {
 		return "", fmt.Errorf(
 			"failed to create the chlog fragment directory %s: %w", unreleasedPath, err)
