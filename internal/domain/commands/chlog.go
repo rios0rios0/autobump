@@ -12,6 +12,8 @@ import (
 
 	logger "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+
+	"github.com/rios0rios0/autobump/internal/domain/entities"
 )
 
 // chlog (https://github.com/luizjhonata/chlog) is a fragment-based changelog tool:
@@ -55,7 +57,7 @@ const (
 // Changelog sections. chlog lets a repository define arbitrary kind labels, but
 // gitforge only ever emits the six known sections, so an unmapped kind would be
 // dropped silently. "Changed" is the neutral bucket that keeps the entry.
-const chlogFallbackSection = "Changed"
+const chlogFallbackSection = entities.SectionChanged
 
 // chlogContinuationIndent prefixes every line of a multi-line fragment body after the
 // first, so a wrapped sentence stays one changelog entry and a nested list stays nested.
@@ -85,12 +87,12 @@ var (
 //
 //nolint:gochecknoglobals // read-only lookup table
 var keepAChangelogSections = map[string]string{
-	"added":      "Added",
-	"changed":    "Changed",
-	"deprecated": "Deprecated",
-	"removed":    "Removed",
-	"fixed":      "Fixed",
-	"security":   "Security",
+	"added":      entities.SectionAdded,
+	"changed":    entities.SectionChanged,
+	"deprecated": entities.SectionDeprecated,
+	"removed":    entities.SectionRemoved,
+	"fixed":      entities.SectionFixed,
+	"security":   entities.SectionSecurity,
 }
 
 // ChlogKind is a single entry of the "kinds" list in .chlog.yaml. Only Label is used
@@ -112,11 +114,17 @@ type ChlogConfig struct {
 }
 
 // ChlogFragment is one pending change, as stored in .changes/unreleased/<name>.yaml.
+//
+// Breaking is what "chlog new --breaking" writes. chlog uses it only to force a major bump
+// when it picks a version itself and never renders it, but AutoBump picks the version from
+// the rendered Keep a Changelog lines -- so the flag has to become the marker the SemVer
+// calculation counts, or a breaking fragment would silently release as a minor.
 type ChlogFragment struct {
-	Kind string    `yaml:"kind"`
-	Body string    `yaml:"body"`
-	Time time.Time `yaml:"time"`
-	Path string    `yaml:"-"`
+	Kind     string    `yaml:"kind"`
+	Body     string    `yaml:"body"`
+	Breaking bool      `yaml:"breaking,omitempty"`
+	Time     time.Time `yaml:"time"`
+	Path     string    `yaml:"-"`
 }
 
 // DefaultChlogConfig returns chlog's own defaults, mirroring DefaultConfig() in
@@ -433,7 +441,7 @@ func RenderChlogFragments(fragments []ChlogFragment, config *ChlogConfig) []stri
 			rendered = append(rendered, "### "+section, "")
 			currentSection = section
 		}
-		rendered = append(rendered, renderChlogBody(fragment.Body)...)
+		rendered = append(rendered, renderChlogBody(fragment)...)
 	}
 
 	return rendered
@@ -462,10 +470,16 @@ func chlogSectionForKind(kind string, config *ChlogConfig) string {
 	return chlogFallbackSection
 }
 
-// renderChlogBody renders one fragment body as a bullet. Lines after the first are
-// indented so a wrapped sentence stays a single entry and a nested list stays nested.
-func renderChlogBody(body string) []string {
-	raw := strings.Split(strings.Trim(body, "\n"), "\n")
+// renderChlogBody renders one fragment as a bullet. Lines after the first are indented so
+// a wrapped sentence stays a single entry and a nested list stays nested.
+//
+// The opening line carries the breaking-change marker when the fragment declares one. It
+// is written by NormalizeBreakingChangeMarker rather than prepended, because a writer who
+// passes --breaking will often open the body with "BREAKING CHANGE:" as well -- the same
+// fact stated the way a commit footer states it -- and prepending would publish the marker
+// twice.
+func renderChlogBody(fragment ChlogFragment) []string {
+	raw := strings.Split(strings.Trim(fragment.Body, "\n"), "\n")
 	rendered := make([]string, 0, len(raw))
 
 	for _, line := range raw {
@@ -473,7 +487,9 @@ func renderChlogBody(body string) []string {
 			continue
 		}
 		if len(rendered) == 0 {
-			rendered = append(rendered, "- "+stripBulletPrefix(line))
+			opening := entities.NormalizeBreakingChangeMarker(
+				stripBulletPrefix(line), fragment.Breaking)
+			rendered = append(rendered, "- "+opening)
 			continue
 		}
 		rendered = append(rendered, chlogContinuationIndent+strings.TrimRight(line, " \t"))
@@ -497,8 +513,8 @@ func stripBulletPrefix(line string) string {
 // replacing matters during a migration to chlog, when both sources can hold real work.
 //
 // Duplicate "### Added"-style headings may result when both sources use the same
-// section. That is harmless: gitforge buckets by heading and merges them, and
-// DeduplicateEntries removes any overlapping bullets.
+// section. That is harmless: the caller normalises the section afterwards, which merges
+// repeated headings into one and removes any overlapping bullets.
 func MergeChlogIntoUnreleased(lines, fragmentLines []string) []string {
 	if len(fragmentLines) == 0 {
 		return lines
@@ -535,11 +551,11 @@ func findUnreleasedBounds(lines []string) (int, int) {
 	firstVersionIdx := len(lines)
 
 	for i, line := range lines {
-		match := changelogVersionHeaderRegex.FindStringSubmatch(line)
-		if match == nil {
+		header, isHeader := entities.MatchChangelogVersionHeader(line)
+		if !isHeader {
 			continue
 		}
-		if match[1] == unreleasedHeaderName {
+		if header == entities.UnreleasedHeaderName {
 			unreleasedHeaderIdx = i
 			continue
 		}

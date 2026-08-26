@@ -362,6 +362,14 @@ When fragments are pending, AutoBump:
   default kinds (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`) land in
   the matching Keep a Changelog sections. A custom kind is filed under `### Changed`
   rather than being dropped
+- honours `chlog new --breaking` by writing the entry as `**BREAKING CHANGE:** <body>`,
+  which is what makes the release a major one. chlog stores the flag but never renders it,
+  and AutoBump reads the bump off the rendered lines. A body that already opens with a
+  breaking-change marker — in any spelling, including a doubled one — is **not** given a
+  second: the marker is announced exactly once
+- applies the [changelog rules](#changelog-rules) to the pending fragments as a set, which
+  is where they matter most: every fragment is written alone, in its own file, so nothing
+  else ever sees them side by side
 - **merges** those entries with anything already written by hand in `[Unreleased]`, so
   nothing is lost while a repository is migrating to chlog
 - computes the next version with its own SemVer rules, **not** chlog's `auto` mapping. An
@@ -378,6 +386,26 @@ AutoBump stops with an error instead of releasing on top of it: that file carrie
 chlog already decided. Run `chlog merge` (or delete the file) and try again.
 
 Set `detect_chlog: false` — globally or per project — to switch the behaviour off.
+
+## Changelog Rules
+
+Every release normalises the `[Unreleased]` section before publishing it, whether its
+entries were written by hand or compiled from [chlog](#fragment-based-changelogs-chlog)
+fragments, and in every versioning mode:
+
+| Rule                     | What it does                                                                                                                       |
+|--------------------------|------------------------------------------------------------------------------------------------------------------------------------|
+| **Heading repair**       | `#### added` and `### ADDED` become `### Added`, and a section opened twice is merged into one                                      |
+| **Breaking-change form** | `BREAKING CHANGE:`, `**BREAKING CHANGE**:`, `BREAKING-CHANGE:` and a doubled marker all become one `**BREAKING CHANGE:**`           |
+| **Deduplication**        | Identical entries collapse; entries whose significant words overlap almost entirely collapse into the fuller or higher-versioned one |
+| **Reclassification**     | An entry is filed under the section its leading verb names, so `- removed the old flag` under `### Changed` moves to `### Removed`  |
+| **Ordering**             | Sections come out in a fixed order and entries are sorted alphabetically inside each one                                            |
+
+A multi-line entry moves as a unit: its continuation lines travel with the bullet they
+explain rather than being judged, sorted, or reclassified on their own.
+
+The rules only ever touch `[Unreleased]`. Released sections are history and are left
+exactly as they are.
 
 ## Versioning Modes
 
@@ -427,7 +455,7 @@ versioning: 'fork-dot'
 3. **Version Detection**: Reads the current version from CHANGELOG.md
 4. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
 5. **Refresh**: Runs any configured [refresh commands](#refresh-commands) so lockfiles and other derived files travel in the same commit
-6. **CHANGELOG Update**: Moves unreleased changes to the new version section with the current date, deduplicating semantically overlapping entries and folding in any pending [chlog](#fragment-based-changelogs-chlog) fragments
+6. **CHANGELOG Update**: Folds in any pending [chlog](#fragment-based-changelogs-chlog) fragments, applies the [changelog rules](#changelog-rules), and moves the result to the new version section with the current date
 7. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
 8. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
 

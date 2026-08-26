@@ -32,21 +32,34 @@ func FindLatestVersion(lines []string) (*semver.Version, error) {
 }
 
 // ProcessChangelog delegates to gitforge's Changelog.Process and sorts entries alphabetically.
+//
+// The [Unreleased] section is normalised and folded first. Normalising repairs what the
+// SemVer pipeline cannot see past -- a mis-cased heading whose entries it would drop, a
+// breaking-change marker spelled in a way it does not count -- and folding makes it read a
+// multi-line entry as the single entry it is. See NormalizeUnreleasedSection and
+// foldUnreleasedEntries.
 func ProcessChangelog(lines []string) (*semver.Version, []string, error) {
-	version, content, err := changelogEntities.NewChangelog(lines).Process()
+	prepared := foldUnreleasedEntries(NormalizeUnreleasedSection(lines))
+
+	version, content, err := changelogEntities.NewChangelog(prepared).Process()
 	if err != nil {
 		return nil, nil, err
 	}
-	return version, SortChangelogEntries(content), nil
+	return version, unfoldChangelogEntries(SortChangelogEntries(content)), nil
 }
 
 // ProcessNewChangelog delegates to gitforge's Changelog.ProcessNew and sorts entries alphabetically.
+//
+// The [Unreleased] section is normalised and folded first, for the reasons given on
+// ProcessChangelog.
 func ProcessNewChangelog(lines []string) (*semver.Version, []string, error) {
-	version, content, err := changelogEntities.NewChangelog(lines).ProcessNew()
+	prepared := foldUnreleasedEntries(NormalizeUnreleasedSection(lines))
+
+	version, content, err := changelogEntities.NewChangelog(prepared).ProcessNew()
 	if err != nil {
 		return nil, nil, err
 	}
-	return version, SortChangelogEntries(content), nil
+	return version, unfoldChangelogEntries(SortChangelogEntries(content)), nil
 }
 
 // SortChangelogEntries sorts bullet entries (lines starting with "- ")

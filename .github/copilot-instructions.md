@@ -67,7 +67,8 @@ autobump/
 │   │   │   │                            #   fork-aware changelog bumping
 │   │   │   ├── chlog.go                  # chlog layout detection; parses
 │   │   │   │                            #   .changes/unreleased/ fragments into
-│   │   │   │                            #   Keep a Changelog entries
+│   │   │   │                            #   Keep a Changelog entries, marking the
+│   │   │   │                            #   ones flagged --breaking
 │   │   │   ├── cleanup.go                # cleanupStaleBumpBranches: deletes stale
 │   │   │   │                            #   remote bump branches and closes their PRs
 │   │   │   ├── self_update.go           # SelfUpdate interface and SelfUpdateRunnerFunc type
@@ -80,6 +81,10 @@ autobump/
 │   │   └── entities/
 │   │       ├── changelog.go             # Changelog delegates to gitforge: version
 │   │       │                            #   calculation, processing, entry sorting
+│   │       ├── changelog_normalize.go   # Changelog rules over the [Unreleased] section:
+│   │       │                            #   heading repair, deduplication, verb-based
+│   │       │                            #   reclassification, ordering; entry folding
+│   │       ├── changelog_breaking.go    # One canonical breaking-change marker per entry
 │   │       ├── controller.go            # Controller interface and ControllerBind struct
 │   │       ├── repository.go            # Re-exports gitforge entities: ServiceType,
 │   │       │                            #   LatestTag, BranchStatus, Repository,
@@ -190,6 +195,9 @@ autobump/
 - Each refresh command is bounded twice: a 10-minute context, and `cmd.WaitDelay` (10s) so a descendant holding the output pipe cannot extend the call. `configureProcessGroup` (`refresh_commands_unix.go` / `_windows.go`) puts the command in its own process group and kills the group on cancellation, so a shell's children die with it
 - `bump_branch_prefix` (default `chore/bump-`, via `entities.ResolveBumpBranchPrefix`) drives both branch creation in `createBumpBranch` and the cleanup match, so they can never diverge
 - `detect_chlog` (opt-out, default enabled via `entities.ChlogEnabled`) toggles [chlog](https://github.com/luizjhonata/chlog) support: repos that keep pending changes as YAML fragments under `.changes/unreleased/` (detected by a `.chlog.yaml` or the fragment directory) have a permanently empty `[Unreleased]`. `internal/domain/commands/chlog.go` parses the fragments and `readChangelogLines` in `service.go` splices them in as Keep a Changelog `### <Section>` entries — the single boundary every changelog read passes through, so emptiness checks, SemVer calculation, and fork mode all still see plain lines. Consumed fragments are deleted and staged in the release commit; a pending `.changes/v*.md` aborts with `ErrChlogPendingVersionFiles`. chlog is re-implemented, not imported (command-only module)
+- `ChlogFragment.Breaking` mirrors `chlog new --breaking`. chlog keeps the flag only to force a major bump when *it* picks the version and never renders a marker, while AutoBump reads the bump off the rendered lines — so `renderChlogBody` writes the entry through `entities.NormalizeBreakingChangeMarker` instead of prepending, because a writer who passes `--breaking` usually opens the body with a breaking-change marker too and prepending would announce it twice
+- `entities.NormalizeUnreleasedSection` (`internal/domain/entities/changelog_normalize.go`) holds the changelog rules — heading repair, breaking-marker canonicalisation, deduplication, verb-based reclassification, ordering — and runs at the end of `readChangelogLines`. Putting it at that boundary is what extends the rules to chlog fragments (each written alone, so nothing else sees the pending set together) and to fork versioning (`rewriteUnreleasedAsForkRelease` never consulted the SemVer pipeline the rules used to live inside). It is idempotent and touches `[Unreleased]` only
+- The rules move an entry as a unit: a bullet plus its continuation lines. gitforge's `DeduplicateEntries` and `ReclassifyEntriesByVerb` are still the deciders (called with the bullets alone, paired back by order; and one entry at a time), and `ProcessChangelog` folds each entry onto one line before gitforge sees it, unfolding afterwards — gitforge reads one entry per line, so without the fold a continuation opening with "removed" is counted, deduplicated, and moved to `### Removed` away from its bullet
 
 ### Provider Configuration (run mode with providers)
 

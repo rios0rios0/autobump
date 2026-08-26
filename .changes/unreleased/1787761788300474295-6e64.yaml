@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed an entry spanning several lines being torn apart by the release. Continuation lines were judged as entries of their own, so a wrapped sentence whose second line opened with a verb was published as an orphan under another section, and the ordering of the section it left was broken as well. An entry now moves as a unit'
+time: '2026-08-26T16:29:48.300406497Z'

@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed a section heading written at the wrong depth or in the wrong casing — `#### added` — silently dropping every entry underneath it from the release, since the renderer buckets entries by the exact string `### Added`'
+time: '2026-08-26T16:29:48.304025887Z'

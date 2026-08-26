@@ -26,15 +26,6 @@ const forkRewriteOverhead = 4
 
 var forkVersionRegex = regexp.MustCompile(`^(\d+\.\d+\.\d+)([.\-])(\d+)$`)
 
-// changelogVersionHeaderRegex matches a Keep-a-Changelog version header line.
-//
-
-var changelogVersionHeaderRegex = regexp.MustCompile(`^\s*##\s*\[([^\]]+)\]`)
-
-// unreleasedHeaderName is the name carried by the "## [Unreleased]" heading, as captured
-// by changelogVersionHeaderRegex.
-const unreleasedHeaderName = "Unreleased"
-
 // ForkVersion is the parsed representation of a fork version string.
 type ForkVersion struct {
 	Upstream  string
@@ -114,12 +105,8 @@ func IsForkVersioning(mode string) bool {
 // form. Returns ErrNoForkVersionFound when no compatible header is present.
 func FindLatestForkVersion(lines []string, mode string) (*ForkVersion, error) {
 	for _, line := range lines {
-		match := changelogVersionHeaderRegex.FindStringSubmatch(line)
-		if match == nil {
-			continue
-		}
-		header := match[1]
-		if header == unreleasedHeaderName {
+		header, isHeader := entities.MatchChangelogVersionHeader(line)
+		if !isHeader || header == entities.UnreleasedHeaderName {
 			continue
 		}
 		parsed, err := ParseForkVersion(header, mode)
@@ -175,11 +162,11 @@ func rewriteUnreleasedAsForkRelease(lines []string, nextVersion string) []string
 	nextSectionIdx := len(lines)
 
 	for i, line := range lines {
-		match := changelogVersionHeaderRegex.FindStringSubmatch(line)
-		if match == nil {
+		header, isHeader := entities.MatchChangelogVersionHeader(line)
+		if !isHeader {
 			continue
 		}
-		if match[1] == unreleasedHeaderName {
+		if header == entities.UnreleasedHeaderName {
 			unreleasedHeaderIdx = i
 			continue
 		}

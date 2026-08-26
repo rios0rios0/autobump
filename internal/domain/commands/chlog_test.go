@@ -275,6 +275,25 @@ func TestReadChlogFragments(t *testing.T) {
 		})
 	}
 
+	t.Run("should read the breaking flag when a fragment declares one", func(t *testing.T) {
+		t.Parallel()
+
+		// given the shape "chlog new --kind Changed --breaking --body ..." writes
+		tmpDir := t.TempDir()
+		writeFragment(t, tmpDir, "100-a1b2.yaml",
+			"kind: 'Changed'\nbody: 'dropped the v1 endpoint'\nbreaking: true\ntime: '2026-07-20T10:00:00Z'\n")
+		writeFragment(t, tmpDir, "200-c3d4.yaml", "kind: 'Added'\nbody: 'added OAuth2 login'\n")
+
+		// when
+		fragments, err := readFragments(t, tmpDir)
+
+		// then
+		require.NoError(t, err)
+		require.Len(t, fragments, 2)
+		assert.False(t, fragments[0].Breaking, "the Added fragment declares nothing")
+		assert.True(t, fragments[1].Breaking)
+	})
+
 	t.Run("should read .yml fragments when a fragment uses the short extension", func(t *testing.T) {
 		t.Parallel()
 
@@ -504,6 +523,100 @@ func TestRenderChlogFragments(t *testing.T) {
 
 		// then
 		assert.Empty(t, rendered)
+	})
+
+	t.Run("should announce the change once when the flag and the body both say it", func(t *testing.T) {
+		t.Parallel()
+
+		bodies := map[string]string{
+			"plain":      "BREAKING CHANGE: dropped the v1 endpoint",
+			"emphasised": "**BREAKING CHANGE:** dropped the v1 endpoint",
+			"doubled":    "BREAKING CHANGE: BREAKING CHANGE: dropped the v1 endpoint",
+		}
+
+		for name, body := range bodies {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				// given
+				fragments := []commands.ChlogFragment{
+					{Kind: "Changed", Body: body, Breaking: true},
+				}
+
+				// when
+				rendered := commands.RenderChlogFragments(fragments, &config)
+
+				// then
+				assert.Equal(t, "- **BREAKING CHANGE:** dropped the v1 endpoint", rendered[len(rendered)-1])
+			})
+		}
+	})
+
+	t.Run("should mark the entry when only the fragment flag says it is breaking", func(t *testing.T) {
+		t.Parallel()
+
+		// given the flag is the only place chlog records it -- the tool never renders it,
+		// and the bump is calculated from the rendered lines
+		fragments := []commands.ChlogFragment{
+			{Kind: "Changed", Body: "changed the configuration format", Breaking: true},
+		}
+
+		// when
+		rendered := commands.RenderChlogFragments(fragments, &config)
+
+		// then
+		assert.Equal(t,
+			"- **BREAKING CHANGE:** changed the configuration format", rendered[len(rendered)-1])
+	})
+
+	t.Run("should mark the entry when only the body says it is breaking", func(t *testing.T) {
+		t.Parallel()
+
+		// given a fragment written by hand, or by a writer who forgot the flag
+		fragments := []commands.ChlogFragment{
+			{Kind: "Changed", Body: "BREAKING CHANGE: dropped the v1 endpoint"},
+		}
+
+		// when
+		rendered := commands.RenderChlogFragments(fragments, &config)
+
+		// then
+		assert.Equal(t, "- **BREAKING CHANGE:** dropped the v1 endpoint", rendered[len(rendered)-1])
+	})
+
+	t.Run("should mark only the opening line when a breaking body spans several lines", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		fragments := []commands.ChlogFragment{{
+			Kind:     "Changed",
+			Body:     "dropped the v1 endpoint\nthe replacement is /v2/tokens",
+			Breaking: true,
+		}}
+
+		// when
+		rendered := commands.RenderChlogFragments(fragments, &config)
+
+		// then
+		assert.Equal(t, []string{
+			"### Changed",
+			"",
+			"- **BREAKING CHANGE:** dropped the v1 endpoint",
+			"  the replacement is /v2/tokens",
+		}, rendered)
+	})
+
+	t.Run("should leave an ordinary fragment untouched when nothing marks it", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		fragments := []commands.ChlogFragment{{Kind: "Added", Body: "added OAuth2 login"}}
+
+		// when
+		rendered := commands.RenderChlogFragments(fragments, &config)
+
+		// then
+		assert.Equal(t, "- added OAuth2 login", rendered[len(rendered)-1])
 	})
 }
 
@@ -748,6 +861,255 @@ func TestShouldBumpProjectWithChlog(t *testing.T) {
 		assert.Contains(t, string(content), "- added OAuth2 login")
 		assert.Contains(t, string(content), "- fixed the retry backoff")
 		assert.Contains(t, string(content), "## [1.3.0]")
+	})
+}
+
+// releasedSectionOf returns the lines of the release section a bump just wrote, which is
+// what the rules have to be asserted on: everything above it is the emptied [Unreleased]
+// header and everything below it is history.
+func releasedSectionOf(t *testing.T, changelogPath, version string) []string {
+	t.Helper()
+
+	content, err := os.ReadFile(changelogPath)
+	require.NoError(t, err)
+
+	var section []string
+	inside := false
+	for line := range strings.SplitSeq(string(content), "\n") {
+		name, isHeader := entities.MatchChangelogVersionHeader(line)
+		if isHeader {
+			if inside {
+				break
+			}
+			inside = strings.HasPrefix(name, version)
+			continue
+		}
+		if inside {
+			section = append(section, line)
+		}
+	}
+
+	return section
+}
+
+// TestChlogFragmentChangelogRules covers the rules a release applies while compiling the
+// pending fragments into CHANGELOG.md. Fragments are the case that needs them most: each is
+// written alone, in its own file, so nobody ever sees the pending set side by side and
+// nothing stops two branches from describing the same change twice, filing an entry under a
+// kind its own verb contradicts, or spelling the breaking-change marker its own way.
+func TestChlogFragmentChangelogRules(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should release a major version when a fragment sets only the breaking flag", func(t *testing.T) {
+		t.Parallel()
+
+		// given the flag is all chlog records -- it never renders a marker of its own
+		tmpDir := t.TempDir()
+		changelogPath := writeChangelog(t, tmpDir, chlogBaseChangelog())
+		writeFragment(t, tmpDir, "100-a1b2.yaml",
+			"kind: Changed\nbody: changed the configuration format\nbreaking: true\n")
+
+		// when
+		version, err := commands.GetNextVersion(nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "2.0.0", version.String())
+	})
+
+	t.Run("should announce a breaking change once when the flag and the body both say it", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		changelogPath := writeChangelog(t, tmpDir, chlogBaseChangelog())
+		writeFragment(t, tmpDir, "100-a1b2.yaml",
+			"kind: Changed\nbody: \"BREAKING CHANGE: dropped the v1 endpoint\"\nbreaking: true\n")
+
+		// when
+		version, err := commands.UpdateChangelogFileString(
+			nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "2.0.0", version)
+		assert.Equal(t, []string{
+			"", "### Changed", "", "- **BREAKING CHANGE:** dropped the v1 endpoint", "",
+		}, releasedSectionOf(t, changelogPath, "2.0.0"))
+	})
+
+	t.Run("should publish one entry when two fragments describe the same change", func(t *testing.T) {
+		t.Parallel()
+
+		// given two branches each wrote a fragment for the work they shared
+		tmpDir := t.TempDir()
+		changelogPath := writeChangelog(t, tmpDir, chlogBaseChangelog())
+		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
+		writeFragment(t, tmpDir, "200-c3d4.yaml", "kind: Added\nbody: added OAuth2 login\n")
+
+		// when
+		version, err := commands.UpdateChangelogFileString(
+			nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"", "### Added", "", "- added OAuth2 login", "",
+		}, releasedSectionOf(t, changelogPath, version))
+	})
+
+	t.Run("should publish the fuller entry when two fragments nearly overlap", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		changelogPath := writeChangelog(t, tmpDir, chlogBaseChangelog())
+		writeFragment(t, tmpDir, "100-a1b2.yaml",
+			"kind: Added\nbody: added support for the new provider\n")
+		writeFragment(t, tmpDir, "200-c3d4.yaml",
+			"kind: Added\nbody: added support for the new provider adapter\n")
+
+		// when
+		version, err := commands.UpdateChangelogFileString(
+			nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"", "### Added", "", "- added support for the new provider adapter", "",
+		}, releasedSectionOf(t, changelogPath, version))
+	})
+
+	t.Run("should file the fragment under the section its verb names", func(t *testing.T) {
+		t.Parallel()
+
+		// given a kind the writer picked that its own body contradicts
+		tmpDir := t.TempDir()
+		changelogPath := writeChangelog(t, tmpDir, chlogBaseChangelog())
+		writeFragment(t, tmpDir, "100-a1b2.yaml",
+			"kind: Changed\nbody: removed the deprecated helper\n")
+
+		// when
+		version, err := commands.UpdateChangelogFileString(
+			nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"", "### Removed", "", "- removed the deprecated helper", "",
+		}, releasedSectionOf(t, changelogPath, version))
+	})
+
+	t.Run("should order the sections and the entries when many fragments are pending", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		changelogPath := writeChangelog(t, tmpDir, chlogBaseChangelog())
+		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Fixed\nbody: fixed the retry backoff\n")
+		writeFragment(t, tmpDir, "200-c3d4.yaml", "kind: Added\nbody: added SSO support\n")
+		writeFragment(t, tmpDir, "300-e5f6.yaml", "kind: Added\nbody: added OAuth2 login\n")
+
+		// when
+		version, err := commands.UpdateChangelogFileString(
+			nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"",
+			"### Added", "", "- added OAuth2 login", "- added SSO support",
+			"",
+			"### Fixed", "", "- fixed the retry backoff",
+			"",
+		}, releasedSectionOf(t, changelogPath, version))
+	})
+
+	t.Run("should keep a multi-line fragment whole when a continuation opens with a verb", func(t *testing.T) {
+		t.Parallel()
+
+		// given a continuation line judged on its own would be filed under "### Removed",
+		// orphaned from the bullet it explains
+		tmpDir := t.TempDir()
+		changelogPath := writeChangelog(t, tmpDir, chlogBaseChangelog())
+		writeFragment(t, tmpDir, "100-a1b2.yaml",
+			"kind: Fixed\nbody: |\n  fixed the retry backoff\n  removed the exponential cap while doing so\n")
+
+		// when
+		version, err := commands.UpdateChangelogFileString(
+			nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"", "### Fixed", "",
+			"- fixed the retry backoff",
+			"  removed the exponential cap while doing so",
+			"",
+		}, releasedSectionOf(t, changelogPath, version))
+	})
+
+	t.Run("should merge the fragments with the entries already written by hand", func(t *testing.T) {
+		t.Parallel()
+
+		// given a repository mid-migration to chlog, where both sources hold real work and
+		// the hand-written entry repeats what a fragment already says
+		tmpDir := t.TempDir()
+		changelogPath := writeChangelog(t, tmpDir, []string{
+			"# Changelog", "",
+			"## [Unreleased]", "",
+			"#### added", "",
+			"- added OAuth2 login",
+			"- added the audit trail", "",
+			"## [1.2.0] - 2026-01-01", "",
+			"### Added", "",
+			"- added the first release",
+		})
+		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
+
+		// when
+		version, err := commands.UpdateChangelogFileString(
+			nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
+
+		// then the mis-written heading is repaired, both sources are kept, and the repeat goes
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"", "### Added", "", "- added OAuth2 login", "- added the audit trail", "",
+		}, releasedSectionOf(t, changelogPath, version))
+	})
+
+	t.Run("should apply the rules when the project uses fork versioning", func(t *testing.T) {
+		t.Parallel()
+
+		// given fork mode rewrites the section without consulting the SemVer pipeline the
+		// rules used to live inside
+		tmpDir := t.TempDir()
+		changelogPath := writeChangelog(t, tmpDir, []string{
+			"# Changelog", "",
+			"## [Unreleased]", "",
+			"#### added", "",
+			"- added OAuth2 login", "",
+			"## [3.3.0.16] - 2026-01-01", "",
+			"### Added", "",
+			"- added the first release",
+		})
+		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: Added\nbody: added OAuth2 login\n")
+		writeFragment(t, tmpDir, "200-c3d4.yaml", "kind: Changed\nbody: removed the deprecated helper\n")
+		projectConfig := &entities.ProjectConfig{Path: tmpDir, Versioning: entities.VersioningForkDot}
+
+		// when
+		version, err := commands.UpdateChangelogFileString(nil, projectConfig, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "3.3.0.17", version)
+		assert.Equal(t, []string{
+			"",
+			"### Added", "", "- added OAuth2 login",
+			"",
+			"### Removed", "", "- removed the deprecated helper",
+			"",
+		}, releasedSectionOf(t, changelogPath, version))
 	})
 }
 
