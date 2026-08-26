@@ -42,6 +42,15 @@ const (
 	defaultChlogChangelogPath = "CHANGELOG.md"
 )
 
+// Bump levels a kind can infer, named as chlog names them. There is deliberately no
+// `autoMajor`: chlog has no such constant either, because under SemVer a major bump is a
+// property of the change rather than of its category, signalled per fragment by
+// `chlog new --breaking`.
+const (
+	autoMinor = "minor"
+	autoPatch = "patch"
+)
+
 // chlogFallbackSection receives fragments whose kind is not one of the six Keep a
 // Changelog sections. chlog lets a repository define arbitrary kind labels, but
 // gitforge only ever emits the six known sections, so an unmapped kind would be
@@ -110,19 +119,30 @@ type ChlogFragment struct {
 	Path string    `yaml:"-"`
 }
 
-// DefaultChlogConfig returns chlog's own defaults.
+// DefaultChlogConfig returns chlog's own defaults, mirroring DefaultConfig() in
+// chlog's internal/config.go.
+//
+// `Auto` is carried for fidelity and is deliberately unread: AutoBump derives the bump
+// from the rendered Keep a Changelog sections, not from the fragment's kind. Only `Label`
+// is used here -- to map a kind to its section and to order the sections.
+//
+// Changed and Removed map to `minor`, not `major`. chlog moved them off `major` (there is
+// no `autoMajor` constant left in the tool at all) because under SemVer a major bump means
+// a backward-incompatible change, which is a property of the change and not of its
+// category -- it is signalled per fragment by `chlog new --breaking`. Mirroring a value
+// the tool no longer has would make this function's own doc comment false.
 func DefaultChlogConfig() ChlogConfig {
 	return ChlogConfig{
 		ChangesDir:    defaultChlogChangesDir,
 		UnreleasedDir: defaultChlogUnreleasedDir,
 		ChangelogPath: defaultChlogChangelogPath,
 		Kinds: []ChlogKind{
-			{Label: "Added", Auto: "minor"},
-			{Label: "Changed", Auto: "major"},
-			{Label: "Deprecated", Auto: "minor"},
-			{Label: "Removed", Auto: "major"},
-			{Label: "Fixed", Auto: "patch"},
-			{Label: "Security", Auto: "patch"},
+			{Label: "Added", Auto: autoMinor},
+			{Label: "Changed", Auto: autoMinor},
+			{Label: "Deprecated", Auto: autoMinor},
+			{Label: "Removed", Auto: autoMinor},
+			{Label: "Fixed", Auto: autoPatch},
+			{Label: "Security", Auto: autoPatch},
 		},
 	}
 }
