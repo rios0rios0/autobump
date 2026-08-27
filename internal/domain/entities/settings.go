@@ -505,11 +505,31 @@ func SanitizeUntrustedLanguages(overrides map[string]LanguageConfig) map[string]
 }
 
 // FindConfigOnMissing finds the config file if not manually set.
+//
+// The operator's home directory is searched first, and on its own. The wider search that follows
+// looks in the working directory before the home one, and AutoBump normally runs with the
+// repository it is releasing as the working directory -- a repository that may carry its own
+// `.autobump.yaml` for per-project overrides. Resolving the global config through that search
+// answers with the project's file, and the settings AutoBump honours only from the operator's
+// config are then dropped with nothing to notice: the project file's own settings still apply,
+// so the release does the visible part of its job and looks correct. `refresh_commands` is the
+// setting that made this visible -- a bump rewrote the version files and skipped the lockfile
+// refresh that belongs with them, and CI rejected the release the pull request existed to
+// validate.
+//
+// The fallback is kept so the change costs nothing to an operator who keeps no config in their
+// home directory: they have no operator-level settings to lose.
 func FindConfigOnMissing(configPath string) string {
-	if configPath == "" {
-		logger.Info("No config file specified, searching for default locations")
+	if configPath != "" {
+		return configPath
+	}
 
-		var err error
+	logger.Info("No config file specified, searching for default locations")
+
+	configPath, err := configHelpers.FindGlobalConfigFile("autobump")
+	if err != nil {
+		logger.Debug("No config file in the home directory, widening the search")
+
 		configPath, err = configHelpers.FindConfigFile("autobump")
 		if err != nil {
 			logger.Warn(
@@ -518,9 +538,9 @@ func FindConfigOnMissing(configPath string) string {
 			)
 			configPath = DefaultConfigURL
 		}
-
-		logger.Infof("Using config file: \"%v\"", configPath)
-		return configPath
 	}
+
+	logger.Infof("Using config file: \"%v\"", configPath)
+
 	return configPath
 }

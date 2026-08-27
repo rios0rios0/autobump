@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/rios0rios0/cliforge v0.3.19
-	github.com/rios0rios0/gitforge v1.0.1-0.20260723213209-a16be141d1d4
+	github.com/rios0rios0/gitforge v1.0.1-0.20260827000225-8c05a4730240
 	github.com/rios0rios0/langforge v1.0.4
 	github.com/rios0rios0/testkit v0.2.8
 	github.com/sirupsen/logrus v1.10.2
