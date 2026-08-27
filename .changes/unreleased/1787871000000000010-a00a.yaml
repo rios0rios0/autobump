@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the Claude review workflow''s display name to `Claude Review`, so it matches its file name and its `Claude Mention` sibling.'
+time: '2026-08-27T21:45:00.000000000Z'
