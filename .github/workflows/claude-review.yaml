@@ -2,11 +2,11 @@ name: 'Claude Code Review'
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
+    types: ['opened', 'synchronize', 'ready_for_review', 'reopened']
 
 jobs:
   claude-review:
-    uses: 'rios0rios0/.github/.github/workflows/claude-code-review.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-review.yaml@main'
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     permissions:

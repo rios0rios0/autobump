@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the Claude workflows to call the reusable workflows in `rios0rios0/pipelines` instead of `rios0rios0/.github`, which is where every other reusable workflow and composite action already lives, and renamed them to `claude-review.yaml` and `claude-mention.yaml`, matching the `reusable-claude-review.yaml` / `reusable-claude-mention.yaml` definitions they call'
+time: '2026-08-27T18:00:00.000000000Z'
