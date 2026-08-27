@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'restored the `id-token: write` permission on both Claude workflow callers. Without it the caller grants less than the reusable workflow declares, which GitHub rejects before the job starts -- runs ended in `startup_failure`. The action needs the scope because `setupGitHubToken()` exchanges a GitHub OIDC token for the GitHub App token it posts with, unless a `github_token` is passed explicitly.'
+time: '2026-08-27T22:30:00.000000000Z'
