@@ -528,13 +528,14 @@ func FindConfigOnMissing(configPath string) string {
 
 	configPath, err := configHelpers.FindGlobalConfigFile("autobump")
 	if err != nil {
-		logger.Debug("No config file in the home directory, widening the search")
+		logger.Debugf("Could not resolve a config file from the home directory (%v), widening the search", err)
 
 		configPath, err = configHelpers.FindConfigFile("autobump")
 		if err != nil {
-			logger.Warn(
-				"Config file not found in default locations, " +
-					"using the repository configuration as the last resort",
+			logger.Warnf(
+				"Config file not found in default locations (%v), "+
+					"falling back to AutoBump's published default configuration at %s",
+				err, DefaultConfigURL,
 			)
 			configPath = DefaultConfigURL
 		}

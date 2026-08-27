@@ -1148,7 +1148,7 @@ func TestFindConfigOnMissingSearchOrder(t *testing.T) {
 			"an operator with no home config has no operator-level settings to lose")
 	})
 
-	t.Run("should fall back to the repository configuration when nothing is found", func(t *testing.T) {
+	t.Run("should fall back to the published default configuration when nothing is found", func(t *testing.T) {
 		// given
 		t.Setenv("HOME", t.TempDir())
 		t.Chdir(t.TempDir())
