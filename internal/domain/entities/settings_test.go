@@ -1108,6 +1108,80 @@ func TestFindConfigOnMissing(t *testing.T) {
 	})
 }
 
+// These cases cannot join TestFindConfigOnMissing above: it calls t.Parallel(), and t.Setenv
+// and t.Chdir panic under a parallel parent.
+func TestFindConfigOnMissingSearchOrder(t *testing.T) {
+	// The bug this ordering exists to prevent: AutoBump runs with the repository it is releasing
+	// as the working directory, that repository legitimately carries its own `.autobump.yaml`,
+	// and picking it as the GLOBAL config silently drops every setting honoured only from the
+	// operator's own file -- `refresh_commands` above all.
+	t.Run("should prefer the home config over one in the working directory", func(t *testing.T) {
+		// given
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		writeYAML(t, filepath.Join(home, ".autobump.yaml"))
+		project := t.TempDir()
+		writeYAML(t, filepath.Join(project, ".autobump.yaml"))
+		t.Chdir(project)
+
+		// when
+		result := entities.FindConfigOnMissing("")
+
+		// then
+		assert.Equal(t, filepath.Join(home, ".autobump.yaml"), result)
+	})
+
+	t.Run("should fall back to the working directory when the home has no config", func(t *testing.T) {
+		// given
+		t.Setenv("HOME", t.TempDir())
+		project := t.TempDir()
+		writeYAML(t, filepath.Join(project, ".autobump.yaml"))
+		t.Chdir(project)
+
+		// when
+		result := entities.FindConfigOnMissing("")
+
+		// then
+		resolved, err := filepath.Abs(result)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(project, ".autobump.yaml"), resolved,
+			"an operator with no home config has no operator-level settings to lose")
+	})
+
+	t.Run("should fall back to the published default configuration when nothing is found", func(t *testing.T) {
+		// given
+		t.Setenv("HOME", t.TempDir())
+		t.Chdir(t.TempDir())
+
+		// when
+		result := entities.FindConfigOnMissing("")
+
+		// then
+		assert.Equal(t, entities.DefaultConfigURL, result)
+	})
+
+	t.Run("should return the given path untouched when one is supplied", func(t *testing.T) {
+		// given
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		writeYAML(t, filepath.Join(home, ".autobump.yaml"))
+
+		// when
+		result := entities.FindConfigOnMissing("/explicit/path.yaml")
+
+		// then
+		assert.Equal(t, "/explicit/path.yaml", result,
+			"an explicit -c must win over any discovery")
+	})
+}
+
+// writeYAML creates a minimal, valid config file at the given path.
+func writeYAML(t *testing.T, path string) {
+	t.Helper()
+
+	require.NoError(t, os.WriteFile(path, []byte("languages:\n"), 0o600))
+}
+
 func TestResolveVersioning(t *testing.T) {
 	t.Parallel()
 
