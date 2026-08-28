@@ -11,7 +11,7 @@ require (
 	github.com/rios0rios0/langforge v1.1.0
 	github.com/rios0rios0/testkit v0.3.0
 	github.com/sirupsen/logrus v1.10.2
-	github.com/skeema/knownhosts v1.3.2
+	github.com/skeema/knownhosts v1.3.3
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	go.uber.org/dig v1.19.0
