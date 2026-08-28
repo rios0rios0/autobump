@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'removed the unused `id-token: write` permission from the Claude workflow callers, and changed `claude-review.yaml`''s display name to `Claude Review` so it matches its file name and its `Claude Mention` sibling. `anthropics/claude-code-action` needs `id-token: write` only for workload identity federation or the Bedrock / Vertex / Foundry OIDC paths; these authenticate with `claude_code_oauth_token`, so the scope allowed minting OIDC tokens for any audience without ever being used.'
-time: '2026-08-27T21:10:00.000000000Z'

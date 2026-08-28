@@ -22,6 +22,23 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.38.1] - 2026-08-28
+
+### Changed
+
+- changed the Claude workflows to call the reusable workflows in `rios0rios0/pipelines` instead of `rios0rios0/.github`, which is where every other reusable workflow and composite action already lives, and renamed them to `claude-review.yaml` and `claude-mention.yaml`, matching the `reusable-claude-review.yaml` / `reusable-claude-mention.yaml` definitions they call
+- changed the Go module dependencies to their latest versions
+
+### Fixed
+
+- fixed the global configuration being read out of the repository being released. The config search checked the working directory before the home one, and AutoBump normally runs with the repository it is releasing as the working directory -- a repository that may legitimately carry its own `.autobump.yaml` for per-project overrides. That file was therefore picked as the *global* config, and every setting AutoBump honours only from the operator's own file was dropped with nothing to notice: the project file's `version_files` still applied, so the bump rewrote the version files and the release looked correct. What went missing was `refresh_commands`, so the lockfile that derives from those version files was never regenerated, and the first CI job running an immutable install rejected the very release the pull request existed to validate. The operator's home directory is now searched first and on its own, through gitforge's `FindGlobalConfigFile`; the previous wider search is kept as a fallback, so an operator who keeps no config in their home directory -- and therefore has no operator-level settings to lose -- sees no change
+- kept the `.changes/unreleased/` directory in the release commit by staging a `.gitkeep` alongside the consumed fragments. Git tracks files rather than directories, so removing the last fragment also removed the directory — and with it the layout AutoBump detects [chlog](https://github.com/luizjhonata/chlog) by, leaving the next run to read the permanently empty `[Unreleased]` section as "nothing to release" and a contributor to recreate the directory before `chlog new` would work again.
+- restored the `id-token: write` permission on both Claude workflow callers. Without it the caller grants less than the reusable workflow declares, which GitHub rejects before the job starts -- runs ended in `startup_failure`. The action needs the scope because `setupGitHubToken()` exchanges a GitHub OIDC token for the GitHub App token it posts with, unless a `github_token` is passed explicitly.
+
+### Removed
+
+- removed the unused `id-token: write` permission from the Claude workflow callers, and changed `claude-review.yaml`'s display name to `Claude Review` so it matches its file name and its `Claude Mention` sibling. `anthropics/claude-code-action` needs `id-token: write` only for workload identity federation or the Bedrock / Vertex / Foundry OIDC paths; these authenticate with `claude_code_oauth_token`, so the scope allowed minting OIDC tokens for any audience without ever being used.
+
 ## [2.38.0] - 2026-08-26
 
 ### Added
