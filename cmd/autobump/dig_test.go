@@ -22,14 +22,14 @@ func TestInjectAppContext(t *testing.T) {
 	})
 }
 
-func TestInjectLocalController(t *testing.T) {
+func TestInjectRootController(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should inject local controller without panic", func(t *testing.T) {
+	t.Run("should inject the root controller without panic", func(t *testing.T) {
 		t.Parallel()
 
 		// given / when
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 
 		// then
 		require.NotNil(t, ctrl)
@@ -57,7 +57,7 @@ func TestBuildRootCommand(t *testing.T) {
 		t.Parallel()
 
 		// given
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 
 		// when
 		cmd := buildRootCommand(ctrl)
@@ -78,47 +78,65 @@ func TestAddSubcommands(t *testing.T) {
 		t.Parallel()
 
 		// given
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 		appCtx := injectAppContext()
 		rootCmd := buildRootCommand(ctrl)
 
 		// when
-		addSubcommands(rootCmd, appCtx)
+		addSubcommands(rootCmd, appCtx, ctrl)
 
 		// then
 		assert.True(t, rootCmd.HasSubCommands())
 	})
 
-	t.Run("should register run and local subcommands", func(t *testing.T) {
+	t.Run("should register the run, version and self-update subcommands", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 		appCtx := injectAppContext()
 		rootCmd := buildRootCommand(ctrl)
-		addSubcommands(rootCmd, appCtx)
+		addSubcommands(rootCmd, appCtx, ctrl)
+
+		// when / then
+		for _, name := range []string{"run", "version", "self-update"} {
+			subCmd, _, err := rootCmd.Find([]string{name})
+			require.NoError(t, err)
+			require.NotNil(t, subCmd)
+			assert.Equal(t, name, subCmd.Name())
+		}
+	})
+
+	t.Run("should keep local as a hidden deprecated command", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- `local` was removed, but registering nothing in its place is worse than
+		// a deprecation notice: the bare word would fall through to the root command's
+		// positional argument and be treated as a path, so `autobump local` would report
+		// that ./local does not exist rather than that the command is gone
+		ctrl := injectRootController()
+		appCtx := injectAppContext()
+		rootCmd := buildRootCommand(ctrl)
+		addSubcommands(rootCmd, appCtx, ctrl)
 
 		// when
-		runCmd, _, runErr := rootCmd.Find([]string{"run"})
-		localCmd, _, localErr := rootCmd.Find([]string{"local"})
+		localCmd, _, err := rootCmd.Find([]string{"local"})
 
 		// then
-		require.NoError(t, runErr)
-		require.NoError(t, localErr)
-		require.NotNil(t, runCmd)
+		require.NoError(t, err)
 		require.NotNil(t, localCmd)
-		assert.Equal(t, "run", runCmd.Name())
 		assert.Equal(t, "local", localCmd.Name())
+		assert.True(t, localCmd.Hidden, "it must not appear in --help")
 	})
 
 	t.Run("should register batch as hidden deprecated command", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 		appCtx := injectAppContext()
 		rootCmd := buildRootCommand(ctrl)
-		addSubcommands(rootCmd, appCtx)
+		addSubcommands(rootCmd, appCtx, ctrl)
 
 		// when
 		batchCmd, _, err := rootCmd.Find([]string{"batch"})
@@ -134,10 +152,10 @@ func TestAddSubcommands(t *testing.T) {
 		t.Parallel()
 
 		// given
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 		appCtx := injectAppContext()
 		rootCmd := buildRootCommand(ctrl)
-		addSubcommands(rootCmd, appCtx)
+		addSubcommands(rootCmd, appCtx, ctrl)
 
 		// when
 		discoverCmd, _, err := rootCmd.Find([]string{"discover"})
@@ -157,10 +175,10 @@ func TestSubcommandExecution(t *testing.T) {
 		t.Parallel()
 
 		// given
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 		appCtx := injectAppContext()
 		rootCmd := buildRootCommand(ctrl)
-		addSubcommands(rootCmd, appCtx)
+		addSubcommands(rootCmd, appCtx, ctrl)
 
 		runCmd, _, err := rootCmd.Find([]string{"run"})
 		require.NoError(t, err)
@@ -175,14 +193,14 @@ func TestSubcommandExecution(t *testing.T) {
 		})
 	})
 
-	t.Run("should execute local subcommand without panic", func(t *testing.T) {
+	t.Run("should execute the deprecated local subcommand without panic", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 		appCtx := injectAppContext()
 		rootCmd := buildRootCommand(ctrl)
-		addSubcommands(rootCmd, appCtx)
+		addSubcommands(rootCmd, appCtx, ctrl)
 
 		localCmd, _, err := rootCmd.Find([]string{"local"})
 		require.NoError(t, err)
@@ -201,10 +219,10 @@ func TestSubcommandExecution(t *testing.T) {
 		t.Parallel()
 
 		// given
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 		appCtx := injectAppContext()
 		rootCmd := buildRootCommand(ctrl)
-		addSubcommands(rootCmd, appCtx)
+		addSubcommands(rootCmd, appCtx, ctrl)
 
 		batchCmd, _, err := rootCmd.Find([]string{"batch"})
 		require.NoError(t, err)
@@ -224,10 +242,10 @@ func TestSubcommandExecution(t *testing.T) {
 		t.Parallel()
 
 		// given
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 		appCtx := injectAppContext()
 		rootCmd := buildRootCommand(ctrl)
-		addSubcommands(rootCmd, appCtx)
+		addSubcommands(rootCmd, appCtx, ctrl)
 
 		discoverCmd, _, err := rootCmd.Find([]string{"discover"})
 		require.NoError(t, err)
@@ -250,7 +268,7 @@ func TestBuildRootCommandRunE(t *testing.T) {
 		t.Parallel()
 
 		// given
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 		cmd := buildRootCommand(ctrl)
 
 		// when
@@ -264,7 +282,7 @@ func TestBuildRootCommandRunE(t *testing.T) {
 		t.Parallel()
 
 		// given
-		ctrl := injectLocalController()
+		ctrl := injectRootController()
 		cmd := buildRootCommand(ctrl)
 
 		// when -- passes a nonexistent path, Execute will log error but RunE returns nil

@@ -31,7 +31,7 @@ func runUpdateCheck(command *cobra.Command) {
 	selfupdate.NewCommand("rios0rios0", "autobump", "autobump", commands.AutobumpVersion).CheckForUpdates()
 }
 
-func buildRootCommand(localController *controllers.LocalController) *cobra.Command {
+func buildRootCommand(rootController *controllers.RootController) *cobra.Command {
 	//nolint:exhaustruct // Minimal Command initialization with required fields only
 	cmd := &cobra.Command{
 		Use:   "autobump [path]",
@@ -42,8 +42,8 @@ the next semantic version, updates version files, commits, pushes, and creates P
 Supports GitHub, GitLab, and Azure DevOps as Git hosting providers.
 
 Usage modes:
-  autobump local             Bump version in the current directory
-  autobump local /path       Bump version in a specific directory
+  autobump .                 Bump version in the current directory
+  autobump /path             Bump version in a specific directory
   autobump run               Batch mode using a config file (cronjob)`,
 		Args: cobra.MaximumNArgs(1),
 		PersistentPreRun: func(command *cobra.Command, _ []string) {
@@ -53,7 +53,7 @@ Usage modes:
 			if len(args) == 0 {
 				return command.Help()
 			}
-			localController.Execute(command, args)
+			rootController.Execute(command, args)
 			return nil
 		},
 	}
@@ -66,13 +66,19 @@ Usage modes:
 		"Keep bump branches from previous runs instead of deleting them and closing their PRs",
 	)
 
-	// Root-level flags (for `autobump .` shorthand)
-	cmd.Flags().StringP("language", "l", "", "project language")
+	// The single-repository flags belong to the root command itself now that there is no
+	// `local` subcommand to carry a second copy of them. AddFlags also sets Args, so the
+	// positional path is bounded in one place rather than two.
+	rootController.AddFlags(cmd)
 
 	return cmd
 }
 
-func addSubcommands(rootCmd *cobra.Command, appContext *internal.AppInternal) {
+func addSubcommands(
+	rootCmd *cobra.Command,
+	appContext *internal.AppInternal,
+	rootController *controllers.RootController,
+) {
 	// Find the RunController from registered controllers for deprecation aliases
 	var runController *controllers.RunController
 	for _, ctrl := range appContext.GetControllers() {
@@ -98,9 +104,6 @@ func addSubcommands(rootCmd *cobra.Command, appContext *internal.AppInternal) {
 		// Add controller-specific flags
 		if rc, ok := ctrl.(*controllers.RunController); ok {
 			rc.AddFlags(subCmd)
-		}
-		if lc, ok := ctrl.(*controllers.LocalController); ok {
-			lc.AddFlags(subCmd)
 		}
 		if sc, ok := ctrl.(*controllers.SelfUpdateController); ok {
 			sc.AddFlags(subCmd)
@@ -133,7 +136,24 @@ func addSubcommands(rootCmd *cobra.Command, appContext *internal.AppInternal) {
 			runController.Execute(cmd, args)
 		},
 	}
-	rootCmd.AddCommand(batchCmd, discoverCmd)
+	// `local` is gone, but leaving nothing in its place is worse than a deprecation
+	// notice: the bare word would fall through to the root command's positional argument
+	// and be treated as a path, so `autobump local` would report that ./local does not
+	// exist rather than that the command was removed.
+	//nolint:exhaustruct // Minimal Command initialization with required fields only
+	localCmd := &cobra.Command{
+		Use:    "local",
+		Short:  "Deprecated: use 'autobump [path]' instead",
+		Hidden: true,
+		Args:   cobra.MaximumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			logger.Warn("'local' was removed in 3.0.0, use 'autobump [path]' instead")
+			rootController.Execute(cmd, args)
+		},
+	}
+	localCmd.Flags().StringP("language", "l", "", "project language")
+
+	rootCmd.AddCommand(batchCmd, discoverCmd, localCmd)
 }
 
 func main() {
@@ -155,13 +175,13 @@ func main() {
 	commands.SetGitOperations(gitOps)
 	commands.SetProviderRegistry(providerRegistry)
 
-	// Inject the local controller and create root command
-	localController := injectLocalController()
-	rootCmd := buildRootCommand(localController)
+	// Inject the root controller and create root command
+	rootController := injectRootController()
+	rootCmd := buildRootCommand(rootController)
 
 	// Add all subcommands (including deprecation aliases)
 	appContext := injectAppContext()
-	addSubcommands(rootCmd, appContext)
+	addSubcommands(rootCmd, appContext, rootController)
 
 	if err := rootCmd.Execute(); err != nil {
 		logger.Errorf("Uncaught error: %v", err)

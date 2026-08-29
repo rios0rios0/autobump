@@ -16,6 +16,8 @@ type ProjectConfigBuilder struct {
 	newVersion         string
 	changelogPath      string
 	versioning         string
+	detectChlog        *bool
+	refresh            *bool
 }
 
 // NewProjectConfigBuilder creates a new ProjectConfig builder with sensible defaults.
@@ -29,6 +31,8 @@ func NewProjectConfigBuilder() *ProjectConfigBuilder {
 		newVersion:         "",
 		changelogPath:      "",
 		versioning:         "",
+		detectChlog:        nil,
+		refresh:            nil,
 	}
 }
 
@@ -74,6 +78,19 @@ func (b *ProjectConfigBuilder) WithVersioning(mode string) *ProjectConfigBuilder
 	return b
 }
 
+// WithDetectChlog sets the chlog detection toggle. A pointer, because an absent setting
+// and an explicit false mean different things: absent resolves to the default.
+func (b *ProjectConfigBuilder) WithDetectChlog(detect bool) *ProjectConfigBuilder {
+	b.detectChlog = &detect
+	return b
+}
+
+// WithRefresh sets the post-bump refresh toggle, with the same pointer semantics.
+func (b *ProjectConfigBuilder) WithRefresh(refresh bool) *ProjectConfigBuilder {
+	b.refresh = &refresh
+	return b
+}
+
 // Build creates the ProjectConfig (satisfies testkit.Builder interface).
 func (b *ProjectConfigBuilder) Build() any {
 	return b.BuildProjectConfig()
@@ -89,6 +106,8 @@ func (b *ProjectConfigBuilder) BuildProjectConfig() *entities.ProjectConfig {
 		NewVersion:         b.newVersion,
 		ChangelogPath:      b.changelogPath,
 		Versioning:         b.versioning,
+		DetectChlog:        b.detectChlog,
+		Refresh:            b.refresh,
 	}
 }
 
@@ -102,6 +121,8 @@ func (b *ProjectConfigBuilder) Reset() testkit.Builder {
 	b.newVersion = ""
 	b.changelogPath = ""
 	b.versioning = ""
+	b.detectChlog = nil
+	b.refresh = nil
 	return b
 }
 
@@ -116,5 +137,7 @@ func (b *ProjectConfigBuilder) Clone() testkit.Builder {
 		newVersion:         b.newVersion,
 		changelogPath:      b.changelogPath,
 		versioning:         b.versioning,
+		detectChlog:        b.detectChlog,
+		refresh:            b.refresh,
 	}
 }

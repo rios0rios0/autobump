@@ -1,6 +1,10 @@
 package commands
 
-import "github.com/rios0rios0/autobump/internal/domain/entities"
+import (
+	"time"
+
+	"github.com/rios0rios0/autobump/internal/domain/entities"
+)
 
 // FilterRepositories exports filterRepositories for testing.
 func FilterRepositories(
@@ -174,5 +178,32 @@ var RunRefreshCommands = runRefreshCommands //nolint:gochecknoglobals // test ex
 // ResolveRefreshedFiles exports resolveRefreshedFiles for testing.
 var ResolveRefreshedFiles = resolveRefreshedFiles //nolint:gochecknoglobals // test export
 
-// RunRefreshCommand exports runRefreshCommand for testing.
-var RunRefreshCommand = runRefreshCommand //nolint:gochecknoglobals // test export
+// RunRefreshRecipe exports runRefreshRecipe for testing, with a recipe built by the test
+// rather than read from configuration -- which is the point of the redesign: production
+// recipes are compile-time constants, so the bounds tests need a synthetic one.
+func RunRefreshRecipe(
+	projectPath string, run, files, env []string,
+	timeout time.Duration, waitDelay time.Duration,
+) error {
+	return runRefreshRecipe(
+		projectPath,
+		refreshRecipe{Manager: "test", Run: run, Files: files, Env: env},
+		timeout, waitDelay,
+	)
+}
+
+// DetectNodeRecipe exports detectNodeRecipe for testing, flattening the unexported recipe
+// into the manager name and argv a test can assert on.
+func DetectNodeRecipe(projectPath string) (string, []string, []string, bool) {
+	recipe, found := detectNodeRecipe(projectPath)
+	return recipe.Manager, recipe.Run, recipe.Files, found
+}
+
+// RefreshRecipeLanguages exports the languages that have a refresh recipe.
+func RefreshRecipeLanguages() []string {
+	languages := make([]string, 0, len(refreshRecipes))
+	for language := range refreshRecipes {
+		languages = append(languages, language)
+	}
+	return languages
+}

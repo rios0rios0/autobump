@@ -68,7 +68,42 @@ Download pre-built binaries from the [releases page](https://github.com/rios0rio
 
 ## Configuration
 
-Create a configuration file based on the example from `configs/autobump.yaml` and put it in `~/.config/autobump.yaml`.
+### Configuration Layers
+
+AutoBump folds four configuration sources, each overriding only the keys it declares:
+
+| # | Layer | Where it comes from | May set |
+|---|-------|---------------------|---------|
+| 1 | **built-in defaults** | `configs/autobump.yaml`, compiled into the binary | languages and behaviour |
+| 2 | **published defaults** | the same file fetched from `main`, best effort | languages and behaviour |
+| 3 | **operator configuration** | `-c <path\|URL>`, else `~/.autobump.yaml` or `~/.config/autobump.yaml` | **everything** |
+| 4 | **project configuration** | `.autobump.yaml` in the repository being released | languages and behaviour |
+
+Layer 1 always exists, so AutoBump knows every language it supports with no configuration
+and no network. Layer 2 lets a language fix reach an installed binary without a release;
+when it cannot be fetched, the run says so and carries on. Layer 3 is the only one that
+may name a credential, a `providers`/`projects` list, or the bump branch prefix -- the
+other three decode through a schema that has no field for them, so a repository cannot
+hand AutoBump credentials or aim its branch deletion.
+
+Set the same key at several levels and the last one wins:
+
+```yaml
+# configs/autobump.yaml (built in)      -> versioning defaults to 'semver'
+# ~/.autobump.yaml                      -> versioning: 'fork-dash'
+# the repository's .autobump.yaml       -> versioning: 'fork-dot'
+# effective                             -> fork-dot
+```
+
+The working directory is never searched for the operator's configuration. AutoBump
+normally runs with the repository it is releasing as the working directory, and that
+repository may carry its own `.autobump.yaml`; reading it as the operator's configuration
+would substitute a project's overrides for the operator's rather than layering them.
+
+### Getting started
+
+Copy [`configs/autobump.example.yaml`](configs/autobump.example.yaml) to
+`~/.config/autobump.yaml` and fill in what you need.
 You will need to configure at least one access token depending on which Git platform you use:
 
 - **GitLab**: Set `gitlab_access_token` field with your GitLab personal access token (e.g., `glpat-TOKEN`)
@@ -140,7 +175,7 @@ autobump run --skip-cleanup
 
 ## Usage
 
-AutoBump has two main modes: **local** (single repository) and **run** (batch engine).
+AutoBump has two modes: a **single repository** (`autobump .`) and the **run** engine.
 
 These flags work with every mode:
 
@@ -150,22 +185,24 @@ These flags work with every mode:
 | `-v`, `--verbose`   | Enable verbose output                                                                    |
 | `--skip-cleanup`    | Keep the bump branches from earlier runs instead of deleting them and closing their PRs  |
 
-### 1. Local Mode
+### 1. Single Repository
 
-Process a single repository. Run in the project directory or specify a path:
+Process a single repository. Run in the project directory or name a path:
 
 ```bash
-autobump local              # Current directory
-autobump local /path/to/repo  # Specific path
-autobump .                  # Shorthand for local mode
+autobump .                    # Current directory
+autobump /path/to/repo        # Specific path
 ```
+
+> The `local` subcommand was removed in 3.0.0. `autobump local` still works, hidden and
+> deprecated, so that the word is not silently read as a path -- but it warns and will go.
 
 AutoBump will automatically detect the project language, update the version files, update the CHANGELOG.md file, and create a merge request/pull request on your Git platform (GitLab, Azure DevOps, or GitHub).
 
 You can manually specify the project language using the `-l` or `--language` flag:
 
 ```bash
-autobump local -l java
+autobump -l java .
 ```
 
 Available languages: `cs`, `dart`, `go`, `helm`, `java`, `python`, `terraform`, `typescript`
@@ -173,7 +210,7 @@ Available languages: `cs`, `dart`, `go`, `helm`, `java`, `python`, `terraform`, 
 You can also specify a custom configuration file path:
 
 ```bash
-autobump local -c /path/to/custom/config.yaml
+autobump -c /path/to/custom/config.yaml .
 ```
 
 ### 2. Run Mode (Batch + Discover)
@@ -246,19 +283,36 @@ AutoBump will process all configured sources (static project list and/or provide
 
 ## Per-Project Configuration (`.autobump.yaml`)
 
-Drop a `.autobump.yaml` (or `.autobump.yml`, `autobump.yaml`, `autobump.yml`) at the
-root of any repository to override settings for that project only. AutoBump
-auto-detects the file from `local`, `run`, and discovery modes, so the global
-config in `~/.config/autobump.yaml` does not need to know anything about it.
+Drop a `.autobump.yaml` (or `.autobump.yml`, `autobump.yaml`, `autobump.yml`) at the root
+of any repository to override settings for that project only. It is the last
+[configuration layer](#configuration-layers): AutoBump finds it in every mode, so your own
+configuration does not need to know anything about it, and what it sets wins over what you
+configured for that project.
 
-The keys recognized in a per-project file are:
+The keys a per-project file may set:
 
-| Key                | Purpose                                                                              |
-|--------------------|--------------------------------------------------------------------------------------|
-| `changelog_path`   | Custom changelog filename relative to the project root (e.g. `CHANGELOG_PROPRIETARY.md`) |
-| `versioning`       | Versioning mode: `semver` (default), `fork-dot`, or `fork-dash`                      |
-| `detect_chlog`     | Set to `false` to ignore [chlog](#fragment-based-changelogs-chlog) fragments (detection is on by default) |
-| `languages`        | Per-language overrides for `extensions`, `special_patterns`, and `version_files`. `refresh_commands` can only be *cleared* here — see [Refresh Commands](#refresh-commands) |
+| Key | Purpose |
+|-----|---------|
+| `refresh` | Regenerate the lockfile in the bump commit — see [Refresh](#refresh) |
+| `changelog_path` | Changelog filename relative to the project root (e.g. `CHANGELOG_PROPRIETARY.md`) |
+| `versioning` | `semver` (default), `fork-dot`, or `fork-dash` |
+| `detect_chlog` | `false` to ignore [chlog](#fragment-based-changelogs-chlog) fragments (on by default) |
+| `cleanup_stale_branches` | `false` to keep this project's bump branches (on by default) |
+| `exclude_forks`, `exclude_archived` | Accepted, but they filter what *discovery selects*; by the time this file is read the repository has already been selected and cloned, so they do nothing here |
+| `languages` | Per-language `extensions`, `special_patterns`, `version_files` and `refresh` |
+
+And the keys it may **not**, which are reported and ignored when a repository sets one:
+
+| Key | Why it is yours alone |
+|-----|------------------------|
+| `gitlab_access_token`, `github_access_token`, `azure_devops_access_token` | A repository handing AutoBump a credential — or a *path* to read one from — is a credential it chose |
+| `gpg_key_path`, `gpg_key_passphrase`, `ssh_key_path`, `ssh_key_passphrase`, `ssh_auth_sock` | Same |
+| `providers`, `projects` | Which repositories get released, and which servers are talked to, is not a repository's to decide |
+| `bump_branch_prefix` | The prefix decides which branches stale-branch cleanup **deletes**, and whose pull requests it closes |
+
+This is not a trust check that runs at the right moment — the three non-operator layers
+decode through a struct that has no field for those keys, so there is nowhere for them to
+land.
 
 ```yaml
 # .autobump.yaml at the root of a fork repository
@@ -266,84 +320,101 @@ changelog_path: 'CHANGELOG_PROPRIETARY.md'
 versioning: 'fork-dot'
 ```
 
-The same keys can also be set at the global level in `~/.config/autobump.yaml`
-(under the project entry, or as top-level defaults applied to every project).
-Project-level values always win over global ones.
+## Refresh
 
-## Refresh Commands
-
-AutoBump rewrites version files with regular expressions. It never runs a package
-manager, so anything *derived* from a version file is left behind — and a lockfile is
-derived from one. Bump the range a workspace package declares on its sibling and
-`yarn.lock` still records the old resolution descriptor, at which point the first CI job
-running `yarn install --immutable` rejects the very pull request the bump opened:
+AutoBump rewrites version files with regular expressions. It never runs a package manager,
+so anything *derived* from a version file is left behind — and a lockfile is derived from
+one. Bump the range a workspace package declares on its sibling and `yarn.lock` still
+records the old resolution descriptor, at which point the first CI job running
+`yarn install --immutable` rejects the very pull request the bump opened:
 
 ```
 YN0028: The lockfile would have been modified by this install, which is explicitly forbidden.
 ```
 
-`refresh_commands` closes that gap. Each entry names a command and the files it
-regenerates; the commands run after the version files are rewritten and before anything
-is committed, and only the declared files are staged:
+`refresh` closes that gap. Turn it on and AutoBump regenerates the lockfile after the
+version files are rewritten and before anything is committed, staging only the lockfile:
 
 ```yaml
+refresh: true              # every language
+
+languages:
+  typescript:
+    refresh: true          # or just this one
+```
+
+It can also be set on a `projects[]` entry, or in the repository's own `.autobump.yaml`.
+The project wins over the language, which wins over the top level.
+
+**AutoBump owns the command.** A configuration says *whether* to refresh, never *what to
+run*: the recipes below are compile-time constants of the program. That is deliberate — an
+argv read from configuration was an executable run with the release credentials, which
+meant a repository's own file could never be trusted with it, which meant the project layer
+could never simply override things the way every other layer does.
+
+| Package manager | Detected by | Command | Stages |
+|-----------------|-------------|---------|--------|
+| Yarn Berry (2+) | `packageManager`, `.yarnrc.yml`, or a `yarn.lock` with `__metadata:` | `yarn install --mode=update-lockfile` | `yarn.lock` |
+| npm | `packageManager` or `package-lock.json` | `npm install --package-lock-only --ignore-scripts` | `package-lock.json` |
+| pnpm | `packageManager` or `pnpm-lock.yaml` | `pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts` | `pnpm-lock.yaml` |
+
+All three resolve without linking, so **no install script runs**. The extra flags are not
+decoration: npm has run the root package's `prepare` and `postinstall` under
+`--package-lock-only` since npm 7, and pnpm turns `frozen-lockfile` on by default in CI —
+which is exactly where `run` mode lives, and a frozen install aborts on the out-of-date
+lockfile the refresh exists to repair. Yarn needs no `--no-immutable`: `update-lockfile`
+disables immutable installs itself from 3.2, and passing `--immutable` alongside it is an
+error.
+
+Notes worth knowing before you turn it on:
+
+- **Opt-in, and it stays that way.** The refresh starts a package manager; upgrading
+  AutoBump must never be what begins running programs on your machine.
+- **Detection order matters.** A repository migrating between package managers carries two
+  lockfiles, so `packageManager` is consulted first: it says which one is *current* rather
+  than which one is *left over*.
+- **Yarn Classic (1.x) is skipped, with a warning.** It has no install mode that resolves
+  the lockfile without also linking and running install scripts, so there is no safe recipe
+  for it. A `yarn.lock` alone does not mean Berry — the header is read, not the file name.
+- **A missing package manager aborts that repository's release.** Skipping would open
+  exactly the pull request the refresh prevents, and would look identical to a release that
+  had nothing to refresh. In `run` mode the blast radius is one repository.
+- **Only the lockfile is staged**, so a refresh cannot sweep unrelated work into the
+  release commit — which matters when you release from your own worktree.
+- **JavaScript is the only ecosystem with a recipe.** A lockfile only goes stale when the
+  rewrite changes a string the lockfile keys on: `go.mod`/`go.sum` never record the
+  module's own version, Python's version file is `{project_name}/__init__.py` while poetry
+  and pdm exclude the root project, and `pom.xml`/`build.gradle`/`Chart.yaml`/`*.csproj`
+  have no lockfile carrying it. `refresh: true` elsewhere warns and does nothing.
+- **Fork versioning skips it**, because it rewrites no version file in the first place.
+- Each command is given 10 minutes before it is killed, so a resolution hanging on an
+  unreachable registry cannot stall every repository queued behind it. It runs in its own
+  process group and the whole group is killed, so a shell's children go with it; on top of
+  that, AutoBump stops reading output 10 seconds after the command itself exits, which
+  bounds the call even when something it spawned still holds the pipe open.
+
+### Migrating from 2.x
+
+`refresh_commands` was removed. Replace the block with the flag:
+
+```yaml
+# before
 languages:
   typescript:
     refresh_commands:
       - run: ['yarn', 'install', '--mode=update-lockfile']
         files: ['yarn.lock']
-```
 
-| Key     | Purpose                                                                                          |
-|---------|--------------------------------------------------------------------------------------------------|
-| `run`   | The command and its arguments. Executed directly, not through a shell — put `sh -c` in the list if you want one |
-| `files` | Glob patterns, relative to the project root, naming what the command regenerates. Only these are staged |
-
-> **Refresh commands are only read from your global configuration.** They are the one
-> language field a per-project `.autobump.yaml` cannot set, because AutoBump loads that
-> file *from the repository it is releasing* — in `run` mode, a repository it discovered
-> rather than one you wrote. Honouring a command from there would let anything in a
-> scanned organisation execute code with the runner's credentials. A project file may
-> still write `refresh_commands: []` to opt **out**, since clearing only ever removes
-> execution; a non-empty list is dropped with a warning.
-
-Notes worth knowing before you configure one:
-
-- **Scope the `files` narrowly.** Staging is limited to what you declare, so a refresh
-  cannot sweep unrelated work into the release commit — which matters in `local` mode,
-  where your own uncommitted changes sit in the same worktree.
-- **A failure aborts the release.** The commands exist to keep a derived file in step
-  with the version files; continuing past one would open exactly the broken pull request
-  the feature prevents.
-- **A pattern that matches nothing is fine.** The same language config is reused across
-  every project, and a repository with no lockfile still has to release.
-- **Overrides replace, they do not merge.** These name a package manager, and appending
-  one to another would run both — an `npm` default left under a `yarn` override would
-  write a `package-lock.json` into a repository that has no business carrying one.
-- **Fork versioning skips them**, because it rewrites no version file in the first place.
-- Each command is given 10 minutes before it is killed, so a resolution hanging on an
-  unreachable registry cannot stall every repository queued behind it. The command runs in
-  its own process group and the whole group is killed, so a shell's children go with it;
-  on top of that, AutoBump stops reading output 10 seconds after the command itself exits,
-  which bounds the call even when something it spawned still holds the pipe open.
-
-Other ecosystems fit the same shape:
-
-```yaml
+# after
 languages:
-  golang:
-    refresh_commands:
-      - run: ['go', 'mod', 'tidy']
-        files: ['go.mod', 'go.sum']
-  python:
-    refresh_commands:
-      - run: ['pdm', 'lock', '--update-reuse']
-        files: ['pdm.lock']
+  typescript:
+    refresh: true
 ```
 
-The command has to be on `PATH` wherever AutoBump runs. In `run` mode across many
-repositories, that means every package manager you configure must be installed on that
-machine.
+AutoBump says so by name if it finds the old key rather than reporting an unknown field.
+Two other changes are worth knowing about: the `local` subcommand is gone (use
+`autobump .`), and a repository's own `.autobump.yaml` now overrides the `projects[]` entry
+you wrote for it rather than only filling in what that entry left empty.
 
 ## Fragment-Based Changelogs (`chlog`)
 
@@ -458,7 +529,7 @@ versioning: 'fork-dot'
 2. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
 3. **Version Detection**: Reads the current version from CHANGELOG.md
 4. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
-5. **Refresh**: Runs any configured [refresh commands](#refresh-commands) so lockfiles and other derived files travel in the same commit
+5. **Refresh**: Regenerates the lockfile when [`refresh`](#refresh) is on, so it travels in the same commit
 6. **CHANGELOG Update**: Folds in any pending [chlog](#fragment-based-changelogs-chlog) fragments, applies the [changelog rules](#changelog-rules), and moves the result to the new version section with the current date
 7. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
 8. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review

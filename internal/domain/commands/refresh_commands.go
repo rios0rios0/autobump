@@ -31,19 +31,22 @@ const refreshCommandTimeout = 10 * time.Minute
 // makes the advertised bound real rather than advisory.
 const refreshCommandWaitDelay = 10 * time.Second
 
-// ErrRefreshCommandEmpty is returned when a configured refresh command has no
-// executable. An empty `run` is a typo in the config rather than a repository state
-// worth tolerating, so it is reported instead of skipped.
-var ErrRefreshCommandEmpty = errors.New("refresh command has no executable")
-
-// runRefreshCommands executes the language's refresh commands in the project
-// directory and returns the existing files they were declared to regenerate, so the
-// caller can stage them alongside the version files.
+// ErrRefreshManagerMissing is returned when the package manager a project's refresh
+// needs is not on PATH.
 //
-// A failure aborts the release. The commands exist to keep a derived file in step
-// with the version files, so continuing past one would open exactly the pull request
-// the feature is meant to prevent — green-looking locally, rejected by the first
-// pipeline job that installs dependencies.
+// It aborts that repository's release rather than skipping the refresh. Skipping opens
+// exactly the pull request the feature exists to prevent -- green locally, rejected by the
+// first CI job that installs dependencies -- and the operator would have no way to tell
+// that from a release that simply had nothing to refresh. In `run` mode the blast radius
+// is one repository: DiscoverAndProcess logs the failure and moves on.
+var ErrRefreshManagerMissing = errors.New("refresh package manager not found")
+
+// runRefreshCommands regenerates the files that derive from the version files AutoBump has
+// just rewritten, and returns the ones it should stage alongside them.
+//
+// A failure aborts the release. The refresh exists to keep a derived file in step with the
+// version files, so continuing past a failure would open exactly the pull request it is
+// meant to prevent.
 func runRefreshCommands(
 	globalConfig *entities.GlobalConfig,
 	projectConfig *entities.ProjectConfig,
@@ -52,59 +55,76 @@ func runRefreshCommands(
 		return nil, nil
 	}
 
-	languageConfig, exists := globalConfig.LanguagesConfig[projectConfig.Language]
-	if !exists || len(languageConfig.RefreshCommands) == 0 {
+	if !entities.RefreshEnabled(globalConfig, projectConfig, projectConfig.Language) {
 		return nil, nil
 	}
 
-	var refreshed []string
-	for _, refreshCommand := range languageConfig.RefreshCommands {
-		err := runRefreshCommand(
-			projectConfig.Path, refreshCommand, refreshCommandTimeout, refreshCommandWaitDelay,
+	detect, known := refreshRecipes[projectConfig.Language]
+	if !known {
+		logger.Warnf(
+			"`refresh` is on for language %q, but AutoBump has no refresh recipe for it: "+
+				"nothing it rewrites there invalidates a derived file",
+			projectConfig.Language,
 		)
-		if err != nil {
-			return nil, err
-		}
-
-		matches, err := resolveRefreshedFiles(projectConfig.Path, refreshCommand.Files)
-		if err != nil {
-			return nil, err
-		}
-		refreshed = append(refreshed, matches...)
+		return nil, nil
 	}
 
-	return dedupPaths(refreshed), nil
+	recipe, found := detect(projectConfig.Path)
+	if !found {
+		logger.Warnf(
+			"Could not identify a package manager in %s; skipping the refresh",
+			projectConfig.Path,
+		)
+		return nil, nil
+	}
+
+	if _, err := exec.LookPath(recipe.Run[0]); err != nil {
+		return nil, fmt.Errorf(
+			"%w: %q is not on PATH, and %s needs it to refresh %s",
+			ErrRefreshManagerMissing, recipe.Run[0], recipe.Manager, projectConfig.Path,
+		)
+	}
+
+	err := runRefreshRecipe(
+		projectConfig.Path, recipe, refreshCommandTimeout, refreshCommandWaitDelay,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	matches, err := resolveRefreshedFiles(projectConfig.Path, recipe.Files)
+	if err != nil {
+		return nil, err
+	}
+
+	return dedupPaths(matches), nil
 }
 
-// runRefreshCommand executes one command with the project root as its working
-// directory. Output is captured rather than streamed so that a failure can report
-// what the command actually said — a package manager's diagnosis of an unresolvable
-// range is the only useful thing in the error.
+// runRefreshRecipe executes one recipe with the project root as its working directory.
+// Output is captured rather than streamed so that a failure can report what the command
+// actually said -- a package manager's diagnosis of an unresolvable range is the only
+// useful thing in the error.
 //
-// timeout and waitDelay are parameters rather than reads of the two constants so the
-// tests can exercise both bounds without waiting minutes for them.
-func runRefreshCommand(
+// timeout and waitDelay are parameters rather than reads of the two constants so the tests
+// can exercise both bounds without waiting minutes for them.
+func runRefreshRecipe(
 	projectPath string,
-	refreshCommand entities.RefreshCommand,
+	recipe refreshRecipe,
 	timeout time.Duration,
 	waitDelay time.Duration,
 ) error {
-	if len(refreshCommand.Run) == 0 {
-		return ErrRefreshCommandEmpty
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	printable := strings.Join(refreshCommand.Run, " ")
-	logger.Infof("Running refresh command: %s", printable)
+	printable := strings.Join(recipe.Run, " ")
+	logger.Infof("Refreshing with: %s", printable)
 
-	//nolint:gosec // G204: refresh commands are only read from the operator's own global
-	// configuration. entities.SanitizeUntrustedLanguages drops any that a released
-	// repository declares in its own .autobump.yaml, so a discovered repository cannot
-	// reach this call.
-	command := exec.CommandContext(ctx, refreshCommand.Run[0], refreshCommand.Run[1:]...)
+	//nolint:gosec // G204: the argv is a compile-time constant of this program. Recipes
+	// live in refresh_recipes.go and no configuration layer can contribute to one -- the
+	// config only says whether to refresh.
+	command := exec.CommandContext(ctx, recipe.Run[0], recipe.Run[1:]...)
 	command.Dir = projectPath
+	command.Env = append(os.Environ(), recipe.Env...)
 	command.WaitDelay = waitDelay
 	configureProcessGroup(command)
 

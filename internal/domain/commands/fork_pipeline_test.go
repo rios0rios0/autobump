@@ -254,10 +254,11 @@ func TestLoadProjectConfigOverridesPropagatesVersioning(t *testing.T) {
 		assert.Equal(t, "CHANGELOG_PROPRIETARY.md", projectConfig.ChangelogPath)
 	})
 
-	t.Run("should keep project versioning when project already specifies one", func(t *testing.T) {
+	t.Run("should override the versioning the operator configured for it", func(t *testing.T) {
 		t.Parallel()
 
-		// given
+		// given -- a fork that changes how it versions itself should not need the operator
+		// to edit their own configuration to follow it
 		tmpDir := t.TempDir()
 		writeProjectConfig(t, tmpDir, "versioning: 'fork-dot'\n")
 
@@ -270,7 +271,7 @@ func TestLoadProjectConfigOverridesPropagatesVersioning(t *testing.T) {
 		commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
-		assert.Equal(t, entities.VersioningForkDash, projectConfig.Versioning)
+		assert.Equal(t, entities.VersioningForkDot, projectConfig.Versioning)
 	})
 
 	t.Run("should leave config unchanged when no .autobump.yaml file exists", func(t *testing.T) {

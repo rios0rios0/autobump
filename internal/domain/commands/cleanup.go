@@ -23,13 +23,18 @@ const closePullRequestTimeout = 30 * time.Second
 // the bumper recreates whichever one it needs on the next run — so an unmerged bump
 // branch is a leftover from a release nobody completed, not work worth preserving.
 // The result is sorted so cleanup order (and its log output) is deterministic.
+//
+// A branch that *is* the prefix, with nothing after it, is left alone. HasPrefix matches
+// it, but the bumper always appends a version, so such a branch was named by somebody
+// else. entities.ValidateBumpBranchPrefix rejects the prefixes that would make this reach
+// far — this is the second lock on the same door, at the point where the deleting happens.
 func filterStaleBumpBranches(branches []string, prefix, defaultBranch string) []string {
 	stale := make([]string, 0, len(branches))
 	for _, branch := range branches {
 		if branch == defaultBranch {
 			continue
 		}
-		if !strings.HasPrefix(branch, prefix) {
+		if !strings.HasPrefix(branch, prefix) || len(branch) == len(prefix) {
 			continue
 		}
 		stale = append(stale, branch)
