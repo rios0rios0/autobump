@@ -137,7 +137,7 @@ func (b *ProjectConfigBuilder) Clone() testkit.Builder {
 		newVersion:         b.newVersion,
 		changelogPath:      b.changelogPath,
 		versioning:         b.versioning,
-		detectChlog:        b.detectChlog,
-		refresh:            b.refresh,
+		detectChlog:        cloneBool(b.detectChlog),
+		refresh:            cloneBool(b.refresh),
 	}
 }

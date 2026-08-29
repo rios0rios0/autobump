@@ -287,10 +287,9 @@ func ValidateBumpBranchPrefix(prefix string) error {
 		)
 	}
 
-	if err := validatePrefixShape(prefix); err != nil {
-		return err
-	}
-
+	// Before the shape check, not after: the shape check rejects anything without a "/",
+	// so a protected name would otherwise be turned away with the wrong reason and this
+	// table would never be read.
 	if _, protected := protectedBranchNames[strings.ToLower(prefix)]; protected {
 		return fmt.Errorf(
 			"%w %q: that is a protected branch name, and cleanup deletes what the prefix matches",
@@ -298,7 +297,7 @@ func ValidateBumpBranchPrefix(prefix string) error {
 		)
 	}
 
-	return nil
+	return validatePrefixShape(prefix)
 }
 
 // validatePrefixShape enforces what the prefix has to look like: a name git accepts, and
@@ -437,18 +436,6 @@ func FindProjectConfigFile(projectDir string) string {
 		}
 	}
 	return ""
-}
-
-// CopyGlobalConfigWithLanguageOverrides creates a shallow copy of the given GlobalConfig
-// and replaces its LanguagesConfig with the result of merging the original languages
-// with the provided overrides. The original config is not mutated.
-func CopyGlobalConfigWithLanguageOverrides(
-	original *GlobalConfig,
-	languageOverrides map[string]LanguageConfig,
-) *GlobalConfig {
-	copied := *original
-	copied.LanguagesConfig = MergeLanguagesConfig(original.LanguagesConfig, languageOverrides)
-	return &copied
 }
 
 // RefreshEnabled reports whether the files derived from a version file should be

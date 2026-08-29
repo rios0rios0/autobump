@@ -199,6 +199,12 @@ func DetectNodeRecipe(projectPath string) (string, []string, []string, bool) {
 	return recipe.Manager, recipe.Run, recipe.Files, found
 }
 
+// RefreshRecipeEnv exports the environment a detected recipe adds to the child process.
+func RefreshRecipeEnv(projectPath string) []string {
+	recipe, _ := detectNodeRecipe(projectPath)
+	return recipe.Env
+}
+
 // RefreshRecipeLanguages exports the languages that have a refresh recipe.
 func RefreshRecipeLanguages() []string {
 	languages := make([]string, 0, len(refreshRecipes))

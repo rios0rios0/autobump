@@ -293,13 +293,13 @@ The keys a per-project file may set:
 
 | Key | Purpose |
 |-----|---------|
-| `refresh` | Regenerate the lockfile in the bump commit — see [Refresh](#refresh) |
+| `refresh` | Only `false`, to switch the refresh **off** — see [Refresh](#refresh) |
 | `changelog_path` | Changelog filename relative to the project root (e.g. `CHANGELOG_PROPRIETARY.md`) |
 | `versioning` | `semver` (default), `fork-dot`, or `fork-dash` |
 | `detect_chlog` | `false` to ignore [chlog](#fragment-based-changelogs-chlog) fragments (on by default) |
-| `cleanup_stale_branches` | `false` to keep this project's bump branches (on by default) |
+| `cleanup_stale_branches` | Only `false`, to keep this project's bump branches. An enable here would arrive after `--skip-cleanup` had been applied and would override it |
 | `exclude_forks`, `exclude_archived` | Accepted, but they filter what *discovery selects*; by the time this file is read the repository has already been selected and cloned, so they do nothing here |
-| `languages` | Per-language `extensions`, `special_patterns`, `version_files` and `refresh` |
+| `languages` | Per-language `extensions`, `special_patterns`, `version_files`, and `refresh` under the same off-only rule |
 
 And the keys it may **not**, which are reported and ignored when a repository sets one:
 
@@ -354,22 +354,33 @@ could never simply override things the way every other layer does.
 
 | Package manager | Detected by | Command | Stages |
 |-----------------|-------------|---------|--------|
-| Yarn Berry (2+) | `packageManager`, `.yarnrc.yml`, or a `yarn.lock` with `__metadata:` | `yarn install --mode=update-lockfile` | `yarn.lock` |
+| Yarn Berry (2+) | `packageManager`, `.yarnrc.yml`, or a `yarn.lock` with `__metadata:` | `yarn install --mode=update-lockfile` (with `YARN_IGNORE_PATH=1`, `YARN_ENABLE_SCRIPTS=0`) | `yarn.lock` |
 | npm | `packageManager` or `package-lock.json` | `npm install --package-lock-only --ignore-scripts` | `package-lock.json` |
-| pnpm | `packageManager` or `pnpm-lock.yaml` | `pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts` | `pnpm-lock.yaml` |
+| pnpm | `packageManager` or `pnpm-lock.yaml` | `pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts --ignore-pnpmfile` | `pnpm-lock.yaml` |
 
-All three resolve without linking, so **no install script runs**. The extra flags are not
-decoration: npm has run the root package's `prepare` and `postinstall` under
-`--package-lock-only` since npm 7, and pnpm turns `frozen-lockfile` on by default in CI —
+All three resolve without linking, so **no package lifecycle script runs** — and the flags
+that say so are not decoration. npm has run the root package's `prepare` and `postinstall`
+under `--package-lock-only` since npm 7. pnpm turns `frozen-lockfile` on by default in CI,
 which is exactly where `run` mode lives, and a frozen install aborts on the out-of-date
 lockfile the refresh exists to repair. Yarn needs no `--no-immutable`: `update-lockfile`
 disables immutable installs itself from 3.2, and passing `--immutable` alongside it is an
 error.
 
+**Lifecycle scripts are not the only way a repository can supply code**, which is why two of
+the recipes carry more than `--ignore-scripts`. pnpm loads `.pnpmfile.cjs` from the project
+root and calls its hooks *during resolution* — `--ignore-pnpmfile` is what suppresses that.
+Yarn's launcher honours `yarnPath` in the project's own `.yarnrc.yml` and execs the file it
+names, which is checked-in JavaScript running with AutoBump's environment; `YARN_IGNORE_PATH`
+is what stops it. Neither is a lifecycle script, so no `--ignore-scripts` reaches them.
+
 Notes worth knowing before you turn it on:
 
-- **Opt-in, and it stays that way.** The refresh starts a package manager; upgrading
-  AutoBump must never be what begins running programs on your machine.
+- **Opt-in, and only you can opt in.** The refresh starts a package manager, so upgrading
+  AutoBump must never be what begins running programs on your machine — and neither must a
+  repository it is releasing. `refresh` is read from a project's own `.autobump.yaml` only
+  when it is `false`: a repository may switch the refresh **off**, never on. Off can only
+  ever remove an action, which is the same asymmetry that let a project clear
+  `refresh_commands` while never being able to introduce one.
 - **Detection order matters.** A repository migrating between package managers carries two
   lockfiles, so `packageManager` is consulted first: it says which one is *current* rather
   than which one is *left over*.

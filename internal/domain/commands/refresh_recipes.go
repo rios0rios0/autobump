@@ -69,13 +69,23 @@ var (
 	// the link step altogether, so no build or lifecycle script runs.
 	//
 	// It carries no --no-immutable: from Yarn 3.2 (yarnpkg/berry#3933) this mode disables
-	// immutable installs by itself, and passing --immutable alongside it is an error. The
-	// environment variable is the escape hatch for 2.x-3.1, where it does not.
+	// immutable installs by itself, and passing --immutable alongside it is an error.
+	// YARN_ENABLE_IMMUTABLE_INSTALLS is the escape hatch for 2.x-3.1, where it does not.
+	//
+	// YARN_IGNORE_PATH is the one that matters for a repository AutoBump did not write.
+	// Yarn's launcher honours `yarnPath` in the project's own `.yarnrc.yml` and execs the
+	// file it names -- checked-in JavaScript, running with this process's environment. That
+	// is not a lifecycle script, so no --ignore-scripts covers it, and `.yarnrc.yml` is the
+	// very file detectByYarnrc reads as proof the project is Berry.
 	yarnBerryRecipe = refreshRecipe{
 		Manager: managerYarn,
 		Run:     []string{managerYarn, subcommandInstall, "--mode=update-lockfile"},
 		Files:   []string{"yarn.lock"},
-		Env:     []string{"YARN_ENABLE_IMMUTABLE_INSTALLS=false"},
+		Env: []string{
+			"YARN_ENABLE_IMMUTABLE_INSTALLS=false",
+			"YARN_IGNORE_PATH=1",
+			"YARN_ENABLE_SCRIPTS=0",
+		},
 	}
 
 	// npmRecipe passes --ignore-scripts because npm has run the root package's `prepare`
@@ -90,10 +100,16 @@ var (
 	// pnpmRecipe passes --no-frozen-lockfile because pnpm turns frozen-lockfile on by
 	// default when it detects CI -- which is exactly where `autobump run` lives, and a
 	// frozen install aborts on the out-of-date lockfile this command exists to repair.
+	//
+	// --ignore-pnpmfile is not a duplicate of --ignore-scripts. The latter governs package
+	// lifecycle scripts; `.pnpmfile.cjs` is a resolution hook, loaded from the project root
+	// and called during a --lockfile-only install, so it runs repository-supplied JavaScript
+	// that --ignore-scripts does not reach.
 	pnpmRecipe = refreshRecipe{
 		Manager: managerPnpm,
 		Run: []string{
-			managerPnpm, subcommandInstall, "--lockfile-only", "--no-frozen-lockfile", "--ignore-scripts",
+			managerPnpm, subcommandInstall, "--lockfile-only", "--no-frozen-lockfile",
+			"--ignore-scripts", "--ignore-pnpmfile",
 		},
 		Files: []string{"pnpm-lock.yaml"},
 	}
@@ -119,7 +135,18 @@ var nodeMarkers = []nodeMarker{
 }
 
 // detectNodeRecipe walks the markers in order and returns the first recipe one identifies.
+//
+// Identifying Yarn Classic stops the walk rather than falling through. A repository that
+// carries both a v1 `yarn.lock` and a stale `package-lock.json` is a Yarn project either
+// way, and continuing would refresh it with npm -- writing a lockfile it has no business
+// carrying, which is the mistake the old per-language `refresh_commands` replacement rule
+// existed to prevent.
 func detectNodeRecipe(projectPath string) (refreshRecipe, bool) {
+	if isYarnClassicProject(projectPath) {
+		warnYarnClassic(projectPath)
+		return refreshRecipe{}, false //nolint:exhaustruct // the zero value is the "none" case
+	}
+
 	for _, marker := range nodeMarkers {
 		if recipe, found := marker.Detect(projectPath); found {
 			logger.Debugf("Refreshing with %s, identified by %s", recipe.Manager, marker.Name)
@@ -128,6 +155,57 @@ func detectNodeRecipe(projectPath string) (refreshRecipe, bool) {
 	}
 
 	return refreshRecipe{}, false //nolint:exhaustruct // the zero value is the "none" case
+}
+
+// isYarnClassicProject reports whether the project uses Yarn 1.x, by either of the two
+// signals that name a package manager: the `packageManager` field, and the lockfile header.
+//
+// It is asked before the marker walk rather than during it, because Classic is a reason to
+// refresh *nothing* rather than a marker that failed to match. A repository carrying a v1
+// `yarn.lock` beside a stale `package-lock.json` is still a Yarn project, and falling
+// through to npm would write it a lockfile it has no business carrying.
+func isYarnClassicProject(projectPath string) bool {
+	if name, version, ok := readPackageManagerField(projectPath); ok {
+		return name == managerYarn && isYarnClassic(version)
+	}
+
+	data, err := os.ReadFile(filepath.Join(projectPath, "yarn.lock"))
+	if err != nil {
+		return false
+	}
+
+	return strings.Contains(lockfileHeader(data), "yarn lockfile v1")
+}
+
+// lockfileHeader returns the preamble a lockfile is identified by. Both markers live there,
+// and a lockfile can be tens of megabytes.
+func lockfileHeader(data []byte) string {
+	if len(data) > yarnLockHeaderBytes {
+		return string(data[:yarnLockHeaderBytes])
+	}
+	return string(data)
+}
+
+// readPackageManagerField reads the `packageManager` field Corepack standardised, split into
+// the manager's name and version.
+func readPackageManagerField(projectPath string) (string, string, bool) {
+	data, err := os.ReadFile(filepath.Join(projectPath, "package.json"))
+	if err != nil {
+		return "", "", false
+	}
+
+	var manifest packageJSON
+	if unmarshalErr := json.Unmarshal(data, &manifest); unmarshalErr != nil {
+		return "", "", false
+	}
+
+	name, version, _ := strings.Cut(manifest.PackageManager, "@")
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", "", false
+	}
+
+	return name, version, true
 }
 
 // managerRecipes maps a package manager's name to its recipe, for the markers that name
@@ -149,24 +227,14 @@ type packageJSON struct {
 // It is the most reliable marker because it states an intent rather than leaving one to be
 // inferred from which files happen to be on disk.
 func detectByPackageManagerField(projectPath string) (refreshRecipe, bool) {
-	data, err := os.ReadFile(filepath.Join(projectPath, "package.json"))
-	if err != nil {
+	name, _, ok := readPackageManagerField(projectPath)
+	if !ok {
 		return refreshRecipe{}, false //nolint:exhaustruct // the zero value is the "none" case
 	}
 
-	var manifest packageJSON
-	if unmarshalErr := json.Unmarshal(data, &manifest); unmarshalErr != nil {
-		return refreshRecipe{}, false //nolint:exhaustruct // the zero value is the "none" case
-	}
-
-	name, version, _ := strings.Cut(manifest.PackageManager, "@")
-	recipe, known := managerRecipes[strings.TrimSpace(name)]
+	// Yarn Classic never reaches here: detectNodeRecipe asks about it before the walk.
+	recipe, known := managerRecipes[name]
 	if !known {
-		return refreshRecipe{}, false //nolint:exhaustruct // the zero value is the "none" case
-	}
-
-	if recipe.Manager == managerYarn && isYarnClassic(version) {
-		warnYarnClassic(projectPath)
 		return refreshRecipe{}, false //nolint:exhaustruct // the zero value is the "none" case
 	}
 
@@ -192,17 +260,10 @@ func detectByYarnLock(projectPath string) (refreshRecipe, bool) {
 		return refreshRecipe{}, false //nolint:exhaustruct // the zero value is the "none" case
 	}
 
-	head := string(data)
-	if len(head) > yarnLockHeaderBytes {
-		head = head[:yarnLockHeaderBytes]
-	}
-
-	if strings.Contains(head, "__metadata:") {
+	// Classic never reaches here either, so the only question left is whether this is a
+	// Berry lockfile at all.
+	if strings.Contains(lockfileHeader(data), "__metadata:") {
 		return yarnBerryRecipe, true
-	}
-
-	if strings.Contains(head, "yarn lockfile v1") {
-		warnYarnClassic(projectPath)
 	}
 
 	return refreshRecipe{}, false //nolint:exhaustruct // the zero value is the "none" case

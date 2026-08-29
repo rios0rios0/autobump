@@ -434,7 +434,7 @@ changelog_path: 'CHANGELOG_PROPRIETARY.md'
 versioning: 'fork-dot'
 detect_chlog: false
 cleanup_stale_branches: false
-refresh: true
+refresh: false
 `)
 
 		// when
@@ -449,7 +449,78 @@ refresh: true
 		require.NotNil(t, cfg.CleanupStaleBranches)
 		assert.False(t, *cfg.CleanupStaleBranches)
 		require.NotNil(t, cfg.Refresh)
-		assert.True(t, *cfg.Refresh)
+		assert.False(t, *cfg.Refresh)
+	})
+
+	// `refresh` and `cleanup_stale_branches` are the two switches a restricted layer may
+	// turn off but never on. Owning the argv was only half of what made `refresh_commands`
+	// untrusted; the other half is whether anything is executed at all, and a package
+	// manager resolving a lockfile still runs what the cloned repository supplies.
+	t.Run("should not let a repository turn the refresh on", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		layer := restrictedLayer("refresh: true\n")
+
+		// when
+		cfg, err := entities.ApplyLayer(&entities.GlobalConfig{}, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.Nil(t, cfg.Refresh, "off is safe in a way on is not: it only ever removes an action")
+	})
+
+	t.Run("should not let a repository turn a language's refresh on", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		layer := restrictedLayer("languages:\n  typescript:\n    refresh: true\n")
+
+		// when
+		cfg, err := entities.ApplyLayer(&entities.GlobalConfig{}, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.Nil(t, cfg.LanguagesConfig["typescript"].Refresh)
+	})
+
+	t.Run("should let a repository turn a language's refresh off", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		enabled := true
+		base := &entities.GlobalConfig{
+			LanguagesConfig: map[string]entities.LanguageConfig{
+				"typescript": {Refresh: &enabled},
+			},
+		}
+		layer := restrictedLayer("languages:\n  typescript:\n    refresh: false\n")
+
+		// when
+		cfg, err := entities.ApplyLayer(base, layer)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, cfg.LanguagesConfig["typescript"].Refresh)
+		assert.False(t, *cfg.LanguagesConfig["typescript"].Refresh)
+	})
+
+	t.Run("should not let a repository turn cleanup on", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- applySkipCleanupFlag runs before this layer, so honouring an enable here
+		// would silently override --skip-cleanup and delete branches the operator asked to keep
+		disabled := false
+		base := &entities.GlobalConfig{CleanupStaleBranches: &disabled}
+		layer := restrictedLayer("cleanup_stale_branches: true\n")
+
+		// when
+		cfg, err := entities.ApplyLayer(base, layer)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, cfg.CleanupStaleBranches)
+		assert.False(t, *cfg.CleanupStaleBranches, "--skip-cleanup must have the last word")
 	})
 
 	t.Run("should return an error when the document is not valid YAML", func(t *testing.T) {
@@ -493,159 +564,6 @@ func restrictedLayer(content string) entities.ConfigLayer {
 		Scope:    entities.ScopeRestricted,
 		Optional: true,
 	}
-}
-
-func TestCopyGlobalConfigWithLanguageOverrides(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should create a copy with merged languages without mutating original", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		original := &entities.GlobalConfig{
-			GitHubAccessToken: "my-token",
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{
-			"python": {Extensions: []string{"py"}},
-		}
-
-		// when
-		result := entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
-
-		// then
-		assert.Contains(t, result.LanguagesConfig, "golang")
-		assert.Contains(t, result.LanguagesConfig, "python")
-		assert.Equal(t, "my-token", result.GitHubAccessToken)
-		assert.NotContains(t, original.LanguagesConfig, "python")
-		assert.Len(t, original.LanguagesConfig, 1)
-	})
-
-	t.Run("should preserve all non-language fields from original", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		original := &entities.GlobalConfig{
-			GitHubAccessToken:      "gh-token",
-			GitLabAccessToken:      "gl-token",
-			AzureDevOpsAccessToken: "ado-token",
-			GpgKeyPath:             "/path/to/key",
-			GpgKeyPassphrase:       "passphrase",
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{}
-
-		// when
-		result := entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
-
-		// then
-		assert.Equal(t, "gh-token", result.GitHubAccessToken)
-		assert.Equal(t, "gl-token", result.GitLabAccessToken)
-		assert.Equal(t, "ado-token", result.AzureDevOpsAccessToken)
-		assert.Equal(t, "/path/to/key", result.GpgKeyPath)
-		assert.Equal(t, "passphrase", result.GpgKeyPassphrase)
-	})
-
-	t.Run("should handle empty overrides returning equivalent languages", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		original := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{}
-
-		// when
-		result := entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
-
-		// then
-		assert.Equal(t, original.LanguagesConfig, result.LanguagesConfig)
-	})
-
-	t.Run("should add new language not present in original", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		original := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{
-			"ruby": {Extensions: []string{"rb"}, SpecialPatterns: []string{"Gemfile"}},
-		}
-
-		// when
-		result := entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
-
-		// then
-		assert.Contains(t, result.LanguagesConfig, "golang")
-		assert.Contains(t, result.LanguagesConfig, "ruby")
-		assert.Equal(t, []string{"rb"}, result.LanguagesConfig["ruby"].Extensions)
-	})
-
-	t.Run("should merge version files for existing language", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		original := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"typescript": {
-					Extensions: []string{"ts"},
-					VersionFiles: []entities.VersionFile{
-						{Path: "package.json", Patterns: []string{`("version":\s*")\d+\.\d+\.\d+(")`}},
-					},
-				},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{
-			"typescript": {
-				VersionFiles: []entities.VersionFile{
-					{Path: "manifest.json", Patterns: []string{`("version":\s*")\d+\.\d+\.\d+(")`}},
-				},
-			},
-		}
-
-		// when
-		result := entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
-
-		// then
-		ts := result.LanguagesConfig["typescript"]
-		assert.Len(t, ts.VersionFiles, 2)
-		assert.Equal(t, "package.json", ts.VersionFiles[0].Path)
-		assert.Equal(t, "manifest.json", ts.VersionFiles[1].Path)
-		assert.Equal(t, []string{"ts"}, ts.Extensions)
-	})
-
-	t.Run("should not mutate the original LanguagesConfig map", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		original := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{
-			"golang": {SpecialPatterns: []string{"go.sum"}},
-			"python": {Extensions: []string{"py"}},
-		}
-		originalLangsCount := len(original.LanguagesConfig)
-
-		// when
-		_ = entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
-
-		// then
-		assert.Len(t, original.LanguagesConfig, originalLangsCount)
-		assert.NotContains(t, original.LanguagesConfig, "python")
-		assert.Empty(t, original.LanguagesConfig["golang"].SpecialPatterns)
-	})
 }
 
 func TestRefreshEnabled(t *testing.T) {

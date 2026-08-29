@@ -165,7 +165,7 @@ func applyRestrictedLayer(config *GlobalConfig, layer ConfigLayer) (*GlobalConfi
 		return nil, err
 	}
 
-	return restricted.applyTo(config), nil
+	return restricted.applyTo(config, layer.describe()), nil
 }
 
 // decodeRestricted reads a layer through RestrictedConfig and reports the operator-only
@@ -173,11 +173,12 @@ func applyRestrictedLayer(config *GlobalConfig, layer ConfigLayer) (*GlobalConfi
 func decodeRestricted(layer ConfigLayer) (RestrictedConfig, error) {
 	var restricted RestrictedConfig //nolint:exhaustruct // the document decides what is set
 
-	// Never strict. The point of RestrictedConfig is that it has no field for the keys a
-	// restricted layer may not set, so strict decoding would turn "AutoBump ignored your
-	// providers block" into "AutoBump refused to run".
+	// Strict only where the document is one this repository owns. The point of
+	// RestrictedConfig is that it has no field for the keys a restricted layer may not set,
+	// so strict decoding of a fetched or repository-supplied document would turn "AutoBump
+	// ignored your providers block" into "AutoBump refused to run".
 	decoder := yaml.NewDecoder(bytes.NewReader(layer.Data))
-	decoder.KnownFields(false)
+	decoder.KnownFields(layer.Strict)
 
 	if err := decoder.Decode(&restricted); err != nil && !errors.Is(err, io.EOF) {
 		return restricted, fmt.Errorf("failed to decode the %s: %w", layer.describe(), err)
@@ -212,7 +213,7 @@ func ApplyProjectLayer(
 		restricted.applyToProject(projectConfig)
 	}
 
-	return restricted.applyTo(config), nil
+	return restricted.applyTo(config, layer.describe()), nil
 }
 
 // applyToProject carries what the repository declared onto the project entry, so the
@@ -229,7 +230,9 @@ func (r RestrictedConfig) applyToProject(projectConfig *ProjectConfig) {
 	if r.DetectChlog != nil {
 		projectConfig.DetectChlog = r.DetectChlog
 	}
-	if r.Refresh != nil {
+	// Only the off direction, for the reason acceptSwitchOff explains. The warning is
+	// emitted there, on the same document, so this stays a plain filter.
+	if r.Refresh != nil && !*r.Refresh {
 		projectConfig.Refresh = r.Refresh
 	}
 }
@@ -255,7 +258,7 @@ type RestrictedConfig struct {
 }
 
 // applyTo folds the restricted layer onto config, returning a copy.
-func (r RestrictedConfig) applyTo(config *GlobalConfig) *GlobalConfig {
+func (r RestrictedConfig) applyTo(config *GlobalConfig, layerName string) *GlobalConfig {
 	next := *config
 
 	if r.ChangelogPath != "" {
@@ -264,14 +267,16 @@ func (r RestrictedConfig) applyTo(config *GlobalConfig) *GlobalConfig {
 	if r.Versioning != "" {
 		next.Versioning = r.Versioning
 	}
-	if r.Refresh != nil {
+	if acceptSwitchOff(r.Refresh, layerName, "refresh", reasonExecution) {
 		next.Refresh = r.Refresh
+	}
+	if acceptSwitchOff(
+		r.CleanupStaleBranches, layerName, "cleanup_stale_branches", reasonCleanupSwitch,
+	) {
+		next.CleanupStaleBranches = r.CleanupStaleBranches
 	}
 	if r.DetectChlog != nil {
 		next.DetectChlog = r.DetectChlog
-	}
-	if r.CleanupStaleBranches != nil {
-		next.CleanupStaleBranches = r.CleanupStaleBranches
 	}
 	if r.ExcludeForks != nil {
 		next.ExcludeForks = *r.ExcludeForks
@@ -280,9 +285,66 @@ func (r RestrictedConfig) applyTo(config *GlobalConfig) *GlobalConfig {
 		next.ExcludeArchived = *r.ExcludeArchived
 	}
 
-	next.LanguagesConfig = MergeLanguagesConfig(config.LanguagesConfig, r.LanguagesConfig)
+	next.LanguagesConfig = MergeLanguagesConfig(
+		config.LanguagesConfig, sanitizeRestrictedLanguages(r.LanguagesConfig, layerName),
+	)
 
 	return &next
+}
+
+const (
+	reasonExecution = "it starts a package manager, and whether AutoBump executes anything " +
+		"at all is the operator's to decide"
+	reasonCleanupSwitch = "it deletes remote branches and closes their pull requests, and " +
+		"--skip-cleanup is applied before this layer, so honouring it would override the flag"
+)
+
+// acceptSwitchOff reports whether a restricted layer's toggle may be honoured.
+//
+// These two switches govern destructive or executing behaviour, so a layer that is not the
+// operator's may turn them *off* and never on. Off is safe in a way on is not: it can only
+// ever remove an action, which is the same asymmetry that let a project clear
+// `refresh_commands` while never being able to introduce one.
+//
+// Owning the argv was only half of what made `refresh_commands` untrusted. The other half is
+// whether anything runs at all -- and a package manager resolving a lockfile in a cloned
+// repository still executes what that repository supplies: pnpm loads `.pnpmfile.cjs`,
+// Yarn Berry honours `yarnPath`. The recipes suppress both, and this keeps the decision to
+// start one where it belongs.
+func acceptSwitchOff(value *bool, layerName, key, reason string) bool {
+	if value == nil {
+		return false
+	}
+	if !*value {
+		return true
+	}
+
+	logger.Warnf("Ignoring %q: %s from the %s can only turn it off, not on: %s",
+		key, key, layerName, reason)
+
+	return false
+}
+
+// sanitizeRestrictedLanguages applies the same asymmetry to the per-language refresh: a
+// restricted layer may switch one off, never on.
+func sanitizeRestrictedLanguages(
+	overrides map[string]LanguageConfig, layerName string,
+) map[string]LanguageConfig {
+	if len(overrides) == 0 {
+		return overrides
+	}
+
+	sanitized := make(map[string]LanguageConfig, len(overrides))
+	for language, override := range overrides {
+		if !acceptSwitchOff(
+			override.Refresh, layerName, "languages."+language+".refresh", reasonExecution,
+		) {
+			override.Refresh = nil
+		}
+		sanitized[language] = override
+	}
+
+	return sanitized
 }
 
 const (

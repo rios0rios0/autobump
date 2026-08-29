@@ -117,7 +117,13 @@ returns `io.EOF`, which is a layer with nothing to say rather than a broken one.
 
 Only the operator's layer is `ScopeOperator`; the other three decode through
 `RestrictedConfig`, which has **no field** for `providers`, `projects`, any credential, or
-`bump_branch_prefix`. That is the whole enforcement — not a check that has to run at the
+`bump_branch_prefix`. Two fields it *does* have are accepted in one direction only:
+`refresh` and `cleanup_stale_branches` may be switched **off** by a restricted layer and
+never on (`acceptSwitchOff`). Off can only ever remove an action — the same asymmetry that
+let a project clear `refresh_commands` while never being able to introduce one — and both
+switches govern something irreversible: one starts a package manager, the other deletes
+remote branches and closes their pull requests *after* `applySkipCleanupFlag` has run, so
+honouring an enable there would override `--skip-cleanup`. That is the whole enforcement — not a check that has to run at the
 right moment, but a struct with nowhere for those keys to land. `operatorOnlyKeys` exists
 only to say out loud that they were ignored. Strictness is per layer: the embedded defaults
 and the operator's file are strict (a typo is worth reporting), the fetched and project
@@ -172,9 +178,15 @@ outside a JS workspace it never does. `nodeMarkers` is ordered on purpose: a rep
 migrating between package managers carries two lockfiles, and `packageManager` is the only
 signal saying which is current rather than left over. Yarn Classic is detected and skipped —
 it has no install mode that resolves without also linking and running install scripts.
-Every recipe is resolution-only, and the extra flags are load-bearing: npm runs the root
-`prepare`/`postinstall` under `--package-lock-only` since npm 7, and pnpm defaults
-`frozen-lockfile` to true in CI, which is exactly where `run` mode lives. A missing binary
+Every recipe is resolution-only, and the extra flags are load-bearing. npm runs the root
+`prepare`/`postinstall` under `--package-lock-only` since npm 7; pnpm defaults
+`frozen-lockfile` to true in CI, which is exactly where `run` mode lives. Two of them are
+not about lifecycle scripts at all: pnpm loads `.pnpmfile.cjs` and calls its hooks during
+resolution (`--ignore-pnpmfile`), and Yarn's launcher execs whatever `yarnPath` in the
+project's own `.yarnrc.yml` names (`YARN_IGNORE_PATH=1`). Both run repository-supplied
+JavaScript with AutoBump's environment, and no `--ignore-scripts` reaches either. Owning the
+argv closed one half of the old trust boundary; those flags plus the off-only `refresh`
+close the other. A missing binary
 aborts that repository's release rather than skipping, because skipping opens exactly the
 pull request the feature prevents and looks identical to having nothing to refresh. Fork
 versioning skips it along with the version-file rewrite it already skips.
