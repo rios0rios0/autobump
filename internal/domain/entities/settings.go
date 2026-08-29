@@ -504,41 +504,50 @@ func SanitizeUntrustedLanguages(overrides map[string]LanguageConfig) map[string]
 	return sanitized
 }
 
-// FindConfigOnMissing finds the config file if not manually set.
+// FindConfigOnMissing finds the global config file if one was not named with -c.
 //
-// The operator's home directory is searched first, and on its own. The wider search that follows
-// looks in the working directory before the home one, and AutoBump normally runs with the
-// repository it is releasing as the working directory -- a repository that may carry its own
-// `.autobump.yaml` for per-project overrides. Resolving the global config through that search
-// answers with the project's file, and the settings AutoBump honours only from the operator's
-// config are then dropped with nothing to notice: the project file's own settings still apply,
-// so the release does the visible part of its job and looks correct. `refresh_commands` is the
-// setting that made this visible -- a bump rewrote the version files and skipped the lockfile
-// refresh that belongs with them, and CI rejected the release the pull request existed to
-// validate.
+// It looks in the operator's home directory and nowhere else. The working directory is
+// deliberately not searched: AutoBump normally runs with the repository it is releasing as the
+// working directory, and that repository may carry its own `.autobump.yaml` for per-project
+// overrides. Answering the global-config question with that file does not merely reorder a
+// preference -- it substitutes the project's configuration for the operator's, and three
+// separate things follow from that.
 //
-// The fallback is kept so the change costs nothing to an operator who keeps no config in their
-// home directory: they have no operator-level settings to lose.
+// The project's overrides stop being overrides. They are meant to be layered onto the global
+// configuration by CopyGlobalConfigWithLanguageOverrides, so a project adds to what AutoBump
+// already carries; adopted as the global config they *replace* it, and the published defaults
+// for every other language go with them.
+//
+// SanitizeUntrustedLanguages is skipped. A project file reaching AutoBump through the project
+// path has its refresh commands stripped, because they are executables run with the release
+// credentials before the pull request is opened. Reaching it through the global path, they are
+// honoured -- so the fallback was a way around an invariant the code states absolutely.
+//
+// The file is decoded strictly. ReadConfig uses KnownFields; ReadProjectConfig does not, because
+// a project file is allowed to be partial. A perfectly valid project file carrying a key that
+// only means something to a project therefore aborts the release rather than being ignored.
+//
+// An operator with no configuration of their own is not left worse off: the published default
+// configuration is the fallback, and their project's file is still merged on top of it through
+// the path that sanitizes it. What they lose is the ability to have a repository silently
+// dictate settings that are the operator's to make.
 func FindConfigOnMissing(configPath string) string {
 	if configPath != "" {
 		return configPath
 	}
 
-	logger.Info("No config file specified, searching for default locations")
+	logger.Info("No config file specified, searching the operator's home directory")
 
 	configPath, err := configHelpers.FindGlobalConfigFile("autobump")
 	if err != nil {
-		logger.Debugf("Could not resolve a config file from the home directory (%v), widening the search", err)
-
-		configPath, err = configHelpers.FindConfigFile("autobump")
-		if err != nil {
-			logger.Warnf(
-				"Config file not found in default locations (%v), "+
-					"falling back to AutoBump's published default configuration at %s",
-				err, DefaultConfigURL,
-			)
-			configPath = DefaultConfigURL
-		}
+		logger.Warnf(
+			"No configuration found in the home directory (%v), "+
+				"falling back to AutoBump's published default configuration at %s. "+
+				"A per-project .autobump.yaml is merged on top of it and is never read as the "+
+				"global configuration; name one with -c to use your own",
+			err, DefaultConfigURL,
+		)
+		configPath = DefaultConfigURL
 	}
 
 	logger.Infof("Using config file: \"%v\"", configPath)

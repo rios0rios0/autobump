@@ -1131,8 +1131,14 @@ func TestFindConfigOnMissingSearchOrder(t *testing.T) {
 		assert.Equal(t, filepath.Join(home, ".autobump.yaml"), result)
 	})
 
-	t.Run("should fall back to the working directory when the home has no config", func(t *testing.T) {
+	t.Run("should not adopt the project's own config as the global one", func(t *testing.T) {
 		// given
+		// The case this replaces used to resolve to the project's file, on the grounds that an
+		// operator with no home config has no operator-level settings to lose. True as far as it
+		// goes, but adopting the file as the *global* config does more than reorder a preference:
+		// the project's overrides stop being overrides and replace the published defaults,
+		// SanitizeUntrustedLanguages never runs so its refresh commands are honoured, and it is
+		// decoded strictly although a project file is allowed to be partial.
 		t.Setenv("HOME", t.TempDir())
 		project := t.TempDir()
 		writeYAML(t, filepath.Join(project, ".autobump.yaml"))
@@ -1142,13 +1148,28 @@ func TestFindConfigOnMissingSearchOrder(t *testing.T) {
 		result := entities.FindConfigOnMissing("")
 
 		// then
-		resolved, err := filepath.Abs(result)
-		require.NoError(t, err)
-		assert.Equal(t, filepath.Join(project, ".autobump.yaml"), resolved,
-			"an operator with no home config has no operator-level settings to lose")
+		assert.Equal(t, entities.DefaultConfigURL, result,
+			"a file in the working directory belongs to the project, and a project's config is "+
+				"merged on top of the global one rather than standing in for it")
 	})
 
-	t.Run("should fall back to the published default configuration when nothing is found", func(t *testing.T) {
+	t.Run("should ignore a config in the working directory even when the home has one", func(t *testing.T) {
+		// given
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		writeYAML(t, filepath.Join(home, ".autobump.yaml"))
+		project := t.TempDir()
+		writeYAML(t, filepath.Join(project, ".autobump.yaml"))
+		t.Chdir(project)
+
+		// when
+		result := entities.FindConfigOnMissing("")
+
+		// then
+		assert.Equal(t, filepath.Join(home, ".autobump.yaml"), result)
+	})
+
+	t.Run("should fall back to the published default configuration when the home has none", func(t *testing.T) {
 		// given
 		t.Setenv("HOME", t.TempDir())
 		t.Chdir(t.TempDir())
