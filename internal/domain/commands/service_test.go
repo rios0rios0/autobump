@@ -891,10 +891,12 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		assert.Equal(t, "docs/CHANGELOG.md", projectConfig.ChangelogPath)
 	})
 
-	t.Run("should not override project config changelog_path when already set", func(t *testing.T) {
+	t.Run("should override the operator's project entry", func(t *testing.T) {
 		t.Parallel()
 
-		// given
+		// given -- the repository's own file is the last layer, so it wins over the entry
+		// the operator wrote for it. Before layering the entry won, which made a project
+		// unable to correct a stale path the operator had configured for it.
 		tmpDir := t.TempDir()
 		configContent := "changelog_path: 'docs/CHANGELOG.md'\n"
 		writeNamedProjectConfig(t, tmpDir, ".autobump.yaml", configContent)
@@ -908,7 +910,7 @@ func TestLoadProjectConfigOverrides(t *testing.T) {
 		commands.LoadProjectConfigOverrides(globalConfig, projectConfig, tmpDir)
 
 		// then
-		assert.Equal(t, "custom/CHANGES.md", projectConfig.ChangelogPath)
+		assert.Equal(t, "docs/CHANGELOG.md", projectConfig.ChangelogPath)
 	})
 }
 

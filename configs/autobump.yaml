@@ -1,57 +1,36 @@
-# (optional) path to your GPG private key used to sign the commits
-# example: "gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobump.asc"
-#gpg_key_path: '/home/user/.gnupg/autobump.asc'
+# AutoBump's built-in defaults.
+#
+# This is the first of the four configuration layers, and the only one that is always
+# present: it is compiled into the binary with `go:embed`, and the same file is served
+# from `main` so an installed binary can pick up a language fix without a release.
+#
+#   built-in defaults -> published defaults -> your ~/.autobump.yaml -> the project's .autobump.yaml
+#
+# Each layer overrides only the keys it declares, so everything below is a starting
+# point rather than a decision. It is NOT a template to copy: it deliberately carries no
+# credentials, no `providers`, no `projects` and no `bump_branch_prefix`, because those
+# are yours to set and this file is merged into every run. Start from
+# `configs/autobump.example.yaml` instead.
 
-# (optional) passphrase for the GPG key above
-# can be a literal string, a file path, or resolved from the GPG_PASSPHRASE env var
-#gpg_key_passphrase: '/home/user/.gnupg/autobump-passphrase.txt'
+# (optional) regenerate the files that derive from a version file -- lockfiles above all --
+# so they travel in the bump commit instead of drifting until CI rejects the release.
+# AutoBump owns the command; a configuration file only says whether to run it. Opt-in,
+# because it starts a package manager. Set it here for every language, or per language below.
+#refresh: true
 
-# (optional) path to SSH private key for push authentication
-# used when SSH agent is not available (e.g., CI environments)
-#ssh_key_path: '~/.ssh/id_ed25519'
-
-# (optional) passphrase for the SSH key above
-# can be a literal string or a file path
-#ssh_key_passphrase: ''
-
-# (optional) custom SSH agent socket path (e.g., for 1Password)
-# auto-detected from common locations if not set
-#ssh_auth_sock: '~/.1password/agent.sock'
-
-# GitLab/Azure DevOps/GitHub personal access token used to create MRs/PRs
-# set it to a path to read the token from a file
-gitlab_access_token: "glpat-TOKEN"
-#gitlab_access_token: ".secure_files/gitlab_access_token.key"
-azure_devops_access_token: "azure-devops-token"
-#azure_devops_access_token: ".secure_files/azure_devops_access_token.key"
-github_access_token: "ghp_TOKEN"
-#github_access_token: ".secure_files/github_access_token.key"
-
-# (optional) global default versioning mode applied to every project that does
-# not specify its own. Accepted values: 'semver' (default), 'fork-dot', 'fork-dash'.
-# 'fork-dot' bumps X.Y.Z.N -> X.Y.Z.(N+1); 'fork-dash' bumps X.Y.Z-N -> X.Y.Z-(N+1).
+# (optional) versioning mode: 'semver' (default), 'fork-dot', or 'fork-dash'.
 #versioning: 'semver'
 
-# (optional) global default changelog filename, relative to each project root.
+# (optional) changelog filename, relative to each project root.
 #changelog_path: 'CHANGELOG.md'
 
-# (optional) detect projects using chlog (https://github.com/luizjhonata/chlog),
-# whose pending changes live as YAML fragments under '.changes/unreleased/' rather
-# than in the '[Unreleased]' section. Without this, such a project looks like it has
-# nothing to release. Enabled by default; uncomment the line below to ignore the
-# fragments instead.
+# (optional) detect projects using chlog (https://github.com/luizjhonata/chlog), whose
+# pending changes live as YAML fragments under '.changes/unreleased/'. Enabled by default.
 #detect_chlog: false
 
-# (optional) delete the bump branches left over by earlier runs, closing any pull
-# request attached to them, before creating the branch for the current release.
-# This keeps unattended runs from piling up release branches nobody merged.
-# Enabled by default; uncomment the line below to keep those branches instead,
-# or pass --skip-cleanup to disable it for a single run.
+# (optional) delete the bump branches left over by earlier runs, closing any pull request
+# attached to each, before creating the branch for the current release. Enabled by default.
 #cleanup_stale_branches: false
-
-# (optional) prefix of the branches AutoBump creates; the next version is appended
-# to it. The same prefix decides which branches the cleanup above removes.
-#bump_branch_prefix: 'chore/bump-'
 
 # rules for automatically detecting project languages
 languages:
@@ -184,41 +163,9 @@ languages:
       - path: "package.json"
         patterns: ["(\\s*\"version\":\\s*\")\\d+\\.\\d+\\.\\d+(\",)"]
 
-# a list of the projects to be managed by this tool
-projects:
-  # path is simply the path of the repository
-  - path: "/home/user/repo1"
-
-  - path: "/home/user/repo2"
-    # language can be omitted if auto-detect rules have already been specified
-    language: "Java"
-
-  # specify a Git URL for AutoBump to clone the repository automatically into a
-  # temporary directory, perform the bump, then delete the temporary directory
-  - path: "git@github.com:example/repo3.git"
-
-  # (optional) custom changelog file path relative to the project root
-  # defaults to 'CHANGELOG.md' if not specified
-  #- path: '/home/user/repo3.5'
-  #  changelog_path: 'docs/CHANGELOG.md'
-
-  # (optional) fork-style versioning for repositories that follow the Forking
-  # Technique (https://github.com/rios0rios0/guide/wiki/Forking-Technique).
-  # The upstream X.Y.Z is preserved; only the trailing fork digit is bumped.
-  # Use 'fork-dot' for X.Y.Z.N or 'fork-dash' for X.Y.Z-N.
-  #- path: '/home/user/forks/opensearch-dashboards'
-  #  changelog_path: 'CHANGELOG_PROPRIETARY.md'
-  #  versioning: 'fork-dot'
-  #- path: '/home/user/forks/oui'
-  #  changelog_path: 'CHANGELOG_PROPRIETARY.md'
-  #  versioning: 'fork-dash'
-
-  # (optional) ignore the chlog fragments of a single project, overriding the
-  # global 'detect_chlog' setting for it
-  #- path: '/home/user/repo3.6'
-  #  detect_chlog: false
-
-  # you can specify a project access token that will be used for this project
-  # this token will be prioritized over the gitlab_access_token and the CI_JOB_TOKEN
-  - path: "https://gitlab.com/user/repo4.git"
-    project_access_token: "glpat-TOKEN"
+    # A TypeScript workspace is the one place a version bump invalidates a lockfile:
+    # moving the range one package declares on its sibling changes a resolution
+    # descriptor `yarn.lock` keys on, and the next `yarn install --immutable` answers
+    # YN0028. Turn the refresh on here (or in your own config, or in the project's) and
+    # AutoBump regenerates the lockfile inside the bump commit.
+    #refresh: true

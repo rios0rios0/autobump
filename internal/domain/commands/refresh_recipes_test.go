@@ -1,0 +1,200 @@
+package commands_test
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/rios0rios0/autobump/internal/domain/commands"
+)
+
+func TestRefreshRecipes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should suppress the hooks that run repository-supplied code", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- "resolves without linking" covers lifecycle scripts only. pnpm loads
+		// `.pnpmfile.cjs` during resolution, and Yarn's launcher execs whatever `yarnPath`
+		// in the project's own `.yarnrc.yml` names; neither is reached by --ignore-scripts.
+		dir := writeProjectFiles(t, map[string]string{"pnpm-lock.yaml": "lockfileVersion: '9.0'\n"})
+
+		// when
+		_, pnpmRun, _, found := commands.DetectNodeRecipe(dir)
+
+		// then
+		require.True(t, found)
+		assert.Contains(t, pnpmRun, "--ignore-pnpmfile")
+		assert.Contains(t, pnpmRun, "--ignore-scripts")
+	})
+
+	t.Run("should refuse the yarn path a repository names for itself", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		dir := writeProjectFiles(t, map[string]string{
+			".yarnrc.yml": "yarnPath: .yarn/releases/anything.cjs\n",
+		})
+
+		// when
+		_, _, _, found := commands.DetectNodeRecipe(dir)
+		env := commands.RefreshRecipeEnv(dir)
+
+		// then
+		require.True(t, found)
+		assert.Contains(t, env, "YARN_IGNORE_PATH=1")
+	})
+
+	t.Run("should cover the JavaScript language keys and no others", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- a lockfile only goes stale when AutoBump's rewrite changes a string the
+		// lockfile keys on, which outside a JavaScript workspace it never does
+		want := []string{"javascript", "node", "typescript"}
+
+		// when
+		got := commands.RefreshRecipeLanguages()
+
+		// then
+		assert.ElementsMatch(t, want, got)
+	})
+}
+
+func TestDetectNodeRecipe(t *testing.T) {
+	t.Parallel()
+
+	// The markers, and what each must resolve to. The order they are tried in is the
+	// point of several of these: a repository migrating between package managers carries
+	// two lockfiles, and only `packageManager` says which one is current.
+	cases := map[string]struct {
+		files       map[string]string
+		wantManager string
+		wantFiles   []string
+	}{
+		"the packageManager field naming yarn": {
+			files:       map[string]string{"package.json": `{"packageManager":"yarn@4.12.0"}`},
+			wantManager: "yarn",
+			wantFiles:   []string{"yarn.lock"},
+		},
+		"the packageManager field naming npm": {
+			files:       map[string]string{"package.json": `{"packageManager":"npm@11.0.0"}`},
+			wantManager: "npm",
+			wantFiles:   []string{"package-lock.json"},
+		},
+		"the packageManager field naming pnpm": {
+			files:       map[string]string{"package.json": `{"packageManager":"pnpm@9.1.0"}`},
+			wantManager: "pnpm",
+			wantFiles:   []string{"pnpm-lock.yaml"},
+		},
+		"a .yarnrc.yml, which only Berry reads": {
+			files:       map[string]string{".yarnrc.yml": "nodeLinker: node-modules\n"},
+			wantManager: "yarn",
+			wantFiles:   []string{"yarn.lock"},
+		},
+		"a Berry lockfile": {
+			files:       map[string]string{"yarn.lock": "__metadata:\n  version: 8\n"},
+			wantManager: "yarn",
+			wantFiles:   []string{"yarn.lock"},
+		},
+		"a pnpm lockfile": {
+			files:       map[string]string{"pnpm-lock.yaml": "lockfileVersion: '9.0'\n"},
+			wantManager: "pnpm",
+			wantFiles:   []string{"pnpm-lock.yaml"},
+		},
+		"an npm lockfile": {
+			files:       map[string]string{"package-lock.json": `{"lockfileVersion":3}`},
+			wantManager: "npm",
+			wantFiles:   []string{"package-lock.json"},
+		},
+		"the packageManager field, over a lockfile left behind by the old one": {
+			files: map[string]string{
+				"package.json":      `{"packageManager":"pnpm@9.1.0"}`,
+				"package-lock.json": `{"lockfileVersion":3}`,
+			},
+			wantManager: "pnpm",
+			wantFiles:   []string{"pnpm-lock.yaml"},
+		},
+	}
+
+	for name, testCase := range cases {
+		t.Run("should identify a project by "+name, func(t *testing.T) {
+			t.Parallel()
+
+			// given
+			dir := writeProjectFiles(t, testCase.files)
+
+			// when
+			manager, run, files, found := commands.DetectNodeRecipe(dir)
+
+			// then
+			require.True(t, found)
+			assert.Equal(t, testCase.wantManager, manager)
+			assert.Equal(t, testCase.wantFiles, files)
+			require.NotEmpty(t, run)
+			assert.Equal(t, testCase.wantManager, run[0])
+			// A recipe for anything but these three would have to run a full install,
+			// which runs install scripts.
+			assert.Contains(t, []string{"yarn", "npm", "pnpm"}, run[0])
+		})
+	}
+
+	// Yarn Classic has no install mode that resolves the lockfile without also linking and
+	// running install scripts, so there is no safe recipe for it. `yarn.lock` alone does
+	// not mean Berry, which is why the header is read rather than the file name trusted.
+	skipped := map[string]map[string]string{
+		"a Yarn Classic lockfile": {
+			"yarn.lock": "# THIS IS AN AUTOGENERATED FILE\n# yarn lockfile v1\n",
+		},
+		// Classic stops the walk rather than failing to match: a repository carrying a v1
+		// lockfile beside a stale package-lock.json is still a Yarn project, and refreshing
+		// it with npm would write it a lockfile it has no business carrying.
+		"a Yarn Classic lockfile beside a stale npm one": {
+			"yarn.lock":         "# yarn lockfile v1\n",
+			"package-lock.json": `{"lockfileVersion":3}`,
+		},
+		"the packageManager field naming Yarn Classic, beside an npm lockfile": {
+			"package.json":      `{"packageManager":"yarn@1.22.22"}`,
+			"package-lock.json": `{"lockfileVersion":3}`,
+		},
+		"the packageManager field naming Yarn Classic": {
+			"package.json": `{"packageManager":"yarn@1.22.22"}`,
+		},
+		"a project with no marker at all": {},
+		"a package.json naming nothing": {
+			"package.json": `{"name":"thing"}`,
+		},
+		"an unparseable package.json": {
+			"package.json": `{not json`,
+		},
+	}
+
+	for name, files := range skipped {
+		t.Run("should refuse to guess from "+name, func(t *testing.T) {
+			t.Parallel()
+
+			// given
+			dir := writeProjectFiles(t, files)
+
+			// when
+			_, _, _, found := commands.DetectNodeRecipe(dir)
+
+			// then
+			assert.False(t, found)
+		})
+	}
+}
+
+// writeProjectFiles lays the given files out in a fresh directory and returns it.
+func writeProjectFiles(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	for name, content := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+	}
+
+	return dir
+}

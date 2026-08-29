@@ -17,6 +17,8 @@ type GlobalConfigBuilder struct {
 	excludeForks           bool
 	excludeArchived        bool
 	cleanupStaleBranches   *bool
+	detectChlog            *bool
+	refresh                *bool
 	bumpBranchPrefix       string
 	changelogPath          string
 	versioning             string
@@ -96,6 +98,19 @@ func (b *GlobalConfigBuilder) WithCleanupStaleBranches(cleanup bool) *GlobalConf
 	return b
 }
 
+// WithDetectChlog sets the chlog detection toggle. A pointer, because an absent setting
+// and an explicit false mean different things: absent resolves to the default.
+func (b *GlobalConfigBuilder) WithDetectChlog(detect bool) *GlobalConfigBuilder {
+	b.detectChlog = &detect
+	return b
+}
+
+// WithRefresh sets the top-level post-bump refresh toggle, with the same pointer semantics.
+func (b *GlobalConfigBuilder) WithRefresh(refresh bool) *GlobalConfigBuilder {
+	b.refresh = &refresh
+	return b
+}
+
 // WithBumpBranchPrefix sets the bump-branch prefix.
 func (b *GlobalConfigBuilder) WithBumpBranchPrefix(prefix string) *GlobalConfigBuilder {
 	b.bumpBranchPrefix = prefix
@@ -170,6 +185,8 @@ func (b *GlobalConfigBuilder) BuildGlobalConfig() *entities.GlobalConfig {
 		ExcludeForks:           b.excludeForks,
 		ExcludeArchived:        b.excludeArchived,
 		CleanupStaleBranches:   b.cleanupStaleBranches,
+		DetectChlog:            b.detectChlog,
+		Refresh:                b.refresh,
 		BumpBranchPrefix:       b.bumpBranchPrefix,
 		ChangelogPath:          b.changelogPath,
 		Versioning:             b.versioning,
@@ -226,13 +243,11 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 	languagesConfigCopy := make(map[string]entities.LanguageConfig, len(b.languagesConfig))
 	maps.Copy(languagesConfigCopy, b.languagesConfig)
 
-	// The clone gets its own bool so the two builders never share the pointer:
+	// The clone gets its own bools so the two builders never share a pointer:
 	// a deep copy that hands out the same address is not a deep copy.
-	var cleanupStaleBranchesCopy *bool
-	if b.cleanupStaleBranches != nil {
-		cleanupStaleBranches := *b.cleanupStaleBranches
-		cleanupStaleBranchesCopy = &cleanupStaleBranches
-	}
+	cleanupStaleBranchesCopy := cloneBool(b.cleanupStaleBranches)
+	detectChlogCopy := cloneBool(b.detectChlog)
+	refreshCopy := cloneBool(b.refresh)
 
 	return &GlobalConfigBuilder{
 		BaseBuilder:            cloneBase(b.BaseBuilder),
@@ -242,6 +257,8 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 		excludeForks:           b.excludeForks,
 		excludeArchived:        b.excludeArchived,
 		cleanupStaleBranches:   cleanupStaleBranchesCopy,
+		detectChlog:            detectChlogCopy,
+		refresh:                refreshCopy,
 		bumpBranchPrefix:       b.bumpBranchPrefix,
 		changelogPath:          b.changelogPath,
 		versioning:             b.versioning,
@@ -255,4 +272,14 @@ func (b *GlobalConfigBuilder) Clone() testkit.Builder {
 		gitHubAccessToken:      b.gitHubAccessToken,
 		gitLabCIJobToken:       b.gitLabCIJobToken,
 	}
+}
+
+// cloneBool copies the value behind a pointer, so a cloned builder never shares an address
+// with the one it came from.
+func cloneBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
 }

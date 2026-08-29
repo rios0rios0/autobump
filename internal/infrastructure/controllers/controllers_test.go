@@ -1,6 +1,7 @@
 package controllers_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,47 +21,29 @@ import (
 	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
 )
 
-func TestNewLocalController(t *testing.T) {
+func TestNewRootController(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should create a non-nil controller", func(t *testing.T) {
 		t.Parallel()
 
 		// given / when
-		ctrl := controllers.NewLocalController()
+		ctrl := controllers.NewRootController()
 
 		// then
 		require.NotNil(t, ctrl)
 	})
 }
 
-func TestLocalControllerGetBind(t *testing.T) {
+func TestRootControllerAddFlags(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return bind with local command metadata", func(t *testing.T) {
+	t.Run("should add the language flag and bound the positional path", func(t *testing.T) {
 		t.Parallel()
 
-		// given
-		ctrl := controllers.NewLocalController()
-
-		// when
-		bind := ctrl.GetBind()
-
-		// then
-		assert.Equal(t, "local", bind.Use)
-		assert.NotEmpty(t, bind.Short)
-		assert.NotEmpty(t, bind.Long)
-	})
-}
-
-func TestLocalControllerAddFlags(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should add language flag to command", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		ctrl := controllers.NewLocalController()
+		// given -- these belong to the root command now, which is why AddFlags also sets
+		// Args: one definition rather than the two the `local` subcommand used to need
+		ctrl := controllers.NewRootController()
 		cmd := &cobra.Command{}
 
 		// when
@@ -70,6 +53,9 @@ func TestLocalControllerAddFlags(t *testing.T) {
 		flag := cmd.Flags().Lookup("language")
 		require.NotNil(t, flag)
 		assert.Equal(t, "l", flag.Shorthand)
+		require.NotNil(t, cmd.Args)
+		require.NoError(t, cmd.Args(cmd, []string{"."}))
+		assert.Error(t, cmd.Args(cmd, []string{"one", "two"}))
 	})
 }
 
@@ -136,7 +122,6 @@ func TestNewControllers(t *testing.T) {
 		t.Parallel()
 
 		// given
-		local := controllers.NewLocalController()
 		run := controllers.NewRunController(repositories.NewProviderRegistry())
 		selfUpdate := controllers.NewSelfUpdateController(commands.NewSelfUpdateCommand(
 			func(_, _ bool) error { return nil },
@@ -144,11 +129,12 @@ func TestNewControllers(t *testing.T) {
 		version := controllers.NewVersionController(commands.NewVersionCommand())
 
 		// when
-		result := controllers.NewControllers(run, local, selfUpdate, version)
+		result := controllers.NewControllers(run, selfUpdate, version)
 
-		// then
+		// then -- RootController is deliberately absent: this slice is what becomes
+		// subcommands, and there is no `local` subcommand any more
 		require.NotNil(t, result)
-		assert.Len(t, *result, 4)
+		assert.Len(t, *result, 3)
 		assert.IsType(t, (*[]entities.Controller)(nil), result)
 	})
 }
@@ -227,7 +213,7 @@ func TestRegisterProviders(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		assert.Len(t, *result, 4)
+		assert.Len(t, *result, 3, "run, self-update and version -- RootController is not a subcommand")
 	})
 
 	t.Run("should return error when dependency is missing", func(t *testing.T) {
@@ -249,10 +235,18 @@ func TestRegisterProviders(t *testing.T) {
 	})
 }
 
-func TestFindReadAndValidateConfig(t *testing.T) {
+// errOffline stands in for an unreachable GitHub.
+var errOffline = errors.New("offline")
+
+// offlineFetch is the published-defaults fetch for a machine with no network. Every test
+// below uses it: the layering takes bytes, so none of it needs a network, and the old
+// shape reached raw.githubusercontent.com on every single sub-test.
+func offlineFetch(string) ([]byte, error) { return nil, errOffline }
+
+func TestResolveConfigLayers(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should read and return config when valid config file exists with languages", func(t *testing.T) {
+	t.Run("should fold the operator's file onto the built-in defaults", func(t *testing.T) {
 		t.Parallel()
 
 		// given
@@ -267,118 +261,150 @@ languages:
 `)
 
 		// when
-		cfg, err := controllers.FindReadAndValidateConfig(configPath)
+		cfg, err := controllers.ResolveWithFetch(configPath, offlineFetch)
 
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
 		assert.Contains(t, cfg.LanguagesConfig, "golang")
+		assert.Contains(t, cfg.LanguagesConfig, "typescript",
+			"the built-in defaults are the base, so the languages the operator did not "+
+				"mention must still be there")
 	})
 
-	t.Run("should return error when config file does not exist", func(t *testing.T) {
+	t.Run("should return an error when the named config does not exist", func(t *testing.T) {
 		t.Parallel()
 
 		// given
 		nonexistentPath := filepath.Join(t.TempDir(), "nonexistent.yaml")
 
 		// when
-		cfg, err := controllers.FindReadAndValidateConfig(nonexistentPath)
+		cfg, err := controllers.ResolveWithFetch(nonexistentPath, offlineFetch)
 
 		// then
-		require.Error(t, err)
+		require.Error(t, err, "a file the operator named by hand must be readable")
 		assert.Nil(t, cfg)
 	})
 
-	t.Run("should return error when config has invalid YAML", func(t *testing.T) {
+	t.Run("should return an error when the named config is invalid YAML", func(t *testing.T) {
 		t.Parallel()
 
 		// given
 		configPath := writeConfigFile(t, `invalid: [yaml: broken`)
 
 		// when
-		cfg, err := controllers.FindReadAndValidateConfig(configPath)
+		cfg, err := controllers.ResolveWithFetch(configPath, offlineFetch)
 
 		// then
 		require.Error(t, err)
 		assert.Nil(t, cfg)
 	})
 
-	t.Run("should handle config with projects section", func(t *testing.T) {
+	t.Run("should return an error when the bump branch prefix is unusable", func(t *testing.T) {
 		t.Parallel()
 
-		// given
-		configContent := `
-languages:
-  golang:
-    extensions:
-      - 'go'
-    version_files:
-      - path: 'go.mod'
-        patterns: ['(go )\d+\.\d+']
-projects:
-  - path: '/tmp/test-project'
-    language: 'golang'
-`
-		configPath := writeConfigFile(t, configContent)
+		// given -- caught at startup, before a single branch has been listed, let alone
+		// deleted
+		configPath := writeConfigFile(t, "bump_branch_prefix: 'chore/'\n")
 
 		// when
-		cfg, err := controllers.FindReadAndValidateConfig(configPath)
+		cfg, err := controllers.ResolveWithFetch(configPath, offlineFetch)
 
 		// then
-		require.NoError(t, err)
-		require.NotNil(t, cfg)
-		assert.Len(t, cfg.Projects, 1)
+		require.Error(t, err)
+		assert.Nil(t, cfg)
 	})
+}
 
-	t.Run("should handle config without languages key by using defaults", func(t *testing.T) {
-		t.Parallel()
+// These cannot join TestResolveConfigLayers above: they resolve the operator layer from
+// $HOME, so they need t.Setenv to stop reading the developer's own configuration -- and
+// t.Setenv is refused anywhere under a parallel ancestor.
+func TestResolveConfigLayersFromHome(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 
-		// given -- config with no languages key triggers the ErrLanguagesKeyMissing path
-		configContent := `
-github_access_token: 'fake-token'
-projects:
-  - path: '/tmp/test-project'
-    language: 'golang'
-`
-		configPath := writeConfigFile(t, configContent)
-
+	t.Run("should run on the built-in defaults alone", func(t *testing.T) {
+		// given -- no -c, nothing in $HOME, and the published defaults unreachable
 		// when
-		cfg, err := controllers.FindReadAndValidateConfig(configPath)
+		cfg, err := controllers.ResolveWithFetch("", offlineFetch)
 
-		// then -- should succeed by falling back to default config languages
-		require.NoError(t, err)
+		// then
+		require.NoError(t, err, "no configuration of one's own is not an error")
 		require.NotNil(t, cfg)
 		assert.NotEmpty(t, cfg.LanguagesConfig)
 	})
 
-	t.Run("should handle config with providers section", func(t *testing.T) {
-		t.Parallel()
-
+	t.Run("should fold the published defaults when they can be fetched", func(t *testing.T) {
 		// given
-		configContent := `
-languages:
-  golang:
-    extensions:
-      - 'go'
-providers:
-  - type: 'github'
-    token: 'fake-token'
-    organizations:
-      - 'test-org'
-`
-		configPath := writeConfigFile(t, configContent)
+		published := func(string) ([]byte, error) {
+			return []byte("languages:\n  brandnew:\n    extensions: ['bn']\n"), nil
+		}
 
 		// when
-		cfg, err := controllers.FindReadAndValidateConfig(configPath)
+		cfg, err := controllers.ResolveWithFetch("", published)
 
 		// then
 		require.NoError(t, err)
-		require.NotNil(t, cfg)
-		assert.Len(t, cfg.Providers, 1)
+		assert.Contains(t, cfg.LanguagesConfig, "brandnew",
+			"a language added on main must reach an installed binary without a release")
+		assert.Contains(t, cfg.LanguagesConfig, "typescript")
+	})
+
+	t.Run("should ignore a credential the published defaults try to set", func(t *testing.T) {
+		// given -- bytes fetched over the network are not the operator speaking
+		published := func(string) ([]byte, error) {
+			return []byte("github_access_token: 'ghp_from_the_internet'\n"), nil
+		}
+
+		// when
+		cfg, err := controllers.ResolveWithFetch("", published)
+
+		// then
+		require.NoError(t, err)
+		assert.Empty(t, cfg.GitHubAccessToken)
 	})
 }
 
-// newTestCmd creates a cobra.Command with the standard flags used by controllers.
+func TestConfigLayerAssembly(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should assemble the three operator-facing layers in order", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		configPath := writeConfigFile(t, "versioning: 'semver'\n")
+		published := func(string) ([]byte, error) { return []byte("# empty\n"), nil }
+
+		// when
+		names, err := controllers.LayerNamesWithFetch(configPath, published)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			entities.LayerBuiltInDefaults,
+			entities.LayerPublishedDefaults,
+			entities.LayerOperatorConfig,
+		}, names)
+	})
+
+	t.Run("should omit the published defaults when they cannot be fetched", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		configPath := writeConfigFile(t, "versioning: 'semver'\n")
+
+		// when
+		names, err := controllers.LayerNamesWithFetch(configPath, offlineFetch)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			entities.LayerBuiltInDefaults,
+			entities.LayerOperatorConfig,
+		}, names)
+	})
+}
+
+// newTestCmd builds the bare command the controllers read their flags from.
 func newTestCmd() *cobra.Command {
 	cmd := &cobra.Command{} //nolint:exhaustruct // a bare command is the point: the flags below are what the controllers read
 	cmd.Flags().Bool("verbose", false, "")
@@ -386,8 +412,7 @@ func newTestCmd() *cobra.Command {
 	return cmd
 }
 
-// TestLocalControllerExecute is deliberately not parallel: it mutates package-level globals that other tests read.
-func TestLocalControllerExecute(t *testing.T) {
+func TestRootControllerExecute(t *testing.T) {
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
 	require.NoError(t, os.WriteFile(
@@ -402,7 +427,7 @@ func TestLocalControllerExecute(t *testing.T) {
 
 	t.Run("should not panic when config file path is invalid", func(t *testing.T) {
 		// given
-		ctrl := controllers.NewLocalController()
+		ctrl := controllers.NewRootController()
 		cmd := newTestCmd()
 		ctrl.AddFlags(cmd)
 		require.NoError(t, cmd.Flags().Set("config", "/nonexistent/config.yaml"))
@@ -418,7 +443,7 @@ func TestLocalControllerExecute(t *testing.T) {
 		configContent := "languages:\n  golang:\n    extensions:\n      - 'go'\n"
 		cfgPath := writeConfigFile(t, configContent)
 
-		ctrl := controllers.NewLocalController()
+		ctrl := controllers.NewRootController()
 		cmd := newTestCmd()
 		ctrl.AddFlags(cmd)
 		require.NoError(t, cmd.Flags().Set("verbose", "true"))
@@ -435,7 +460,7 @@ func TestLocalControllerExecute(t *testing.T) {
 		configContent := "languages:\n  golang:\n    extensions:\n      - 'go'\n"
 		cfgPath := writeConfigFile(t, configContent)
 
-		ctrl := controllers.NewLocalController()
+		ctrl := controllers.NewRootController()
 		cmd := newTestCmd()
 		ctrl.AddFlags(cmd)
 		require.NoError(t, cmd.Flags().Set("config", cfgPath))
@@ -456,7 +481,7 @@ func TestLocalControllerExecute(t *testing.T) {
 		configContent := "languages:\n  golang:\n    extensions:\n      - 'go'\n"
 		cfgPath := writeConfigFile(t, configContent)
 
-		ctrl := controllers.NewLocalController()
+		ctrl := controllers.NewRootController()
 		cmd := newTestCmd()
 		ctrl.AddFlags(cmd)
 		require.NoError(t, cmd.Flags().Set("config", cfgPath))
@@ -490,7 +515,7 @@ func TestLocalControllerExecute(t *testing.T) {
 		configContent := "languages:\n  golang:\n    extensions:\n      - 'go'\n"
 		cfgPath := writeConfigFile(t, configContent)
 
-		ctrl := controllers.NewLocalController()
+		ctrl := controllers.NewRootController()
 		cmd := newTestCmd()
 		ctrl.AddFlags(cmd)
 		require.NoError(t, cmd.Flags().Set("config", cfgPath))
@@ -510,7 +535,7 @@ func TestLocalControllerExecute(t *testing.T) {
 
 		cfgPath := writeConfigFile(t, "languages:\n  golang:\n    extensions:\n      - 'go'\n")
 
-		ctrl := controllers.NewLocalController()
+		ctrl := controllers.NewRootController()
 		cmd := newTestCmd()
 		ctrl.AddFlags(cmd)
 		require.NoError(t, cmd.Flags().Set("config", cfgPath))
@@ -540,7 +565,7 @@ func TestLocalControllerExecute(t *testing.T) {
 		configContent := "languages:\n  golang:\n    extensions:\n      - 'go'\n"
 		cfgPath := writeConfigFile(t, configContent)
 
-		ctrl := controllers.NewLocalController()
+		ctrl := controllers.NewRootController()
 		cmd := newTestCmd()
 		ctrl.AddFlags(cmd)
 		require.NoError(t, cmd.Flags().Set("config", cfgPath))

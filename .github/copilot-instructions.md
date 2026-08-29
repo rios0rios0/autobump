@@ -34,7 +34,7 @@ Note: The CI/CD pipeline automatically uses these scripts via the reusable workf
 - Run directly: `go run ./cmd/autobump`
 - Run built binary: `./bin/autobump`
 - Test help: `./bin/autobump --help`
-- Local mode help: `./bin/autobump local --help`
+- Single-repository help: `./bin/autobump --help`
 - Run mode help: `./bin/autobump run --help`
 
 ### Installation
@@ -54,7 +54,7 @@ autobump/
 │   └── autobump/
 │       ├── main.go                      # Entry point: wires DI, builds Cobra commands
 │       └── dig.go                       # DIG injection helpers: injectAppContext,
-│                                        #   injectLocalController, injectRunController,
+│                                        #   injectRootController, injectRunController,
 │                                        #   injectProviderRegistry
 ├── internal/
 │   ├── app.go                           # AppInternal: aggregates all controllers
@@ -96,11 +96,11 @@ autobump/
 │   │       └── export_test.go           # Exports unexported changelog functions for testing
 │   ├── infrastructure/
 │   │   ├── controllers/
-│   │   │   ├── local_controller.go      # "local" subcommand (single repo mode)
+│   │   │   ├── root_controller.go       # backs `autobump .` (no `local` subcommand)
 │   │   │   ├── run_controller.go        # "run" subcommand (batch + discover engine)
 │   │   │   ├── self_update_controller.go # "self-update" subcommand
 │   │   │   ├── version_controller.go    # "version" subcommand
-│   │   │   ├── config_helpers.go        # Shared config reading/validation helper
+│   │   │   ├── config_helpers.go        # configLoader: assembles + folds the config layers
 │   │   │   └── container.go             # RegisterProviders for all controllers via DIG
 │   │   └── repositories/
 │   │       ├── provider_registry.go     # ProviderRegistry wrapping gitforge's registry
@@ -118,7 +118,9 @@ autobump/
 │           ├── provider_config_builder.go # Test builder for ProviderConfig
 │           └── repository_builder.go    # Test builder for Repository entities
 ├── configs/
-│   ├── autobump.yaml                    # Default configuration template
+│   ├── autobump.yaml                    # Shipped defaults (embedded via configs/embed.go)
+│   ├── autobump.example.yaml            # Annotated example for operators
+│   ├── embed.go                         # go:embed of the shipped defaults
 │   └── CHANGELOG.template.md           # Default CHANGELOG template
 ├── Makefile                             # Build: build, debug, build-musl, run, install
 ├── go.mod                               # Module: github.com/rios0rios0/autobump (Go 1.27.0)
@@ -165,8 +167,9 @@ autobump/
 
 | Command | Description |
 |---|---|
-| `autobump` | Shows help (use `autobump .` as shorthand for local mode) |
-| `autobump local` | Single project mode: detects language, bumps version, creates PR |
+| `autobump` | Shows help |
+| `autobump .` / `autobump <path>` | Single repository: detects language, bumps version, creates PR |
+| `autobump local` | **Removed in 3.0.0** — kept hidden and deprecated so the word is not read as a path |
 | `autobump run` | Engine mode: auto-detects batch (static project list) and/or discover (provider APIs) from config |
 | `autobump batch` | **Deprecated**: hidden alias for `run` (shows deprecation warning) |
 | `autobump discover` | **Deprecated**: hidden alias for `run` (shows deprecation warning) |
@@ -177,22 +180,28 @@ autobump/
 
 - `--config/-c` -- config file path (persistent, available on all commands)
 - `--verbose/-v` -- enable verbose output (persistent, available on all commands)
-- `--language/-l` -- override detected language (`local` command and root shorthand only)
+- `--language/-l` -- override detected language (root command only)
 
 ## Configuration
 
-- Global config resolution: `-c`, then `~/`, then `~/.config/` (file names: `autobump.yaml`, `autobump.yml`, `.autobump.yaml`, `.autobump.yml`). The working directory is never searched for the global config
-- Final fallback: remote default URL (`configs/autobump.yaml` in this repository)
-- A `.autobump.yaml` in the repository being released is per-project overrides only — merged onto the global config by `loadProjectConfigOverrides`, never read as the global config
+- **Configuration is layered.** Four sources, each overriding only the keys its document declares: built-in defaults (`configs/autobump.yaml`, embedded via `configs/embed.go`) → published defaults (the same file fetched from `entities.DefaultConfigURL`, best effort) → the operator's file (`-c <path|URL>`, else `~/` then `~/.config/`, names `.autobump.yaml`, `.autobump.yml`, `autobump.yaml`, `autobump.yml`) → the repository's own `.autobump.yaml`
+- `internal/domain/entities/config_layers.go` is the engine (`ConfigLayer`, `ApplyLayer`, `ApplyProjectLayer`, `ResolveGlobalConfig`, `FinalizeGlobalConfig`); `configLoader` in `internal/infrastructure/controllers/config_helpers.go` assembles the first three (its `fetch` field is the seam that keeps the tests offline), and `loadProjectConfigOverrides` in `service.go` applies the fourth after the clone
+- The mechanism is `yaml.v3` decoding into a *non-zero* struct: absent keys are never assigned, so absent-versus-`false` needs no pointer fields. Maps are the exception — each value decodes into a fresh zero element — so `LanguagesConfig` is blanked before the decode and re-merged with `MergeLanguagesConfig` afterwards
+- The working directory is never searched for the operator's configuration; finding none there is not an error, because the built-in defaults are the base of every run (`FindOperatorConfig` returns `""`)
+- Only the operator's layer is `ScopeOperator`. The other three decode through `RestrictedConfig`, which has **no field** for `providers`, `projects`, any credential, or `bump_branch_prefix` — enforcement by schema, not by a check that has to run at the right moment. `operatorOnlyKeys` only reports what was ignored
+- `refresh` and `cleanup_stale_branches` are accepted from a restricted layer **only when they turn the behaviour off** (`acceptSwitchOff`). Off can only ever remove an action; an enable would let a released repository start a package manager, and — because `applySkipCleanupFlag` runs before the project layer — would override `--skip-cleanup`
+- `bump_branch_prefix` is operator-only *and* validated (`entities.ValidateBumpBranchPrefix`): it aims a destructive operation, so it must name a branch git accepts, contain a `/`, and not stop at one — `chore/` would match `chore/autoupdate-*`. `filterStaleBumpBranches` never deletes a branch equal to the prefix
 - Config structs live in `internal/domain/entities/settings.go`: `GlobalConfig`, `ProjectConfig`, `ProviderConfig`, `LanguageConfig`, `VersionFile`, `RefreshCommand`
 - Supports `projects` list and/or `providers` list (both processed by `run` command)
 - Token resolution: inline string, `${ENV_VAR}` expansion, or file path auto-detection
 - SSH push auth: `ssh_key_path`, `ssh_key_passphrase`, `ssh_auth_sock` fields; auto-detects common SSH agent sockets (1Password, standard `ssh-agent`) when not explicitly set
-- Per-project `.autobump.yaml` discovered via `entities.FindProjectConfigFile`; `loadProjectConfigOverrides` in `internal/domain/commands/service.go` merges its `changelog_path`, `versioning`, `detect_chlog`, and `languages` fields into the resolved config
+- Per-project `.autobump.yaml` discovered via `entities.FindProjectConfigFile`; `loadProjectConfigOverrides` in `internal/domain/commands/service.go` applies it as the fourth layer through `entities.ApplyProjectLayer`. It may set `refresh`, `changelog_path`, `versioning`, `detect_chlog`, `cleanup_stale_branches`, `exclude_forks`, `exclude_archived` and `languages`, and it now **wins over the operator's `projects[]` entry** rather than only filling in what that entry left empty. The project-entry pass reads what *that document* declared, not the folded configuration — otherwise a global default would overwrite the entry written beside it
 - `versioning` mode (`semver`, `fork-dot`, `fork-dash`) drives `getNextVersionString` and `updateChangelogFileString`; fork modes preserve the upstream `X.Y.Z` and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`
 - `cleanup_stale_branches` (opt-out, default enabled) and the persistent `--skip-cleanup` flag control stale bump-branch cleanup: `cleanupStaleBumpBranches` in `internal/domain/commands/cleanup.go` runs before `createBumpBranch` (only when a bump is needed) to delete matching remote branches and close their PRs/MRs via the gitforge `ForgeProvider.ClosePullRequest`. `entities.CleanupEnabled` resolves the toggle; `applySkipCleanupFlag` in `internal/infrastructure/controllers/config_helpers.go` lets the flag override the config
-- `refresh_commands` (per language, opt-in, **global config only**) regenerates files derived from the version files — lockfiles above all. `runRefreshCommands` in `internal/domain/commands/refresh_commands.go` runs each `run` argv in the project root after `updateVersion` and returns the existing matches of its `files` globs, which `addFilesToWorktree` stages alongside the version files. Only the declared globs are staged, a non-zero exit aborts the release with the command output attached, and fork versioning skips the whole step. `MergeLanguagesConfig` *replaces* rather than merges this field (keyed on presence, so `refresh_commands: []` clears rather than reading as omitted), so an `npm` default cannot run alongside a `yarn` override
-- **Refresh commands are a trust boundary.** `loadProjectConfigOverrides` reads `.autobump.yaml` from the *cloned* repository, which in `run` mode is a discovered repository. `entities.SanitizeUntrustedLanguages` therefore drops any non-empty `refresh_commands` arriving from a project file — a command there would run with the runner's provider credentials — while letting an empty list through so a project can opt out. Never route project overrides around that function
+- `refresh` (boolean, top-level or per-language, opt-in, settable in any layer) regenerates what the version files derive — lockfiles above all. `entities.RefreshEnabled` resolves project → language → top level → false. `runRefreshCommands` in `internal/domain/commands/refresh_commands.go` runs the recipe after `updateVersion` and returns what it wrote, which `addFilesToWorktree` stages. A non-zero exit aborts the release with the command output attached, and fork versioning skips the whole step
+- **AutoBump owns the argv.** `internal/domain/commands/refresh_recipes.go` holds the recipes as compile-time constants; a configuration says *whether* to refresh, never *what to run*. That is what removed the old trust boundary — `refresh_commands` was an executable read from config, so a repository's own file could never be trusted with it, and that single exception is what stopped the project layer overriding things like every other layer. `SanitizeUntrustedLanguages` is gone with it
+- The recipes suppress more than lifecycle scripts: `--ignore-pnpmfile` (pnpm calls `.pnpmfile.cjs` hooks during resolution) and `YARN_IGNORE_PATH=1` (Yarn's launcher execs the file `yarnPath` in the project's own `.yarnrc.yml` names). Neither is reached by `--ignore-scripts`, and both run repository-supplied JavaScript with AutoBump's environment
+- `refreshRecipes` covers `typescript`/`javascript`/`node` only: a lockfile goes stale only when the rewrite changes a string it keys on, which outside a JavaScript workspace it never does. `nodeMarkers` is ordered — `packageManager` before any lockfile, because a repository mid-migration carries two and only that field says which is current. Yarn Classic is detected (`# yarn lockfile v1` vs Berry's `__metadata:`) and skipped: it has no install mode that resolves without linking. A missing binary returns `ErrRefreshManagerMissing` and aborts that repository rather than skipping
 - Each refresh command is bounded twice: a 10-minute context, and `cmd.WaitDelay` (10s) so a descendant holding the output pipe cannot extend the call. `configureProcessGroup` (`refresh_commands_unix.go` / `_windows.go`) puts the command in its own process group and kills the group on cancellation, so a shell's children die with it
 - `bump_branch_prefix` (default `chore/bump-`, via `entities.ResolveBumpBranchPrefix`) drives both branch creation in `createBumpBranch` and the cleanup match, so they can never diverge
 - `detect_chlog` (opt-out, default enabled via `entities.ChlogEnabled`) toggles [chlog](https://github.com/luizjhonata/chlog) support: repos that keep pending changes as YAML fragments under `.changes/unreleased/` (detected by a `.chlog.yaml` or the fragment directory) have a permanently empty `[Unreleased]`. `internal/domain/commands/chlog.go` parses the fragments and `readChangelogLines` in `service.go` splices them in as Keep a Changelog `### <Section>` entries — the single boundary every changelog read passes through, so emptiness checks, SemVer calculation, and fork mode all still see plain lines. Consumed fragments are deleted and staged in the release commit; a pending `.changes/v*.md` aborts with `ErrChlogPendingVersionFiles`. chlog is re-implemented, not imported (command-only module)
@@ -254,7 +263,7 @@ go test ./internal/...  # Quick internal-only check during development (acceptab
 1. `make lint` -- must report 0 issues
 2. `make test` -- all tests must pass
 3. `make build` -- must complete successfully
-4. `./bin/autobump --help` -- must show help text with `local` and `run` commands
+4. `./bin/autobump --help` -- must show help text with the `run`, `version` and `self-update` commands, and no `local`
 5. `make sast` -- should report no new findings
 
 ### Pre-commit

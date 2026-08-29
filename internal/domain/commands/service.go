@@ -44,14 +44,19 @@ var (
 	ErrLanguageNotFoundInConfig     = errors.New("language not found in config")
 )
 
-// loadProjectConfigOverrides searches for a per-project .autobump.yaml in the given
-// project directory. If found, it reads the file and merges its languages section
-// into the provided globalConfig, returning a new GlobalConfig without mutating the
-// original globalConfig, but it may update the provided projectConfig.
-// It also merges the changelog_path, versioning and detect_chlog fields from the
-// per-project config into the projectConfig when the projectConfig does not already
-// specify them. If no per-project config is found, the original globalConfig is
-// returned unchanged.
+// loadProjectConfigOverrides folds the repository's own .autobump.yaml onto the resolved
+// configuration and returns the result, leaving the one it was given untouched.
+//
+// This is the last of the four configuration layers, and the only one that is read out of
+// the repository being released -- which in `run` mode is a repository AutoBump discovered
+// rather than one anybody vetted. It is applied with ScopeRestricted, so the keys that are
+// the operator's alone (credentials, `providers`, `projects`, the branch prefix that aims
+// stale-branch deletion) have no field to land in. Everything else layers exactly as the
+// operator's own file does.
+//
+// A missing file is not an error, and neither is an unparseable one: the release proceeds
+// on the configuration resolved without it, which is what a project that cannot be read
+// has always got.
 func loadProjectConfigOverrides(
 	globalConfig *entities.GlobalConfig,
 	projectConfig *entities.ProjectConfig,
@@ -64,30 +69,26 @@ func loadProjectConfigOverrides(
 
 	logger.Infof("Found per-project config: %s", configPath)
 
-	projectOverrides, err := entities.ReadProjectConfig(configPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
-		logger.Warnf("Failed to read per-project config %s: %v, using global config", configPath, err)
+		logger.Warnf("Failed to read per-project config %s: %v; ignoring it", configPath, err)
 		return globalConfig
 	}
 
-	if projectOverrides.ChangelogPath != "" && projectConfig.ChangelogPath == "" {
-		projectConfig.ChangelogPath = projectOverrides.ChangelogPath
-	}
-
-	if projectOverrides.Versioning != "" && projectConfig.Versioning == "" {
-		projectConfig.Versioning = projectOverrides.Versioning
-	}
-
-	if projectOverrides.DetectChlog != nil && projectConfig.DetectChlog == nil {
-		projectConfig.DetectChlog = projectOverrides.DetectChlog
-	}
-
-	if len(projectOverrides.LanguagesConfig) == 0 {
+	//nolint:exhaustruct // Strict is false for a restricted layer by construction
+	merged, err := entities.ApplyProjectLayer(globalConfig, projectConfig, entities.ConfigLayer{
+		Name:     entities.LayerProjectConfig,
+		Origin:   configPath,
+		Data:     data,
+		Scope:    entities.ScopeRestricted,
+		Optional: true,
+	})
+	if err != nil {
+		logger.Warnf("Failed to apply the per-project config %s: %v; ignoring it", configPath, err)
 		return globalConfig
 	}
 
-	logger.Infof("Merging %d language override(s) from per-project config", len(projectOverrides.LanguagesConfig))
-	return entities.CopyGlobalConfigWithLanguageOverrides(globalConfig, projectOverrides.LanguagesConfig)
+	return merged
 }
 
 // providerRegistry is set by the application at startup via SetProviderRegistry.
@@ -792,11 +793,19 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 // honoured, so AutoBump writes where that project already keeps its changelog; an
 // explicit changelog_path still wins over it.
 //
+// The project entry wins over the folded configuration, which is where a repository's own
+// `changelog_path` and the operator's default both end up. Consulting the folded value is
+// what makes a global `changelog_path` mean anything: it was decoded and never read
+// before layering existed, so the setting the README documented did nothing.
+//
 // The configured path must stay inside the project root: an absolute or parent-escaping
 // path would make the bumper read and rewrite a file outside the repository it was
 // pointed at.
 func resolveChangelogPath(ctx *RepoContext) (string, error) {
 	changelogFile := ctx.ProjectConfig.ChangelogPath
+	if changelogFile == "" && ctx.GlobalConfig != nil {
+		changelogFile = ctx.GlobalConfig.ChangelogPath
+	}
 	if changelogFile == "" {
 		var err error
 		changelogFile, err = chlogChangelogPath(ctx)

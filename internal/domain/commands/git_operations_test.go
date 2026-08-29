@@ -349,15 +349,20 @@ func TestUpdateChangelogAndVersionFiles(t *testing.T) {
 		require.NoError(t, readErr)
 		assert.Contains(t, string(pomContent), "<version>1.1.0</version>")
 	})
+}
 
-	t.Run("should stage the refreshed file when a refresh command regenerates it", func(t *testing.T) {
-		t.Parallel()
-
+// These cannot join TestUpdateChangelogAndVersionFiles above: it calls t.Parallel(), and
+// t.Setenv -- which is how the stand-in package manager reaches PATH -- is refused
+// anywhere under a parallel ancestor.
+func TestUpdateChangelogAndVersionFilesRefresh(t *testing.T) {
+	// This sub-test and the one below are deliberately not parallel: they use t.Setenv to
+	// put a stand-in package manager on PATH, which the runtime forbids in a parallel test.
+	t.Run("should stage the refreshed file when the refresh regenerates it", func(t *testing.T) {
 		// given
-		// Copying the rewritten version out of package.json is what proves the command
-		// ran after the rewrite rather than before it.
+		// Copying the rewritten version out of package.json is what proves the refresh ran
+		// after the rewrite rather than before it.
 		repoPath, wt, ctx := buildRefreshCtx(
-			t, []string{"sh", "-c", "grep version package.json > yarn.lock"},
+			t, "grep version package.json > package-lock.json",
 		)
 
 		// when
@@ -367,22 +372,21 @@ func TestUpdateChangelogAndVersionFiles(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "1.1.0", ctx.ProjectConfig.NewVersion)
 
-		lockContent, readErr := os.ReadFile(filepath.Join(repoPath, "yarn.lock"))
+		lockContent, readErr := os.ReadFile(filepath.Join(repoPath, "package-lock.json"))
 		require.NoError(t, readErr)
 		assert.Contains(t, string(lockContent), "1.1.0")
 
 		status, statusErr := wt.Status()
 		require.NoError(t, statusErr)
-		assert.Contains(t, status, "yarn.lock")
+		assert.Contains(t, status, "package-lock.json")
 		assert.Contains(t, status, "package.json")
 		assert.Contains(t, status, "CHANGELOG.md")
 	})
 
-	t.Run("should fail the release when a refresh command fails", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		repoPath, wt, ctx := buildRefreshCtx(t, []string{"sh", "-c", "exit 1"})
+	t.Run("should fail the release when the refresh fails", func(t *testing.T) {
+		// given -- continuing past a failed refresh would open exactly the pull request the
+		// refresh exists to prevent: green locally, rejected by the first CI install
+		repoPath, wt, ctx := buildRefreshCtx(t, "exit 1")
 
 		// when
 		err := commands.UpdateChangelogAndVersionFiles(ctx, filepath.Join(repoPath, "CHANGELOG.md"))
@@ -391,17 +395,32 @@ func TestUpdateChangelogAndVersionFiles(t *testing.T) {
 		require.Error(t, err)
 		status, statusErr := wt.Status()
 		require.NoError(t, statusErr)
-		assert.NotContains(t, status, "yarn.lock")
+		assert.NotContains(t, status, "package-lock.json")
 	})
 }
 
-// buildRefreshCtx creates a TypeScript repository holding a releasable changelog and a
-// package.json at 1.0.0, wired to a single refresh command. Shared by the
-// TestUpdateChangelogAndVersionFiles sub-tests that exercise refresh commands.
+// buildRefreshCtx creates a TypeScript repository holding a releasable changelog, a
+// package.json at 1.0.0 and a package-lock.json, with the refresh turned on and a
+// stand-in `npm` on PATH running the given shell script.
+//
+// The stand-in is a hand-rolled double, not a mock: a real executable, found by the real
+// exec.LookPath and run by the real process machinery. It exists because AutoBump now owns
+// the argv -- a configuration file cannot supply one any more -- so a test that needs the
+// refresh to fail, or to write a known file, has to stand in for the manager itself rather
+// than configure a command.
+//
+// The caller must not be parallel: t.Setenv is what puts the double on PATH.
 func buildRefreshCtx(
-	t *testing.T, run []string,
+	t *testing.T, script string,
 ) (string, *git.Worktree, *commands.RepoContext) {
 	t.Helper()
+
+	binDir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(binDir, "npm"), []byte("#!/bin/sh\n"+script+"\n"), 0o700,
+	))
+	// Prepended rather than replacing PATH: the script still needs the ordinary tools.
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	repoPath, repo := createTestRepo(t)
 	wt, err := repo.Worktree()
@@ -412,26 +431,24 @@ func buildRefreshCtx(
 	require.NoError(
 		t, os.WriteFile(filepath.Join(repoPath, "CHANGELOG.md"), []byte(changelogContent), 0o644),
 	)
-	require.NoError(
-		t,
-		os.WriteFile(
-			filepath.Join(repoPath, "package.json"),
-			[]byte("{\n  \"version\": \"1.0.0\",\n}\n"),
-			0o644,
-		),
-	)
+	// packageManager is what identifies npm here. A lockfile would identify it too, but
+	// writing one as a fixture would leave it in the worktree whether the refresh ran or
+	// not, and "the refresh did not stage anything" is exactly what one of these asserts.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(repoPath, "package.json"),
+		[]byte("{\n  \"version\": \"1.0.0\",\n  \"packageManager\": \"npm@11.0.0\"\n}\n"), 0o644,
+	))
 
+	refresh := true
 	ctx := &commands.RepoContext{
 		Repo:     repo,
 		Worktree: wt,
 		GlobalConfig: entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
 				"typescript": {
+					Refresh: &refresh,
 					VersionFiles: []entities.VersionFile{
 						{Path: "package.json", Patterns: []string{`(\s*"version":\s*")\d+\.\d+\.\d+(",)`}},
-					},
-					RefreshCommands: []entities.RefreshCommand{
-						{Run: run, Files: []string{"yarn.lock"}},
 					},
 				},
 			}).BuildGlobalConfig(),

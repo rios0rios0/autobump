@@ -4,15 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	logger "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v3"
 
 	configEntities "github.com/rios0rios0/gitforge/pkg/config/domain/entities"
 	configHelpers "github.com/rios0rios0/gitforge/pkg/config/domain/helpers"
@@ -45,6 +42,7 @@ type GlobalConfig struct {
 	ExcludeArchived        bool                            `yaml:"exclude_archived"`
 	CleanupStaleBranches   *bool                           `yaml:"cleanup_stale_branches"`
 	DetectChlog            *bool                           `yaml:"detect_chlog"`
+	Refresh                *bool                           `yaml:"refresh"`
 	BumpBranchPrefix       string                          `yaml:"bump_branch_prefix"`
 	ChangelogPath          string                          `yaml:"changelog_path"`
 	Versioning             string                          `yaml:"versioning"`
@@ -64,37 +62,19 @@ type ProviderConfig = configEntities.ProviderConfig
 
 // LanguageConfig holds per-language detection and versioning rules.
 type LanguageConfig struct {
-	Extensions      []string         `yaml:"extensions"`
-	SpecialPatterns []string         `yaml:"special_patterns"`
-	VersionFiles    []VersionFile    `yaml:"version_files"`
-	RefreshCommands []RefreshCommand `yaml:"refresh_commands"`
+	Extensions      []string      `yaml:"extensions"`
+	SpecialPatterns []string      `yaml:"special_patterns"`
+	VersionFiles    []VersionFile `yaml:"version_files"`
+
+	// Refresh turns the post-bump refresh on for this language. Nil inherits the
+	// top-level setting, which in turn defaults to off.
+	Refresh *bool `yaml:"refresh"`
 }
 
 // VersionFile describes a file that contains version information.
 type VersionFile struct {
 	Path     string   `yaml:"path"`
 	Patterns []string `yaml:"patterns"`
-}
-
-// RefreshCommand regenerates the files that derive from a version file AutoBump has
-// just rewritten, so they travel in the bump commit instead of drifting until a
-// pipeline rejects the release.
-//
-// A lockfile is the motivating case: bumping the range one workspace package declares
-// on its sibling invalidates the resolution descriptor recorded in `yarn.lock`, and a
-// CI job running `yarn install --immutable` then refuses the install the bump PR was
-// opened to validate. AutoBump cannot know that relationship — only the package
-// manager does — so it runs the command that does and stages what the command wrote.
-type RefreshCommand struct {
-	// Run is the command and its arguments, executed directly rather than through a
-	// shell so that quoting and interpolation cannot change what runs.
-	Run []string `yaml:"run"`
-
-	// Files are glob patterns, relative to the project root, naming what the command
-	// regenerates. Only these are staged: a refresh must not sweep unrelated work
-	// into the release commit, which is a real risk in `local` mode where the
-	// operator's own uncommitted changes sit in the same worktree.
-	Files []string `yaml:"files"`
 }
 
 // ProjectConfig holds per-project configuration.
@@ -107,6 +87,7 @@ type ProjectConfig struct {
 	ChangelogPath      string `yaml:"changelog_path"`
 	Versioning         string `yaml:"versioning"`
 	DetectChlog        *bool  `yaml:"detect_chlog"`
+	Refresh            *bool  `yaml:"refresh"`
 }
 
 // ResolveVersioning returns the effective versioning mode for a project.
@@ -175,68 +156,17 @@ const DefaultConfigURL = "https://raw.githubusercontent.com/rios0rios0/autobump/
 	"main/configs/autobump.yaml"
 
 var (
-	ErrLanguagesKeyMissingError = errors.New("missing languages key")
-	ErrConfigFileNotFoundError  = errors.New("config file not found")
-	ErrConfigKeyMissingError    = errors.New("config keys missing")
+	ErrConfigKeyMissingError   = errors.New("config keys missing")
+	ErrBumpBranchPrefixInvalid = errors.New("invalid bump branch prefix")
 )
 
-// ReadConfig reads the config file and returns a GlobalConfig struct.
-func ReadConfig(configPath string) (*GlobalConfig, error) {
-	data, err := readData(configPath)
+// ReadLayerData reads a configuration layer from a file path or an HTTP(S) URL.
+func ReadLayerData(configPath string) ([]byte, error) {
+	data, err := downloadHelpers.ReadData(configPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read %s: %w", configPath, err)
 	}
-
-	globalConfig, err := DecodeConfig(data, true)
-	if err != nil {
-		return nil, err
-	}
-
-	for i := range globalConfig.Projects {
-		if globalConfig.Projects[i].Name == "" {
-			basename := path.Base(globalConfig.Projects[i].Path)
-			basename = strings.TrimSuffix(basename, ".git")
-			globalConfig.Projects[i].Name = basename
-		}
-	}
-
-	handleTokenFile("GPG passphrase", &globalConfig.GpgKeyPassphrase)
-	handleTokenFile("SSH key passphrase", &globalConfig.SSHKeyPassphrase)
-	handleTokenFile("GitLab access token", &globalConfig.GitLabAccessToken)
-	handleTokenFile("Azure DevOps access token", &globalConfig.AzureDevOpsAccessToken)
-	handleTokenFile("GitHub access token", &globalConfig.GitHubAccessToken)
-
-	expandHome(&globalConfig.SSHKeyPath)
-	expandHome(&globalConfig.SSHAuthSock)
-
-	// Resolve provider tokens (env vars and file paths)
-	for i := range globalConfig.Providers {
-		globalConfig.Providers[i].Token = globalConfig.Providers[i].ResolveToken()
-	}
-
-	globalConfig.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
-
-	if globalConfig.GpgKeyPassphrase == "" {
-		globalConfig.GpgKeyPassphrase = os.Getenv("GPG_PASSPHRASE")
-	}
-
-	return globalConfig, nil
-}
-
-// readData reads data from a file or a URL.
-func readData(configPath string) ([]byte, error) {
-	uri, err := url.Parse(configPath)
-	if err != nil || uri.Scheme == "" || uri.Host == "" {
-		// It's not a URL, read the data from file
-		var data []byte
-		data, err = os.ReadFile(configPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
-		}
-		return data, nil
-	}
-	// It's a URL, so read the data from the URL
-	return downloadHelpers.DownloadFile(configPath)
+	return data, nil
 }
 
 // expandHome replaces a leading "~/" with the user's home directory.
@@ -289,46 +219,19 @@ func ValidateProviders(providers []configEntities.ProviderConfig) error {
 	return nil
 }
 
-// DecodeConfig decodes the config file and returns a GlobalConfig struct
-// If strict is true, unknown fields will cause an error (for user config)
-// If strict is false, unknown fields will be ignored (for default config).
-func DecodeConfig(data []byte, strict bool) (*GlobalConfig, error) {
-	var globalConfig GlobalConfig
-
-	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
-	decoder.KnownFields(strict)
-	err := decoder.Decode(&globalConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode config: %w", err)
-	}
-
-	return &globalConfig, nil
-}
-
-// ValidateGlobalConfig validates the global config and reports missing keys and errors.
-func ValidateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
+// ValidateGlobalConfig checks the finished configuration -- the result of folding every
+// layer -- and reports what is missing or unusable.
+//
+// The `batch` parameter it used to take was always false from both call sites, so the
+// branches guarded by it were unreachable; the checks that survive are the ones that
+// applied either way. Languages are no longer among them: the built-in defaults are the
+// base of every run, so LanguagesConfig cannot be empty by the time this is reached.
+func ValidateGlobalConfig(globalConfig *GlobalConfig) error {
 	var missingKeys []string
-
-	if batch && len(globalConfig.Projects) == 0 {
-		missingKeys = append(missingKeys, "projects")
-	}
 
 	for projectIndex, projectConfig := range globalConfig.Projects {
 		if projectConfig.Path == "" {
 			missingKeys = append(missingKeys, fmt.Sprintf("projects[%d].path", projectIndex))
-		}
-		if batch && globalConfig.GitLabAccessToken == "" &&
-			globalConfig.AzureDevOpsAccessToken == "" &&
-			globalConfig.GitHubAccessToken == "" &&
-			projectConfig.ProjectAccessToken == "" {
-			logger.Error(
-				"Project access token is required when personal access token " +
-					"is not set in batch mode",
-			)
-			missingKeys = append(
-				missingKeys,
-				fmt.Sprintf("projects[%d].project_access_token", projectIndex),
-			)
 		}
 	}
 
@@ -336,27 +239,124 @@ func ValidateGlobalConfig(globalConfig *GlobalConfig, batch bool) error {
 		return fmt.Errorf("%w: %s", ErrConfigKeyMissingError, strings.Join(missingKeys, ", "))
 	}
 
-	if globalConfig.LanguagesConfig == nil {
-		return ErrLanguagesKeyMissingError
+	return ValidateBumpBranchPrefix(globalConfig.BumpBranchPrefix)
+}
+
+// protectedBranchNames are the branches a bump prefix must not be able to reach. A prefix
+// matches by string prefix, so "main" would match "main" itself and every branch under a
+// "main..." name with it.
+//
+//nolint:gochecknoglobals // read-only lookup table
+var protectedBranchNames = map[string]struct{}{
+	"main": {}, "master": {}, "develop": {}, "head": {}, "trunk": {},
+}
+
+// invalidPrefixRunes are the characters git refuses in a ref name. A prefix that cannot
+// name a branch can only misbehave: it will never match one AutoBump created, and the
+// operator will believe cleanup is running when it is matching nothing.
+const invalidPrefixRunes = " \t~^:?*[\\"
+
+// ValidateBumpBranchPrefix checks a configured bump-branch prefix before anything uses it.
+//
+// The prefix is not only what new branches are named after -- it is the argument to a
+// destructive operation. cleanupStaleBumpBranches deletes every remote branch that starts
+// with it and closes the pull request attached to each, so a prefix that is wider than the
+// operator meant does not produce a confusing branch name, it deletes other people's work.
+// An operator's typo is as capable of that as a hostile repository would be, which is why
+// this runs over the operator's own file too.
+//
+// A failure here is an error rather than a fallback to the default. Quietly substituting
+// the default would mean cleanup ran against branches the operator never named.
+func ValidateBumpBranchPrefix(prefix string) error {
+	if prefix == "" {
+		// Unset is not invalid -- it means DefaultBumpBranchPrefix, which is valid by
+		// construction and covered by this function's tests.
+		return nil
+	}
+
+	trimmed := strings.TrimSpace(prefix)
+	if trimmed == "" {
+		return fmt.Errorf(
+			"%w: an empty prefix matches every branch in the repository", ErrBumpBranchPrefixInvalid,
+		)
+	}
+	if trimmed != prefix {
+		return fmt.Errorf(
+			"%w %q: leading or trailing whitespace cannot be part of a branch name",
+			ErrBumpBranchPrefixInvalid, prefix,
+		)
+	}
+
+	// Before the shape check, not after: the shape check rejects anything without a "/",
+	// so a protected name would otherwise be turned away with the wrong reason and this
+	// table would never be read.
+	if _, protected := protectedBranchNames[strings.ToLower(prefix)]; protected {
+		return fmt.Errorf(
+			"%w %q: that is a protected branch name, and cleanup deletes what the prefix matches",
+			ErrBumpBranchPrefixInvalid, prefix,
+		)
+	}
+
+	return validatePrefixShape(prefix)
+}
+
+// validatePrefixShape enforces what the prefix has to look like: a name git accepts, and
+// a namespace it cannot escape from.
+func validatePrefixShape(prefix string) error {
+	if strings.ContainsAny(prefix, invalidPrefixRunes) ||
+		strings.Contains(prefix, "..") || strings.Contains(prefix, "//") ||
+		strings.HasPrefix(prefix, "-") || strings.HasPrefix(prefix, "/") ||
+		strings.HasSuffix(prefix, ".lock") || prefix == "@" {
+		return fmt.Errorf(
+			"%w %q: it is not a name git will accept for a branch",
+			ErrBumpBranchPrefixInvalid, prefix,
+		)
+	}
+
+	for _, r := range prefix {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf(
+				"%w: control characters cannot be part of a branch name", ErrBumpBranchPrefixInvalid,
+			)
+		}
+	}
+
+	if strings.HasPrefix(prefix, "refs/") {
+		return fmt.Errorf(
+			"%w %q: cleanup matches short branch names, so a refs/ prefix silently matches "+
+				"nothing and leaves cleanup looking enabled while it does nothing; use %q",
+			ErrBumpBranchPrefixInvalid, prefix, DefaultBumpBranchPrefix,
+		)
+	}
+
+	slash := strings.LastIndex(prefix, "/")
+	if slash < 0 {
+		return fmt.Errorf(
+			"%w %q: it must contain a %q so the match cannot escape into the repository's "+
+				"ordinary branch names; the default is %q",
+			ErrBumpBranchPrefixInvalid, prefix, "/", DefaultBumpBranchPrefix,
+		)
+	}
+	if slash == len(prefix)-1 {
+		return fmt.Errorf(
+			"%w %q: a bare namespace matches everything under it -- %q would match every "+
+				"other tool's branches in the same namespace, and cleanup deletes what it "+
+				"matches. Name the branches too, as %q does",
+			ErrBumpBranchPrefixInvalid, prefix, prefix, DefaultBumpBranchPrefix,
+		)
 	}
 
 	return nil
 }
 
-// MergeLanguagesConfig deep-merges user language overrides into defaults.
-// Version files with the same path are replaced; new paths are appended.
-// Extensions and special patterns from defaults are preserved when the user
-// provides only version files. New languages are added wholesale.
+// MergeLanguagesConfig deep-merges one layer's language overrides onto the accumulated
+// ones. Version files with the same path are replaced and new paths are appended;
+// extensions and special patterns are appended and de-duplicated, so a layer that names
+// only version files keeps the ones it inherited. New languages are added wholesale.
 //
-// Refresh commands are the one field that replaces rather than merges. They name a
-// package manager, and appending one to another would run both: an `npm` default
-// left in place under a `yarn` override would write a `package-lock.json` into a
-// repository that has no business carrying one.
-//
-// Replacement is keyed on the field being *present*, not on it being non-empty, so
-// an explicit `refresh_commands: []` clears a globally configured command instead of
-// reading as an omission. Without that distinction a project could never opt out of
-// a refresh its language configures for everyone.
+// `refresh` is a pointer rather than a bool for the same reason every other opt-out in
+// this file is: a layer has to be able to turn an inherited refresh *off*, and a plain
+// false is indistinguishable from a key nobody wrote.
 func MergeLanguagesConfig(
 	defaults, overrides map[string]LanguageConfig,
 ) map[string]LanguageConfig {
@@ -379,8 +379,8 @@ func MergeLanguagesConfig(
 		if len(override.VersionFiles) > 0 {
 			base.VersionFiles = mergeVersionFiles(base.VersionFiles, override.VersionFiles)
 		}
-		if override.RefreshCommands != nil {
-			base.RefreshCommands = slices.Clone(override.RefreshCommands)
+		if override.Refresh != nil {
+			base.Refresh = override.Refresh
 		}
 
 		result[lang] = base
@@ -438,119 +438,71 @@ func FindProjectConfigFile(projectDir string) string {
 	return ""
 }
 
-// ReadProjectConfig reads a per-project config file and returns a GlobalConfig.
-// Only the LanguagesConfig field is meaningful; other fields are ignored by the caller.
-// The file is decoded in non-strict mode to allow partial config files gracefully.
-func ReadProjectConfig(configPath string) (*GlobalConfig, error) {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read project config file %s: %w", configPath, err)
-	}
-	return DecodeConfig(data, false)
-}
-
-// CopyGlobalConfigWithLanguageOverrides creates a shallow copy of the given GlobalConfig
-// and replaces its LanguagesConfig with the result of merging the original languages
-// with the provided overrides. The original config is not mutated.
+// RefreshEnabled reports whether the files derived from a version file should be
+// regenerated for this project -- lockfiles above all.
 //
-// The overrides here come from a `.autobump.yaml` inside the repository being released,
-// which in `run` mode is a repository AutoBump discovered rather than one the operator
-// wrote. They are therefore untrusted, and passed through SanitizeUntrustedLanguages
-// before the merge.
-func CopyGlobalConfigWithLanguageOverrides(
-	original *GlobalConfig,
-	languageOverrides map[string]LanguageConfig,
-) *GlobalConfig {
-	copied := *original
-	copied.LanguagesConfig = MergeLanguagesConfig(
-		original.LanguagesConfig, SanitizeUntrustedLanguages(languageOverrides),
-	)
-	return &copied
-}
-
-// SanitizeUntrustedLanguages strips what a repository-owned config file is not allowed
-// to say. It returns a copy; the input is not mutated.
+// Unlike chlog detection and stale-branch cleanup, the refresh is opt-**in**. It starts a
+// package manager, and a tool whose job is rewriting text files should not begin
+// executing programs because somebody upgraded it.
 //
-// Only refresh commands are stripped, and only when they would *introduce* one. Every
-// other language field describes how to find and rewrite a version string, which is
-// bounded by what a regular expression can do to a file AutoBump was already going to
-// rewrite. A refresh command is different in kind: it is an executable, run with the
-// runner's environment and provider credentials, before the pull request is opened.
-// Honouring one from a discovered repository would let anything in a scanned
-// organisation execute code on the machine doing the release.
-//
-// Clearing is still allowed, because an empty list only ever removes execution: a
-// project that cannot use its language's configured refresh must be able to say so.
-// That is why the check is on the contents rather than on presence.
-func SanitizeUntrustedLanguages(overrides map[string]LanguageConfig) map[string]LanguageConfig {
-	if len(overrides) == 0 {
-		return overrides
+// The project entry wins over the language, which wins over the top-level default.
+// Layering has already folded a repository's own `refresh:` into the top level and its
+// `languages.<lang>.refresh` into the language, so those three are the whole ladder.
+func RefreshEnabled(
+	globalConfig *GlobalConfig, projectConfig *ProjectConfig, language string,
+) bool {
+	if projectConfig != nil && projectConfig.Refresh != nil {
+		return *projectConfig.Refresh
 	}
 
-	sanitized := make(map[string]LanguageConfig, len(overrides))
-	for lang, override := range overrides {
-		if len(override.RefreshCommands) > 0 {
-			logger.Warnf(
-				"Ignoring %d refresh command(s) declared for language %q by the project's own "+
-					"config: refresh commands are executables and are only honoured from the "+
-					"global configuration",
-				len(override.RefreshCommands), lang,
-			)
-			override.RefreshCommands = nil
+	if globalConfig != nil && language != "" {
+		if languageConfig, exists := globalConfig.LanguagesConfig[language]; exists &&
+			languageConfig.Refresh != nil {
+			return *languageConfig.Refresh
 		}
-		sanitized[lang] = override
 	}
 
-	return sanitized
+	if globalConfig != nil && globalConfig.Refresh != nil {
+		return *globalConfig.Refresh
+	}
+
+	return false
 }
 
-// FindConfigOnMissing finds the global config file if one was not named with -c.
+// FindOperatorConfig locates the operator's own configuration file: the one named with
+// -c, or the one in their home directory.
 //
-// It looks in the operator's home directory and nowhere else. The working directory is
-// deliberately not searched: AutoBump normally runs with the repository it is releasing as the
-// working directory, and that repository may carry its own `.autobump.yaml` for per-project
-// overrides. Answering the global-config question with that file does not merely reorder a
-// preference -- it substitutes the project's configuration for the operator's, and three
-// separate things follow from that.
+// It returns "" when there is none, and that is not an error. AutoBump's built-in
+// defaults are the base of every run, so an operator who keeps no configuration is not
+// missing anything the tool needs to work -- only the credentials and the project list,
+// which the modes that need them validate for themselves.
 //
-// The project's overrides stop being overrides. They are meant to be layered onto the global
-// configuration by CopyGlobalConfigWithLanguageOverrides, so a project adds to what AutoBump
-// already carries; adopted as the global config they *replace* it, and the published defaults
-// for every other language go with them.
-//
-// SanitizeUntrustedLanguages is skipped. A project file reaching AutoBump through the project
-// path has its refresh commands stripped, because they are executables run with the release
-// credentials before the pull request is opened. Reaching it through the global path, they are
-// honoured -- so the fallback was a way around an invariant the code states absolutely.
-//
-// The file is decoded strictly. ReadConfig uses KnownFields; ReadProjectConfig does not, because
-// a project file is allowed to be partial. A perfectly valid project file carrying a key that
-// only means something to a project therefore aborts the release rather than being ignored.
-//
-// An operator with no configuration of their own is not left worse off: the published default
-// configuration is the fallback, and their project's file is still merged on top of it through
-// the path that sanitizes it. What they lose is the ability to have a repository silently
-// dictate settings that are the operator's to make.
-func FindConfigOnMissing(configPath string) string {
+// The working directory is deliberately not searched. AutoBump normally runs with the
+// repository it is releasing as the working directory, and that repository may carry its
+// own `.autobump.yaml`. Answering the operator-configuration question with that file does
+// not reorder a preference, it substitutes a project's overrides for the operator's: the
+// project's settings stop being overrides and replace the layers beneath them, and the
+// file is decoded strictly although a project file is allowed to be partial. The
+// project's file is still read -- as the last layer, through the schema that is scoped
+// for it.
+func FindOperatorConfig(configPath string) string {
 	if configPath != "" {
 		return configPath
 	}
 
-	logger.Info("No config file specified, searching the operator's home directory")
+	logger.Debug("No config file specified, searching the operator's home directory")
 
 	configPath, err := configHelpers.FindGlobalConfigFile("autobump")
 	if err != nil {
-		logger.Warnf(
-			"No configuration found in the home directory (%v), "+
-				"falling back to AutoBump's published default configuration at %s. "+
-				"A per-project .autobump.yaml is merged on top of it and is never read as the "+
-				"global configuration; name one with -c to use your own",
-			err, DefaultConfigURL,
+		logger.Infof(
+			"No configuration found in the home directory (%v); running on AutoBump's "+
+				"built-in defaults. Name your own with -c if you keep it elsewhere",
+			err,
 		)
-		configPath = DefaultConfigURL
+		return ""
 	}
 
-	logger.Infof("Using config file: \"%v\"", configPath)
+	logger.Infof("Using config file: %q", configPath)
 
 	return configPath
 }

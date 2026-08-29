@@ -11,28 +11,21 @@ import (
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 )
 
-// LocalController handles the "local" subcommand (single repo mode).
-type LocalController struct{}
+// RootController backs the root command's positional-path form: `autobump .` and
+// `autobump /path/to/repo`.
+//
+// It deliberately does not implement entities.Controller. That interface is what
+// addSubcommands turns into a subcommand, and there is no `local` subcommand any more --
+// having one would give the same behaviour two spellings, which is what it had before.
+type RootController struct{}
 
-// NewLocalController creates a new LocalController.
-func NewLocalController() *LocalController {
-	return &LocalController{}
-}
-
-// GetBind returns the Cobra command metadata.
-func (it *LocalController) GetBind() entities.ControllerBind {
-	return entities.ControllerBind{
-		Use:   "local",
-		Short: "Run AutoBump for a single local repository",
-		Long: `Process a single local repository: read CHANGELOG.md, calculate the next
-semantic version, update version files, commit, push, and create a PR.
-
-If no path is specified, the current working directory is used.`,
-	}
+// NewRootController creates a new RootController.
+func NewRootController() *RootController {
+	return &RootController{}
 }
 
 // Execute runs the single-repo bump process.
-func (it *LocalController) Execute(cmd *cobra.Command, args []string) {
+func (it *RootController) Execute(cmd *cobra.Command, args []string) {
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	if verbose {
 		logger.SetLevel(logger.DebugLevel)
@@ -88,7 +81,7 @@ func (it *LocalController) Execute(cmd *cobra.Command, args []string) {
 }
 
 // AddFlags adds local-specific flags to the given Cobra command.
-func (it *LocalController) AddFlags(cmd *cobra.Command) {
+func (it *RootController) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("language", "l", "", "project language")
 	cmd.Args = cobra.MaximumNArgs(1)
 }

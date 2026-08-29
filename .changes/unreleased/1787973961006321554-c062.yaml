@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'removed a nil dereference in the default-configuration fallback, reachable when the published default was named with `-c` and carried no `languages` key. The branch that held it is gone: the built-in defaults are the base of every run, so the languages map can no longer be empty by the time it is read.'
+time: '2026-08-29T03:26:01.006287993Z'

@@ -1,0 +1,4 @@
+kind: 'Changed'
+body: 'split `configs/autobump.yaml` into the defaults AutoBump ships and `configs/autobump.example.yaml`. The shipped file is now merged into every run, so it can no longer carry the placeholder credentials and the example `projects` list it used to: `gitlab_access_token: ''glpat-TOKEN''` would have become the *effective* token for every operator who keeps none of their own, shadowing `CI_JOB_TOKEN` in GitLab CI, and the three example paths would have made `autobump run` walk directories that belong to the documentation. Copy the example file instead.'
+breaking: true
+time: '2026-08-29T03:26:01.000558189Z'

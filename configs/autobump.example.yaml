@@ -1,0 +1,159 @@
+# Example AutoBump configuration.
+#
+# Copy this to `~/.autobump.yaml` (or `~/.config/autobump.yaml`) and fill in the parts you
+# need. This file is an example only: nothing reads it, and it is neither embedded in the
+# binary nor fetched at runtime.
+#
+# Configuration is layered. Each layer overrides only the keys it declares:
+#
+#   1. built-in defaults      compiled into the binary (configs/autobump.yaml)
+#   2. published defaults     the same file fetched from `main`, best effort
+#   3. your configuration     this file -- `-c <path>`, else ~/ or ~/.config/
+#   4. the project            a `.autobump.yaml` in the repository being released
+#
+# Layer 3 is the only one that may set credentials, `providers`, `projects` or
+# `bump_branch_prefix`. A repository's own file is a set of overrides, never a stand-in
+# for yours, so those keys are ignored (with a warning) when they arrive from layer 1, 2
+# or 4.
+
+# ---------------------------------------------------------------------------
+# Credentials -- layer 3 only
+# ---------------------------------------------------------------------------
+
+# Personal access token for the platform you release to. Each value may be an inline
+# string, a `${ENV_VAR}` reference, or a path to a file containing the token.
+gitlab_access_token: 'glpat-TOKEN'
+#gitlab_access_token: '.secure_files/gitlab_access_token.key'
+azure_devops_access_token: 'azure-devops-token'
+#azure_devops_access_token: '.secure_files/azure_devops_access_token.key'
+github_access_token: 'ghp_TOKEN'
+#github_access_token: '.secure_files/github_access_token.key'
+
+# (optional) GPG private key used to sign the commits
+# export it with:
+#   gpg --export-secret-key --armor $(git config user.signingkey) > ~/.gnupg/autobump.asc
+#gpg_key_path: '/home/user/.gnupg/autobump.asc'
+
+# (optional) passphrase for the GPG key above
+# an inline string, a file path, or the GPG_PASSPHRASE environment variable
+#gpg_key_passphrase: '/home/user/.gnupg/autobump-passphrase.txt'
+
+# (optional) SSH private key for push authentication, used when no SSH agent is
+# available (CI, for instance). Common agent sockets are auto-detected otherwise.
+#ssh_key_path: '~/.ssh/id_ed25519'
+#ssh_key_passphrase: ''
+#ssh_auth_sock: '~/.1password/agent.sock'
+
+# ---------------------------------------------------------------------------
+# Behaviour -- settable in any layer unless noted
+# ---------------------------------------------------------------------------
+
+# (optional) regenerate the files that derive from a version file -- lockfiles above all --
+# so they travel in the bump commit instead of drifting until CI rejects the release.
+# AutoBump owns the command; this only says whether to run it. Opt-in, because it starts a
+# package manager. Set it here for every language, or per language under `languages`.
+#refresh: true
+
+# (optional) versioning mode applied to every project that does not specify its own.
+# 'semver' (default), 'fork-dot' (X.Y.Z.N -> X.Y.Z.N+1), 'fork-dash' (X.Y.Z-N -> X.Y.Z-N+1).
+#versioning: 'semver'
+
+# (optional) changelog filename, relative to each project root.
+#changelog_path: 'CHANGELOG.md'
+
+# (optional) detect projects using chlog (https://github.com/luizjhonata/chlog), whose
+# pending changes live as YAML fragments under '.changes/unreleased/' and whose
+# '[Unreleased]' section is therefore always empty. Enabled by default.
+#detect_chlog: false
+
+# (optional) delete the bump branches left over by earlier runs, closing any pull request
+# attached to each, before creating the branch for the current release. Enabled by
+# default; `--skip-cleanup` disables it for a single run.
+#cleanup_stale_branches: false
+
+# (optional, layer 3 only) prefix of the branches AutoBump creates; the next version is
+# appended to it. The same prefix decides which branches the cleanup above DELETES, which
+# is why it is yours alone to set and why it is validated: it must name a branch, must
+# contain a '/', and must not stop at one -- 'chore/' would match every 'chore/*' branch
+# in the repository, including another tool's.
+#bump_branch_prefix: 'chore/bump-'
+
+# (optional) skip forked or archived repositories during provider discovery.
+#exclude_forks: true
+#exclude_archived: true
+
+# ---------------------------------------------------------------------------
+# What to release -- layer 3 only
+# ---------------------------------------------------------------------------
+
+# `autobump run` discovers repositories through provider APIs when `providers` is set,
+# iterates `projects` when that is set, and does both when both are.
+
+#providers:
+#  - type: 'github'
+#    token: '${GITHUB_TOKEN}'
+#    organizations:
+#      - 'my-org'
+#  - type: 'gitlab'
+#    token: '${GITLAB_TOKEN}'
+#    organizations:
+#      - 'my-group'
+#  - type: 'azuredevops'
+#    token: '${AZURE_DEVOPS_PAT}'
+#    organizations:
+#      - 'https://dev.azure.com/MyOrg'
+
+projects:
+  # path is simply the path of the repository
+  - path: '/home/user/repo1'
+
+  - path: '/home/user/repo2'
+    # language can be omitted if auto-detect rules have already been specified
+    language: 'Java'
+
+  # specify a Git URL for AutoBump to clone the repository automatically into a
+  # temporary directory, perform the bump, then delete the temporary directory
+  - path: 'git@github.com:example/repo3.git'
+
+  # (optional) custom changelog file path relative to the project root
+  # defaults to 'CHANGELOG.md' if not specified
+  #- path: '/home/user/repo3.5'
+  #  changelog_path: 'docs/CHANGELOG.md'
+
+  # (optional) fork-style versioning for repositories that follow the Forking
+  # Technique (https://github.com/rios0rios0/guide/wiki/Forking-Technique).
+  # The upstream X.Y.Z is preserved; only the trailing fork digit is bumped.
+  #- path: '/home/user/forks/opensearch-dashboards'
+  #  changelog_path: 'CHANGELOG_PROPRIETARY.md'
+  #  versioning: 'fork-dot'
+  #- path: '/home/user/forks/oui'
+  #  changelog_path: 'CHANGELOG_PROPRIETARY.md'
+  #  versioning: 'fork-dash'
+
+  # (optional) ignore the chlog fragments of a single project, overriding the
+  # global 'detect_chlog' setting for it
+  #- path: '/home/user/repo3.6'
+  #  detect_chlog: false
+
+  # you can specify a project access token that will be used for this project
+  # this token will be prioritized over the gitlab_access_token and the CI_JOB_TOKEN
+  - path: 'https://gitlab.com/user/repo4.git'
+    project_access_token: 'glpat-TOKEN'
+
+# ---------------------------------------------------------------------------
+# Language overrides
+# ---------------------------------------------------------------------------
+
+# Anything here is merged onto the built-in defaults rather than replacing them:
+# `extensions` and `special_patterns` are appended and de-duplicated, and a
+# `version_files` entry replaces the default with the same `path` while a new path is
+# added. So a project only has to name what differs.
+
+#languages:
+#  typescript:
+#    # regenerate yarn.lock/package-lock.json/pnpm-lock.yaml inside the bump commit
+#    refresh: true
+#    version_files:
+#      - path: 'plugins/*/package.json'
+#        patterns:
+#          - '(\s*"version":\s*")\d+\.\d+\.\d+(",)'

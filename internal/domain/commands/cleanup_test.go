@@ -12,6 +12,33 @@ import (
 func TestFilterStaleBumpBranches(t *testing.T) {
 	t.Parallel()
 
+	t.Run("should not delete a branch that is exactly the prefix", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- HasPrefix matches it, but the bumper always appends a version, so a
+		// branch named exactly the prefix was named by somebody else
+		branches := []string{"chore/bump-", "chore/bump-1.2.3", "feat/thing"}
+
+		// when
+		stale := commands.FilterStaleBumpBranches(branches, "chore/bump-", "main")
+
+		// then
+		assert.Equal(t, []string{"chore/bump-1.2.3"}, stale)
+	})
+
+	t.Run("should not delete the default branch even when it carries the prefix", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		branches := []string{"chore/bump-main", "chore/bump-1.2.3"}
+
+		// when
+		stale := commands.FilterStaleBumpBranches(branches, "chore/bump-", "chore/bump-main")
+
+		// then
+		assert.Equal(t, []string{"chore/bump-1.2.3"}, stale)
+	})
+
 	t.Run("should select every branch carrying the bump prefix", func(t *testing.T) {
 		t.Parallel()
 
