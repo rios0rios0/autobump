@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'validated `bump_branch_prefix` before anything uses it. The prefix decides which branches stale-branch cleanup deletes, and an operator''s typo is as capable of a mass deletion as a hostile repository would be, so it must name a branch git accepts, must contain a `/`, and must not stop at one — `chore/` matches `chore/autoupdate-*`, which is how one tool ends up deleting another''s branches and closing its pull requests. A bad prefix fails at startup, before a single branch has been listed. `filterStaleBumpBranches` carries the second lock: it never deletes a branch equal to the prefix itself.'
-time: '2026-08-29T03:26:01.002428615Z'

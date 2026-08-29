@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'honoured the global `changelog_path`. It was decoded and never read, so the setting the README documented as applying to every project did nothing; `resolveChangelogPath` now falls back to it when the project entry does not name one.'
-time: '2026-08-29T03:26:01.004401129Z'

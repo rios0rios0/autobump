@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'stopped refreshing a Yarn Classic project with npm. Detecting Classic now ends the search rather than falling through to the next lockfile marker: a repository carrying a v1 `yarn.lock` beside a stale `package-lock.json` is still a Yarn project, and the refresh would have written it a lockfile it has no business carrying.'
-time: '2026-08-29T03:55:58.288406373Z'
