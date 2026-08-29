@@ -1153,21 +1153,34 @@ func TestFindConfigOnMissingSearchOrder(t *testing.T) {
 				"merged on top of the global one rather than standing in for it")
 	})
 
-	t.Run("should ignore a config in the working directory even when the home has one", func(t *testing.T) {
-		// given
-		home := t.TempDir()
-		t.Setenv("HOME", home)
-		writeYAML(t, filepath.Join(home, ".autobump.yaml"))
-		project := t.TempDir()
-		writeYAML(t, filepath.Join(project, ".autobump.yaml"))
-		t.Chdir(project)
+	// The search that was removed also reached `.`, `.config/` and `configs/` -- all relative to
+	// the working directory, which is the repository being released -- under four name patterns,
+	// not just the `.autobump.yaml` the case above writes. Each removed location is pinned
+	// separately, because dropping the fallback is what this change is for and a reinstated
+	// wider search would otherwise only be caught for one of the four names in one of the three
+	// directories.
+	for _, removed := range []string{
+		"autobump.yaml",
+		filepath.Join(".config", "autobump.yaml"),
+		filepath.Join("configs", "autobump.yaml"),
+	} {
+		t.Run("should ignore "+removed+" in the working directory", func(t *testing.T) {
+			// given
+			t.Setenv("HOME", t.TempDir())
+			project := t.TempDir()
+			path := filepath.Join(project, removed)
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+			writeYAML(t, path)
+			t.Chdir(project)
 
-		// when
-		result := entities.FindConfigOnMissing("")
+			// when
+			result := entities.FindConfigOnMissing("")
 
-		// then
-		assert.Equal(t, filepath.Join(home, ".autobump.yaml"), result)
-	})
+			// then
+			assert.Equal(t, entities.DefaultConfigURL, result,
+				"the wider search that used to reach this location was removed with the fallback")
+		})
+	}
 
 	t.Run("should fall back to the published default configuration when the home has none", func(t *testing.T) {
 		// given
