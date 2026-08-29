@@ -181,8 +181,9 @@ autobump/
 
 ## Configuration
 
-- Default config search order: `.`, `.config/`, `configs/`, `~/`, `~/.config/` (file names: `autobump.yaml`, `autobump.yml`, `.autobump.yaml`, `.autobump.yml`)
+- Global config resolution: `-c`, then `~/`, then `~/.config/` (file names: `autobump.yaml`, `autobump.yml`, `.autobump.yaml`, `.autobump.yml`). The working directory is never searched for the global config
 - Final fallback: remote default URL (`configs/autobump.yaml` in this repository)
+- A `.autobump.yaml` in the repository being released is per-project overrides only — merged onto the global config by `loadProjectConfigOverrides`, never read as the global config
 - Config structs live in `internal/domain/entities/settings.go`: `GlobalConfig`, `ProjectConfig`, `ProviderConfig`, `LanguageConfig`, `VersionFile`, `RefreshCommand`
 - Supports `projects` list and/or `providers` list (both processed by `run` command)
 - Token resolution: inline string, `${ENV_VAR}` expansion, or file path auto-detection

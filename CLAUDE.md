@@ -99,7 +99,7 @@ Three-stage fallback in `DetectProjectLanguage`:
 
 ## Configuration
 
-Config file search order: `.` → `.config/` → `configs/` → `~/` → `~/.config/`. Falls back to downloading default from GitHub. Token values support inline strings, `${ENV_VAR}` expansion, and file paths. SSH push auth is configured via `ssh_key_path`, `ssh_key_passphrase`, and `ssh_auth_sock` fields; common SSH agent sockets (1Password, standard `ssh-agent`) are auto-detected when not explicitly set.
+Global config resolution: `-c` → `~/` → `~/.config/` → AutoBump's published default (downloaded from GitHub). The working directory is never searched for the *global* config — `FindConfigOnMissing` calls gitforge's `FindGlobalConfigFile`, which looks only in the home directory. A `.autobump.yaml` found in the repository being released is loaded as per-project overrides by `loadProjectConfigOverrides` and merged through `CopyGlobalConfigWithLanguageOverrides`, which sanitizes it; adopting it as the global config would replace the published defaults instead of layering onto them, skip `SanitizeUntrustedLanguages`, and decode it strictly. Token values support inline strings, `${ENV_VAR}` expansion, and file paths. SSH push auth is configured via `ssh_key_path`, `ssh_key_passphrase`, and `ssh_auth_sock` fields; common SSH agent sockets (1Password, standard `ssh-agent`) are auto-detected when not explicitly set.
 
 Versioning modes: `semver` (default), `fork-dot`, `fork-dash`. Fork modes increment only the trailing fork digit (e.g. `3.3.0.16` → `3.3.0.17`) and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`.
 
