@@ -1169,7 +1169,11 @@ func TestFindConfigOnMissingSearchOrder(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			project := t.TempDir()
 			path := filepath.Join(project, removed)
-			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+			// The permission rule compares the mode against 0600 and cannot tell a
+			// directory from a file, so it flags the tightest mode a directory can have
+			// and still be entered. Same suppression as makeDir in the command tests.
+			// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
 			writeYAML(t, path)
 			t.Chdir(project)
 
