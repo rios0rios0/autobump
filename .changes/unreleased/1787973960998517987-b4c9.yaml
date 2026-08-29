@@ -1,4 +1,0 @@
-kind: 'Changed'
-body: 'narrowed what a repository''s own `.autobump.yaml` may set. `providers`, `projects` and every credential key now decode through a struct that has no field for them, and so does `bump_branch_prefix` — which is not a naming preference but the argument to a destructive operation, since stale-branch cleanup deletes every remote branch carrying it and closes each attached pull request. A repository that sets one is told it was ignored and why. Everything else layers freely, which is new: a project''s file now wins over the `projects[]` entry an operator wrote for it, where before it could only fill in what that entry left empty.'
-breaking: true
-time: '2026-08-29T03:26:00.998465638Z'
