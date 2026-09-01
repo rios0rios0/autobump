@@ -22,6 +22,13 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-09-01
+
+### Changed
+
+- changed the Go module dependencies to their latest versions
+- refreshed `.github/copilot-instructions.md` to correct the configuration-struct list in `internal/domain/entities/settings.go`: `ProviderConfig` is a re-export alias for gitforge's type and there is no `RefreshCommand` struct — `refresh` is a `*bool` and the recipes are compile-time constants
+
 ## [3.0.0] - 2026-08-29
 
 ### Added
