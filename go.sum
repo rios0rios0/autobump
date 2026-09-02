@@ -85,8 +85,8 @@ github.com/rios0rios0/gitforge v1.0.1-0.20260827000225-8c05a4730240 h1:rZw7iEbUT
 github.com/rios0rios0/gitforge v1.0.1-0.20260827000225-8c05a4730240/go.mod h1:Jmd6rMFSuMuVRr7UIRRjAUWsUSjwMCPUGrOoyGqni5A=
 github.com/rios0rios0/langforge v1.1.2 h1:YFSSt03CXHKqLzEKy9yD8FMFCAadQ3y0JgN5kYLz69g=
 github.com/rios0rios0/langforge v1.1.2/go.mod h1:gXwN9LkIqv2H+1zkPRAngG7DQcRNr1TifmtdsyPrROw=
-github.com/rios0rios0/testkit v0.3.1 h1:Wx52hoN5P0z/F34TNsEngbO2HhJ3yoT2BhH3U5G8c4Y=
-github.com/rios0rios0/testkit v0.3.1/go.mod h1:V3QQvbOM++F+85HX3lMhPEXTRbVcwIhDZHqJngF8wB4=
+github.com/rios0rios0/testkit v0.3.2 h1:Ehj4RxBtrJJRviTEjna3PiXmo1Tjf68xSh6v2Xv1s0g=
+github.com/rios0rios0/testkit v0.3.2/go.mod h1:V3QQvbOM++F+85HX3lMhPEXTRbVcwIhDZHqJngF8wB4=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
