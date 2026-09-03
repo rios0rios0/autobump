@@ -264,7 +264,7 @@ func (r RestrictedConfig) applyToProject(projectConfig *ProjectConfig, refreshVe
 	// The veto has to be applied here as well as in applyTo, and this is the copy
 	// that decides: RefreshEnabled consults projectConfig.Refresh *before* either
 	// field on GlobalConfig, so a veto enforced only there would be read past.
-	if r.Refresh != nil && !(refreshVetoed && *r.Refresh) {
+	if r.Refresh != nil && (!refreshVetoed || !*r.Refresh) {
 		projectConfig.Refresh = r.Refresh
 	}
 }
