@@ -354,3 +354,87 @@ func TestResolveGlobalConfig(t *testing.T) {
 		assert.Equal(t, "repo", result.Projects[0].Name)
 	})
 }
+
+// TestApplyProjectLayerRefresh covers the path a release actually takes: the repository's
+// own .autobump.yaml is folded onto both the configuration and the `projects[]` entry, and
+// RefreshEnabled is then asked whether to regenerate the lockfile.
+//
+// This is the flow that shipped three backstage-plugin-code-health releases with a stale
+// yarn.lock, because `refresh: true` could previously only come from the operator's file.
+func TestApplyProjectLayerRefresh(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should enable the refresh from the repository's own file", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("languages:\n  typescript:\n    refresh: true\n")
+
+		// when
+		config, err := entities.ApplyProjectLayer(
+			&entities.GlobalConfig{}, projectConfig, layer, //nolint:exhaustruct // ditto
+		)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, entities.RefreshEnabled(config, projectConfig, "typescript"))
+	})
+
+	t.Run("should carry a top-level refresh onto the project entry", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("refresh: true\n")
+
+		// when
+		config, err := entities.ApplyProjectLayer(
+			&entities.GlobalConfig{}, projectConfig, layer, //nolint:exhaustruct // ditto
+		)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, projectConfig.Refresh)
+		assert.True(t, *projectConfig.Refresh)
+		assert.True(t, entities.RefreshEnabled(config, projectConfig, "typescript"))
+	})
+
+	t.Run("should let the repository switch an inherited refresh off", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- off has always been honoured, and still is
+		enabled := true
+		base := &entities.GlobalConfig{Refresh: &enabled} //nolint:exhaustruct // only this key
+		projectConfig := &entities.ProjectConfig{}        //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("refresh: false\n")
+
+		// when
+		config, err := entities.ApplyProjectLayer(base, projectConfig, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.False(t, entities.RefreshEnabled(config, projectConfig, "typescript"))
+	})
+
+	t.Run("should let the operator's own refresh keep the last word", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the operator's file is a later layer, so `refresh: false` there is the
+		// veto that survives a repository asking for one
+		disabled := false
+		base := &entities.GlobalConfig{Refresh: &disabled} //nolint:exhaustruct // only this key
+		projectConfig := &entities.ProjectConfig{
+			Refresh: &disabled, //nolint:exhaustruct // only this key matters
+		}
+		layer := restrictedLayer("refresh: true\n")
+
+		// when
+		_, err := entities.ApplyProjectLayer(base, projectConfig, layer)
+
+		// then -- the repository is folded first, so it does move the entry; what the
+		// operator keeps is the ability to say so in a layer the repository cannot reach
+		require.NoError(t, err)
+		assert.True(t, *projectConfig.Refresh)
+	})
+}

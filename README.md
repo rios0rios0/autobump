@@ -293,13 +293,13 @@ The keys a per-project file may set:
 
 | Key | Purpose |
 |-----|---------|
-| `refresh` | Only `false`, to switch the refresh **off** — see [Refresh](#refresh) |
+| `refresh` | `true` or `false` — see [Refresh](#refresh). A repository may turn its own refresh on: it is the party that knows whether a version bump leaves its lockfile stale |
 | `changelog_path` | Changelog filename relative to the project root (e.g. `CHANGELOG_PROPRIETARY.md`) |
 | `versioning` | `semver` (default), `fork-dot`, or `fork-dash` |
 | `detect_chlog` | `false` to ignore [chlog](#fragment-based-changelogs-chlog) fragments (on by default) |
 | `cleanup_stale_branches` | Only `false`, to keep this project's bump branches. An enable here would arrive after `--skip-cleanup` had been applied and would override it |
 | `exclude_forks`, `exclude_archived` | Accepted, but they filter what *discovery selects*; by the time this file is read the repository has already been selected and cloned, so they do nothing here |
-| `languages` | Per-language `extensions`, `special_patterns`, `version_files`, and `refresh` under the same off-only rule |
+| `languages` | Per-language `extensions`, `special_patterns`, `version_files`, and `refresh` under the same rule |
 
 And the keys it may **not**, which are reported and ignored when a repository sets one:
 
@@ -375,12 +375,22 @@ is what stops it. Neither is a lifecycle script, so no `--ignore-scripts` reache
 
 Notes worth knowing before you turn it on:
 
-- **Opt-in, and only you can opt in.** The refresh starts a package manager, so upgrading
-  AutoBump must never be what begins running programs on your machine — and neither must a
-  repository it is releasing. `refresh` is read from a project's own `.autobump.yaml` only
-  when it is `false`: a repository may switch the refresh **off**, never on. Off can only
-  ever remove an action, which is the same asymmetry that let a project clear
-  `refresh_commands` while never being able to introduce one.
+- **Opt-in, and off by default.** The refresh starts a package manager, so upgrading
+  AutoBump must never be what begins running programs on your machine. Nothing runs until
+  some layer says `refresh: true`.
+- **A repository may turn its own refresh on.** `refresh: true` in the project's own
+  `.autobump.yaml` is honoured, because a lockfile that goes stale on a version bump is a
+  fact about *that* repository's build, and the repository is the only party that reliably
+  knows it. That file is committed and reviewed by the same people who put the repository
+  on your project list, and AutoBump still owns the argv — a configuration says *whether*
+  to refresh, never *what to run*.
+- **The fetched defaults may not.** `refresh: true` in the copy downloaded from
+  `DefaultConfigURL` is warned about and ignored: it is a document that arrives over the
+  network rather than one a repository committed, and that is a remote party choosing to
+  start a process. Turning the refresh **off** is still honoured from any layer, since off
+  can only ever remove an action.
+- **You keep the veto.** Your own configuration is a later layer than the built-in and
+  published defaults, so `refresh: false` there holds against them.
 - **Detection order matters.** A repository migrating between package managers carries two
   lockfiles, so `packageManager` is consulted first: it says which one is *current* rather
   than which one is *left over*.
