@@ -22,6 +22,17 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.0.3] - 2026-09-03
+
+### Changed
+
+- changed the Go module dependencies to their latest versions
+- let a repository turn its own refresh on. `refresh: true` in the project's own `.autobump.yaml` -- top-level or under a language -- is now honoured, where before it was warned about and dropped and only the operator's file could enable it. A lockfile that goes stale on a version bump is a fact about that repository's build, and the repository is the party that reliably knows it: a TypeScript workspace whose packages declare caret ranges on each other rewrites a resolution descriptor `yarn.lock` keys on, and the next `yarn install --immutable` answers YN0028 -- so the release that most needed the refresh was the one that could not ask for it, and every such repository had to be repaired by hand after the fact. The old rule treated the three restricted layers as one population; they are not. `acceptRefresh` now honours an enable from the project layer and still refuses one from the defaults fetched over the network, which is a document nobody in the room wrote. Turning the refresh *off* is unchanged and still honoured from any layer, and the operator keeps the veto: their own configuration is a later layer than the defaults. What made the old boundary necessary has not come back -- AutoBump owns the argv, and the recipes still suppress pnpm's `.pnpmfile.cjs`, Yarn Berry's `yarnPath` and npm's lifecycle scripts -- so the toggle decides only whether a package manager runs, never what it runs.
+
+### Fixed
+
+- gave the operator a real veto over a repository's refresh. The first cut of the project-layer opt-in claimed one and did not have it: the repository's `.autobump.yaml` is folded *after* the operator's file, and `RefreshEnabled` reads the project entry before either field on the global config, so an operator's `refresh: false` was overwritten and then never consulted. An operator whose release host has no pnpm could not stop a repository turning the refresh on, and there is no `--skip-refresh` to fall back on. `resolveRefreshVeto` now records an explicit operator `false` separately, read from the document's own keys rather than the decoded pointer, because only the key's presence separates a refusal from an inherited value; `acceptRefresh` and `applyToProject` both refuse a project enable against it, at the top level and per language. Omitting the key is still not a veto -- silence leaves the repository free to enable its own refresh, which is the point of the feature. This matters most under `providers:` discovery, where the operator names an org rather than each repository and anyone who can land a config file in anything the API returns could otherwise start a package manager on the release host; the README now says so where an operator will read it before adding a providers block.
+
 ## [3.0.2] - 2026-09-02
 
 ### Changed
