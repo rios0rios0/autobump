@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"slices"
 	"strings"
 
 	logger "github.com/sirupsen/logrus"
@@ -39,6 +40,11 @@ const (
 	// defaults, the copy fetched from DefaultConfigURL and the .autobump.yaml inside the
 	// repository being released all use it: none of the three is the operator speaking,
 	// so none of them needs to be able to name a token or aim a branch deletion.
+	//
+	// The scope is what a layer may *say*, not how far it is trusted, and those are not
+	// the same question. `refresh` is the one key where they come apart: acceptRefresh
+	// honours it from the repository's own file and not from the fetched defaults, both
+	// of which decode through this scope. See its comment for why.
 	ScopeRestricted
 )
 
@@ -153,8 +159,28 @@ func applyOperatorLayer(config *GlobalConfig, layer ConfigLayer) (*GlobalConfig,
 	}
 
 	next.LanguagesConfig = MergeLanguagesConfig(inherited, next.LanguagesConfig)
+	next.refreshVetoed = resolveRefreshVeto(config.refreshVetoed, next.Refresh, layer.Data)
 
 	return &next, nil
+}
+
+// resolveRefreshVeto reports whether an operator has said no to the refresh.
+//
+// It reads the raw document rather than the decoded value because the two answer
+// different questions: `next.Refresh` after a decode may be false because *this* layer
+// said so, or because an earlier one did and this document is silent. Only the key's
+// presence distinguishes them, and only an explicit false is a veto -- an operator who
+// writes `refresh: true` is opting in, not forbidding anything, and one who writes
+// nothing has expressed no opinion for a repository to override.
+//
+// A later operator-scope document can lift a veto an earlier one set, which is the same
+// last-writer-wins rule every other key follows within this scope.
+func resolveRefreshVeto(inherited bool, refresh *bool, data []byte) bool {
+	if !slices.Contains(topLevelKeys(data), "refresh") {
+		return inherited
+	}
+
+	return refresh != nil && !*refresh
 }
 
 // applyRestrictedLayer decodes a layer through the narrower schema, so the keys it is not
@@ -165,7 +191,7 @@ func applyRestrictedLayer(config *GlobalConfig, layer ConfigLayer) (*GlobalConfi
 		return nil, err
 	}
 
-	return restricted.applyTo(config, layer.describe()), nil
+	return restricted.applyTo(config, layer), nil
 }
 
 // decodeRestricted reads a layer through RestrictedConfig and reports the operator-only
@@ -210,17 +236,17 @@ func ApplyProjectLayer(
 	}
 
 	if projectConfig != nil {
-		restricted.applyToProject(projectConfig)
+		restricted.applyToProject(projectConfig, config.refreshVetoed)
 	}
 
-	return restricted.applyTo(config, layer.describe()), nil
+	return restricted.applyTo(config, layer), nil
 }
 
 // applyToProject carries what the repository declared onto the project entry, so the
 // repository's own file wins over the operator's `projects[]` entry for the settings both
 // can express. Language is not among them: it is detected, or given with -l, never
 // configured here.
-func (r RestrictedConfig) applyToProject(projectConfig *ProjectConfig) {
+func (r RestrictedConfig) applyToProject(projectConfig *ProjectConfig, refreshVetoed bool) {
 	if r.ChangelogPath != "" {
 		projectConfig.ChangelogPath = r.ChangelogPath
 	}
@@ -230,9 +256,15 @@ func (r RestrictedConfig) applyToProject(projectConfig *ProjectConfig) {
 	if r.DetectChlog != nil {
 		projectConfig.DetectChlog = r.DetectChlog
 	}
-	// Only the off direction, for the reason acceptSwitchOff explains. The warning is
-	// emitted there, on the same document, so this stays a plain filter.
-	if r.Refresh != nil && !*r.Refresh {
+	// Both directions, unless the operator has forbidden the on direction. This
+	// function is reached only from ApplyProjectLayer, so the document being folded
+	// here is always the repository's own .autobump.yaml -- the one layer
+	// acceptRefresh trusts to start a package manager. See its comment.
+	//
+	// The veto has to be applied here as well as in applyTo, and this is the copy
+	// that decides: RefreshEnabled consults projectConfig.Refresh *before* either
+	// field on GlobalConfig, so a veto enforced only there would be read past.
+	if r.Refresh != nil && (!refreshVetoed || !*r.Refresh) {
 		projectConfig.Refresh = r.Refresh
 	}
 }
@@ -258,8 +290,11 @@ type RestrictedConfig struct {
 }
 
 // applyTo folds the restricted layer onto config, returning a copy.
-func (r RestrictedConfig) applyTo(config *GlobalConfig, layerName string) *GlobalConfig {
+func (r RestrictedConfig) applyTo(config *GlobalConfig, layer ConfigLayer) *GlobalConfig {
 	next := *config
+
+	layerName := layer.describe()
+	fromProject := layer.Name == LayerProjectConfig
 
 	if r.ChangelogPath != "" {
 		next.ChangelogPath = r.ChangelogPath
@@ -267,7 +302,7 @@ func (r RestrictedConfig) applyTo(config *GlobalConfig, layerName string) *Globa
 	if r.Versioning != "" {
 		next.Versioning = r.Versioning
 	}
-	if acceptSwitchOff(r.Refresh, layerName, "refresh", reasonExecution) {
+	if acceptRefresh(r.Refresh, layerName, "refresh", fromProject, config.refreshVetoed) {
 		next.Refresh = r.Refresh
 	}
 	if acceptSwitchOff(
@@ -286,31 +321,33 @@ func (r RestrictedConfig) applyTo(config *GlobalConfig, layerName string) *Globa
 	}
 
 	next.LanguagesConfig = MergeLanguagesConfig(
-		config.LanguagesConfig, sanitizeRestrictedLanguages(r.LanguagesConfig, layerName),
+		config.LanguagesConfig,
+		sanitizeRestrictedLanguages(
+			r.LanguagesConfig, layerName, fromProject, config.refreshVetoed,
+		),
 	)
 
 	return &next
 }
 
 const (
-	reasonExecution = "it starts a package manager, and whether AutoBump executes anything " +
-		"at all is the operator's to decide"
+	// Reached by the built-in defaults and by the copy fetched from DefaultConfigURL,
+	// so the wording names neither: one ships inside the binary and the other arrives
+	// over the network, and what they have in common is that the repository being
+	// released did not write either of them.
+	reasonNonProjectExecution = "it starts a package manager, and only the operator or " +
+		"the repository's own committed configuration may decide that"
 	reasonCleanupSwitch = "it deletes remote branches and closes their pull requests, and " +
 		"--skip-cleanup is applied before this layer, so honouring it would override the flag"
 )
 
 // acceptSwitchOff reports whether a restricted layer's toggle may be honoured.
 //
-// These two switches govern destructive or executing behaviour, so a layer that is not the
-// operator's may turn them *off* and never on. Off is safe in a way on is not: it can only
-// ever remove an action, which is the same asymmetry that let a project clear
-// `refresh_commands` while never being able to introduce one.
+// The switch it still governs is destructive, so a layer that is not the operator's may turn
+// it *off* and never on. Off is safe in a way on is not: it can only ever remove an action.
 //
-// Owning the argv was only half of what made `refresh_commands` untrusted. The other half is
-// whether anything runs at all -- and a package manager resolving a lockfile in a cloned
-// repository still executes what that repository supplies: pnpm loads `.pnpmfile.cjs`,
-// Yarn Berry honours `yarnPath`. The recipes suppress both, and this keeps the decision to
-// start one where it belongs.
+// `refresh` used to be judged here too. It is now acceptRefresh's, which draws the line
+// between the restricted layers instead of across all of them.
 func acceptSwitchOff(value *bool, layerName, key, reason string) bool {
 	if value == nil {
 		return false
@@ -325,10 +362,71 @@ func acceptSwitchOff(value *bool, layerName, key, reason string) bool {
 	return false
 }
 
-// sanitizeRestrictedLanguages applies the same asymmetry to the per-language refresh: a
-// restricted layer may switch one off, never on.
+// acceptRefresh reports whether a restricted layer's `refresh` toggle may be honoured.
+//
+// Off is honoured from any layer: it can only ever remove an action. On is honoured from
+// the repository's own .autobump.yaml and from no other restricted layer.
+//
+// The distinction the older rule missed is that "restricted" was never one population.
+// The published defaults arrive over the network from a document nobody in the room wrote,
+// and letting those start a package manager is a remote party choosing to execute. A
+// project's file is not that: it is committed and reviewed in the repository being
+// released, and every release already runs the package manager that repository names -- so
+// a refresh it asks for is the repository describing its own build.
+//
+// What made `refresh_commands` untrusted was owning the argv, and that has not come back:
+// AutoBump still owns the command, and the recipes still suppress the hooks a cloned
+// repository could otherwise reach through it -- pnpm's `.pnpmfile.cjs`, Yarn Berry's
+// `yarnPath`, npm's lifecycle scripts. This decides only *whether* one runs.
+//
+// The veto is the `vetoed` argument, and it exists because the layer order alone does not
+// supply one: the repository's file is folded *after* the operator's, so an operator's
+// `refresh: false` would otherwise simply be overwritten -- and RefreshEnabled reads the
+// project entry before either field on GlobalConfig, so it would not even be consulted.
+// resolveRefreshVeto records an explicit operator `false` separately for that reason, and
+// this function refuses a project enable against it. Silence is not a veto: an operator who
+// never wrote the key has expressed no opinion, and the repository may enable its own
+// refresh, which is the point of the feature.
+//
+// That asymmetry matters most in discovery mode. With `projects:` an operator names each
+// repository; with `providers:` they name an org and AutoBump releases whatever the API
+// returns, so anyone able to land a config file in any discovered repository can turn this
+// on for them. An operator who does not want that writes `refresh: false` once and enables
+// it per repository instead.
+func acceptRefresh(value *bool, layerName, key string, fromProject, vetoed bool) bool {
+	if value == nil {
+		return false
+	}
+	if !*value {
+		return true
+	}
+
+	if fromProject {
+		if !vetoed {
+			return true
+		}
+
+		logger.Warnf(
+			"Ignoring %q: the operator's configuration sets `refresh: false`, and %s "+
+				"in the %s cannot overturn it",
+			key, key, layerName,
+		)
+
+		return false
+	}
+
+	logger.Warnf(
+		"Ignoring %q: %s from the %s can only turn it off, not on: %s",
+		key, key, layerName, reasonNonProjectExecution,
+	)
+
+	return false
+}
+
+// sanitizeRestrictedLanguages applies the same rule to the per-language refresh: any
+// restricted layer may switch one off, and the project's own file may switch one on.
 func sanitizeRestrictedLanguages(
-	overrides map[string]LanguageConfig, layerName string,
+	overrides map[string]LanguageConfig, layerName string, fromProject, vetoed bool,
 ) map[string]LanguageConfig {
 	if len(overrides) == 0 {
 		return overrides
@@ -336,8 +434,9 @@ func sanitizeRestrictedLanguages(
 
 	sanitized := make(map[string]LanguageConfig, len(overrides))
 	for language, override := range overrides {
-		if !acceptSwitchOff(
-			override.Refresh, layerName, "languages."+language+".refresh", reasonExecution,
+		if !acceptRefresh(
+			override.Refresh, layerName, "languages."+language+".refresh",
+			fromProject, vetoed,
 		) {
 			override.Refresh = nil
 		}

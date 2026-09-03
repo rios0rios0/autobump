@@ -35,26 +35,41 @@ const DefaultBumpBranchPrefix = "chore/bump-"
 
 // GlobalConfig represents the top-level configuration.
 type GlobalConfig struct {
-	Providers              []configEntities.ProviderConfig `yaml:"providers"`
-	Projects               []ProjectConfig                 `yaml:"projects"`
-	LanguagesConfig        map[string]LanguageConfig       `yaml:"languages"`
-	ExcludeForks           bool                            `yaml:"exclude_forks"`
-	ExcludeArchived        bool                            `yaml:"exclude_archived"`
-	CleanupStaleBranches   *bool                           `yaml:"cleanup_stale_branches"`
-	DetectChlog            *bool                           `yaml:"detect_chlog"`
-	Refresh                *bool                           `yaml:"refresh"`
-	BumpBranchPrefix       string                          `yaml:"bump_branch_prefix"`
-	ChangelogPath          string                          `yaml:"changelog_path"`
-	Versioning             string                          `yaml:"versioning"`
-	GpgKeyPath             string                          `yaml:"gpg_key_path"`
-	GpgKeyPassphrase       string                          `yaml:"gpg_key_passphrase"`
-	SSHKeyPath             string                          `yaml:"ssh_key_path"`
-	SSHKeyPassphrase       string                          `yaml:"ssh_key_passphrase"`
-	SSHAuthSock            string                          `yaml:"ssh_auth_sock"`
-	GitLabAccessToken      string                          `yaml:"gitlab_access_token"`
-	AzureDevOpsAccessToken string                          `yaml:"azure_devops_access_token"`
-	GitHubAccessToken      string                          `yaml:"github_access_token"`
-	GitLabCIJobToken       string                          `yaml:"gitlab_ci_job_token"`
+	Providers            []configEntities.ProviderConfig `yaml:"providers"`
+	Projects             []ProjectConfig                 `yaml:"projects"`
+	LanguagesConfig      map[string]LanguageConfig       `yaml:"languages"`
+	ExcludeForks         bool                            `yaml:"exclude_forks"`
+	ExcludeArchived      bool                            `yaml:"exclude_archived"`
+	CleanupStaleBranches *bool                           `yaml:"cleanup_stale_branches"`
+	DetectChlog          *bool                           `yaml:"detect_chlog"`
+	Refresh              *bool                           `yaml:"refresh"`
+
+	// refreshVetoed records that an operator-scope document declared
+	// `refresh: false` at the top level, which no later layer may overturn.
+	//
+	// The plain Refresh pointer cannot carry this. The repository's own
+	// .autobump.yaml is folded *after* the operator's file, so by the time a
+	// project `refresh: true` is judged, an operator's `false` has already been
+	// overwritten and is indistinguishable from one nobody wrote. Recording the
+	// veto separately is what lets acceptRefresh tell "the operator said no"
+	// from "nobody said anything", which is the whole difference between an
+	// opt-in a repository may take and one it may impose.
+	//
+	// Unexported so it cannot be set from any YAML document, only inferred from
+	// one AutoBump decoded through ScopeOperator.
+	refreshVetoed          bool
+	BumpBranchPrefix       string `yaml:"bump_branch_prefix"`
+	ChangelogPath          string `yaml:"changelog_path"`
+	Versioning             string `yaml:"versioning"`
+	GpgKeyPath             string `yaml:"gpg_key_path"`
+	GpgKeyPassphrase       string `yaml:"gpg_key_passphrase"`
+	SSHKeyPath             string `yaml:"ssh_key_path"`
+	SSHKeyPassphrase       string `yaml:"ssh_key_passphrase"`
+	SSHAuthSock            string `yaml:"ssh_auth_sock"`
+	GitLabAccessToken      string `yaml:"gitlab_access_token"`
+	AzureDevOpsAccessToken string `yaml:"azure_devops_access_token"`
+	GitHubAccessToken      string `yaml:"github_access_token"`
+	GitLabCIJobToken       string `yaml:"gitlab_ci_job_token"`
 }
 
 // ProviderConfig is re-exported from gitforge for backward compatibility.

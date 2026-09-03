@@ -354,3 +354,145 @@ func TestResolveGlobalConfig(t *testing.T) {
 		assert.Equal(t, "repo", result.Projects[0].Name)
 	})
 }
+
+// TestApplyProjectLayerRefresh covers the path a release actually takes: the repository's
+// own .autobump.yaml is folded onto both the configuration and the `projects[]` entry, and
+// RefreshEnabled is then asked whether to regenerate the lockfile.
+//
+// This is the flow that shipped three backstage-plugin-code-health releases with a stale
+// yarn.lock, because `refresh: true` could previously only come from the operator's file.
+func TestApplyProjectLayerRefresh(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should enable the refresh from the repository's own file", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("languages:\n  typescript:\n    refresh: true\n")
+
+		// when
+		config, err := entities.ApplyProjectLayer(
+			&entities.GlobalConfig{}, projectConfig, layer, //nolint:exhaustruct // ditto
+		)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, entities.RefreshEnabled(config, projectConfig, "typescript"))
+	})
+
+	t.Run("should carry a top-level refresh onto the project entry", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("refresh: true\n")
+
+		// when
+		config, err := entities.ApplyProjectLayer(
+			&entities.GlobalConfig{}, projectConfig, layer, //nolint:exhaustruct // ditto
+		)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, projectConfig.Refresh)
+		assert.True(t, *projectConfig.Refresh)
+		assert.True(t, entities.RefreshEnabled(config, projectConfig, "typescript"))
+	})
+
+	t.Run("should let the repository switch an inherited refresh off", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- off has always been honoured, and still is
+		enabled := true
+		base := &entities.GlobalConfig{Refresh: &enabled} //nolint:exhaustruct // only this key
+		projectConfig := &entities.ProjectConfig{}        //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("refresh: false\n")
+
+		// when
+		config, err := entities.ApplyProjectLayer(base, projectConfig, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.False(t, entities.RefreshEnabled(config, projectConfig, "typescript"))
+	})
+
+	for _, testCase := range refreshVetoCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			// given -- the veto has to come from a real operator document, because
+			// it is the key's *presence* there that separates "the operator said
+			// no" from "nobody said anything". The repository is folded afterwards,
+			// as it is in a real run.
+			layers := make([]entities.ConfigLayer, 0, len(testCase.operatorDocs)+1)
+			layers = append(layers, defaultsLayer("# nothing\n"))
+			for _, doc := range testCase.operatorDocs {
+				layers = append(layers, operatorLayer(doc))
+			}
+
+			base, err := entities.ResolveGlobalConfig(layers)
+			require.NoError(t, err)
+
+			projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+
+			// when
+			config, err := entities.ApplyProjectLayer(
+				base, projectConfig, restrictedLayer(testCase.projectDoc),
+			)
+
+			// then -- the resolved answer is what matters, not just the entry:
+			// RefreshEnabled reads projectConfig.Refresh before anything on
+			// GlobalConfig, so a veto guarding only the latter would be read past
+			require.NoError(t, err)
+			assert.Equal(t, testCase.enabled,
+				entities.RefreshEnabled(config, projectConfig, "typescript"))
+
+			if !testCase.enabled {
+				assert.Nil(t, projectConfig.Refresh,
+					"a vetoed enable must not reach the project entry at all")
+			}
+		})
+	}
+}
+
+// vetoCase is one operator position put to a repository asking for a refresh.
+type vetoCase struct {
+	name         string
+	operatorDocs []string
+	projectDoc   string
+	enabled      bool
+}
+
+// refreshVetoCases covers the four positions an operator can be in. The
+// omitted-key row is the one the feature exists for and the one a veto must not
+// swallow; the rest are what the first cut of this change got wrong by assuming
+// layer order supplied a veto it did not.
+func refreshVetoCases() []vetoCase {
+	return []vetoCase{
+		{
+			name:         "an explicit operator refresh:false vetoes the repository",
+			operatorDocs: []string{"refresh: false\n"},
+			projectDoc:   "refresh: true\n",
+			enabled:      false,
+		},
+		{
+			name:         "the veto reaches a per-language enable too",
+			operatorDocs: []string{"refresh: false\n"},
+			projectDoc:   "languages:\n  typescript:\n    refresh: true\n",
+			enabled:      false,
+		},
+		{
+			name:         "an omitted key is not a veto",
+			operatorDocs: []string{"bump_branch_prefix: 'chore/bump-'\n"},
+			projectDoc:   "refresh: true\n",
+			enabled:      true,
+		},
+		{
+			name:         "a later operator document lifts an earlier veto",
+			operatorDocs: []string{"refresh: false\n", "refresh: true\n"},
+			projectDoc:   "refresh: true\n",
+			enabled:      true,
+		},
+	}
+}

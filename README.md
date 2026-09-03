@@ -293,13 +293,13 @@ The keys a per-project file may set:
 
 | Key | Purpose |
 |-----|---------|
-| `refresh` | Only `false`, to switch the refresh **off** — see [Refresh](#refresh) |
+| `refresh` | `true` or `false` — see [Refresh](#refresh). A repository may turn its own refresh on: it is the party that knows whether a version bump leaves its lockfile stale |
 | `changelog_path` | Changelog filename relative to the project root (e.g. `CHANGELOG_PROPRIETARY.md`) |
 | `versioning` | `semver` (default), `fork-dot`, or `fork-dash` |
 | `detect_chlog` | `false` to ignore [chlog](#fragment-based-changelogs-chlog) fragments (on by default) |
 | `cleanup_stale_branches` | Only `false`, to keep this project's bump branches. An enable here would arrive after `--skip-cleanup` had been applied and would override it |
 | `exclude_forks`, `exclude_archived` | Accepted, but they filter what *discovery selects*; by the time this file is read the repository has already been selected and cloned, so they do nothing here |
-| `languages` | Per-language `extensions`, `special_patterns`, `version_files`, and `refresh` under the same off-only rule |
+| `languages` | Per-language `extensions`, `special_patterns`, `version_files`, and `refresh` under the same rule |
 
 And the keys it may **not**, which are reported and ignored when a repository sets one:
 
@@ -375,12 +375,34 @@ is what stops it. Neither is a lifecycle script, so no `--ignore-scripts` reache
 
 Notes worth knowing before you turn it on:
 
-- **Opt-in, and only you can opt in.** The refresh starts a package manager, so upgrading
-  AutoBump must never be what begins running programs on your machine — and neither must a
-  repository it is releasing. `refresh` is read from a project's own `.autobump.yaml` only
-  when it is `false`: a repository may switch the refresh **off**, never on. Off can only
-  ever remove an action, which is the same asymmetry that let a project clear
-  `refresh_commands` while never being able to introduce one.
+- **Opt-in, and off by default.** The refresh starts a package manager, so upgrading
+  AutoBump must never be what begins running programs on your machine. Nothing runs until
+  some layer says `refresh: true`.
+- **A repository may turn its own refresh on.** `refresh: true` in the project's own
+  `.autobump.yaml` is honoured, because a lockfile that goes stale on a version bump is a
+  fact about *that* repository's build, and the repository is the only party that reliably
+  knows it. AutoBump still owns the argv — a configuration says *whether* to refresh, never
+  *what to run*.
+- **The fetched defaults may not.** `refresh: true` in the copy downloaded from
+  `DefaultConfigURL` is warned about and ignored: it is a document that arrives over the
+  network rather than one a repository committed, and that is a remote party choosing to
+  start a process. Turning the refresh **off** is still honoured from any layer, since off
+  can only ever remove an action.
+- **You keep the veto, but you have to write it.** `refresh: false` in your own
+  configuration is not merely a default a later layer replaces — it is recorded as an
+  explicit refusal, and a repository's `refresh: true` cannot overturn it, at the top level
+  or per language. The distinction is between saying no and saying nothing: omit the key
+  and a repository may enable its own refresh, which is the point of the feature.
+- **Read this before you add a `providers` block.** With `projects:` you name each
+  repository, so the file that turns the refresh on was committed by people you chose to
+  release. Discovery is not that: you name an org or group and AutoBump releases whatever
+  the API returns, so *anyone who can land a four-line config file in any repository the
+  provider can see* can start a package manager on your release host, with your
+  environment. The recipes suppress `.pnpmfile.cjs`, `yarnPath` and lifecycle scripts, but
+  a repository's own `.npmrc`/`.yarnrc.yml` is still read during resolution and can expand
+  `${VAR}` out of that environment. If that is not a trust boundary you want, set
+  `refresh: false` in your own configuration — the veto above — and turn it on per
+  repository through `projects[]` instead.
 - **Detection order matters.** A repository migrating between package managers carries two
   lockfiles, so `packageManager` is consulted first: it says which one is *current* rather
   than which one is *left over*.

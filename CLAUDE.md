@@ -117,13 +117,40 @@ returns `io.EOF`, which is a layer with nothing to say rather than a broken one.
 
 Only the operator's layer is `ScopeOperator`; the other three decode through
 `RestrictedConfig`, which has **no field** for `providers`, `projects`, any credential, or
-`bump_branch_prefix`. Two fields it *does* have are accepted in one direction only:
-`refresh` and `cleanup_stale_branches` may be switched **off** by a restricted layer and
-never on (`acceptSwitchOff`). Off can only ever remove an action — the same asymmetry that
-let a project clear `refresh_commands` while never being able to introduce one — and both
-switches govern something irreversible: one starts a package manager, the other deletes
-remote branches and closes their pull requests *after* `applySkipCleanupFlag` has run, so
-honouring an enable there would override `--skip-cleanup`. That is the whole enforcement — not a check that has to run at the
+`bump_branch_prefix`. Two fields it *does* have are filtered rather than taken as written.
+
+`cleanup_stale_branches` may be switched **off** by a restricted layer and never on
+(`acceptSwitchOff`): off can only ever remove an action, and an enable would arrive after
+`applySkipCleanupFlag` has run and would therefore override `--skip-cleanup`.
+
+`refresh` is `acceptRefresh`'s, which splits the restricted layers rather than treating
+them as one population. Off is honoured from any of them. On is honoured from
+`LayerProjectConfig` — the repository's own committed, reviewed `.autobump.yaml`, which is
+the only party that reliably knows whether a version bump leaves its lockfile stale — and
+refused from `LayerPublishedDefaults`, which arrives over the network from a document
+nobody in the room wrote. Scope is what a layer may *say*; trust is a separate question,
+and `refresh` is where the two come apart. AutoBump still owns the argv, so this decides
+only *whether* a package manager runs, never *what* it runs.
+
+The operator's veto is **not** the layer order, and assuming it was is a bug this feature
+shipped with once. The project layer is folded *after* the operator's file
+(`loadProjectConfigOverrides` -> `ApplyProjectLayer`), and `RefreshEnabled` reads
+`projectConfig.Refresh` before either field on `GlobalConfig` — so an operator's
+`refresh: false` is both overwritten and then never consulted. `resolveRefreshVeto` records
+an explicit operator `false` in the unexported `GlobalConfig.refreshVetoed`, read from the
+document's own keys rather than the decoded pointer, because only the key's *presence*
+separates "the operator said no" from "an earlier layer did and this one is silent". Both
+`acceptRefresh` and `applyToProject` refuse a project enable against it; the second is the
+one that decides, for the `RefreshEnabled` ordering reason above.
+
+Silence is deliberately not a veto — an operator who never wrote the key has expressed no
+opinion, and the repository may enable its own refresh. That asymmetry is load-bearing in
+discovery mode: with `providers:` the operator names an org rather than each repository, so
+anyone who can land a config file in anything the API returns can turn the refresh on for
+them. Documented in the README rather than blocked, because the operator has a one-line
+answer (`refresh: false`, then enable per repository through `projects[]`).
+
+That is the whole enforcement — not a check that has to run at the
 right moment, but a struct with nowhere for those keys to land. `operatorOnlyKeys` exists
 only to say out loud that they were ignored. Strictness is per layer: the embedded defaults
 and the operator's file are strict (a typo is worth reporting), the fetched and project
@@ -185,8 +212,8 @@ not about lifecycle scripts at all: pnpm loads `.pnpmfile.cjs` and calls its hoo
 resolution (`--ignore-pnpmfile`), and Yarn's launcher execs whatever `yarnPath` in the
 project's own `.yarnrc.yml` names (`YARN_IGNORE_PATH=1`). Both run repository-supplied
 JavaScript with AutoBump's environment, and no `--ignore-scripts` reaches either. Owning the
-argv closed one half of the old trust boundary; those flags plus the off-only `refresh`
-close the other. A missing binary
+argv closed one half of the old trust boundary; those flags close the other, which is what
+lets `acceptRefresh` take `refresh: true` from a repository without handing it a command. A missing binary
 aborts that repository's release rather than skipping, because skipping opens exactly the
 pull request the feature prevents and looks identical to having nothing to refresh. Fork
 versioning skips it along with the version-file rewrite it already skips.

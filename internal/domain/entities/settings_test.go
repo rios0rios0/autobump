@@ -452,11 +452,11 @@ refresh: false
 		assert.False(t, *cfg.Refresh)
 	})
 
-	// `refresh` and `cleanup_stale_branches` are the two switches a restricted layer may
-	// turn off but never on. Owning the argv was only half of what made `refresh_commands`
-	// untrusted; the other half is whether anything is executed at all, and a package
-	// manager resolving a lockfile still runs what the cloned repository supplies.
-	t.Run("should not let a repository turn the refresh on", func(t *testing.T) {
+	// `refresh` is the repository's to turn on: it is committed and reviewed by the same
+	// people who put the repository on the operator's project list, and a lockfile that
+	// goes stale on a version bump is a fact about that repository's build. AutoBump still
+	// owns the argv, so this decides only whether the command runs, never what it is.
+	t.Run("should let a repository turn the refresh on", func(t *testing.T) {
 		t.Parallel()
 
 		// given
@@ -467,10 +467,11 @@ refresh: false
 
 		// then
 		require.NoError(t, err)
-		assert.Nil(t, cfg.Refresh, "off is safe in a way on is not: it only ever removes an action")
+		require.NotNil(t, cfg.Refresh)
+		assert.True(t, *cfg.Refresh)
 	})
 
-	t.Run("should not let a repository turn a language's refresh on", func(t *testing.T) {
+	t.Run("should let a repository turn a language's refresh on", func(t *testing.T) {
 		t.Parallel()
 
 		// given
@@ -481,7 +482,57 @@ refresh: false
 
 		// then
 		require.NoError(t, err)
-		assert.Nil(t, cfg.LanguagesConfig["typescript"].Refresh)
+		require.NotNil(t, cfg.LanguagesConfig["typescript"].Refresh)
+		assert.True(t, *cfg.LanguagesConfig["typescript"].Refresh)
+	})
+
+	// The trust stops at the repository. The published defaults decode through the very
+	// same restricted scope but arrive over the network from a document nobody in the room
+	// wrote, so `refresh: true` there is a remote party choosing to start a process.
+	t.Run("should not let the published defaults turn the refresh on", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		layer := publishedLayer("refresh: true\n")
+
+		// when
+		cfg, err := entities.ApplyLayer(&entities.GlobalConfig{}, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.Nil(t, cfg.Refresh, "a fetched document does not get to start a package manager")
+	})
+
+	t.Run("should not let the published defaults turn a language's refresh on",
+		func(t *testing.T) {
+			t.Parallel()
+
+			// given
+			layer := publishedLayer("languages:\n  typescript:\n    refresh: true\n")
+
+			// when
+			cfg, err := entities.ApplyLayer(&entities.GlobalConfig{}, layer)
+
+			// then
+			require.NoError(t, err)
+			assert.Nil(t, cfg.LanguagesConfig["typescript"].Refresh)
+		})
+
+	t.Run("should let the published defaults turn the refresh off", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- off is still honoured from anywhere: it only ever removes an action
+		enabled := true
+		base := &entities.GlobalConfig{Refresh: &enabled} //nolint:exhaustruct // only this key matters
+		layer := publishedLayer("refresh: false\n")
+
+		// when
+		cfg, err := entities.ApplyLayer(base, layer)
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, cfg.Refresh)
+		assert.False(t, *cfg.Refresh)
 	})
 
 	t.Run("should let a repository turn a language's refresh off", func(t *testing.T) {
@@ -560,6 +611,19 @@ func restrictedLayer(content string) entities.ConfigLayer {
 	return entities.ConfigLayer{
 		Name:     entities.LayerProjectConfig,
 		Origin:   ".autobump.yaml",
+		Data:     []byte(content),
+		Scope:    entities.ScopeRestricted,
+		Optional: true,
+	}
+}
+
+// publishedLayer builds the layer the defaults fetched from DefaultConfigURL are applied
+// as: the same restricted scope as a repository's file, and a different level of trust.
+func publishedLayer(content string) entities.ConfigLayer {
+	//nolint:exhaustruct // Strict is false for a fetched layer by construction
+	return entities.ConfigLayer{
+		Name:     entities.LayerPublishedDefaults,
+		Origin:   entities.DefaultConfigURL,
 		Data:     []byte(content),
 		Scope:    entities.ScopeRestricted,
 		Optional: true,
