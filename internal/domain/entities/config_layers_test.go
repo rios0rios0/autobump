@@ -417,24 +417,95 @@ func TestApplyProjectLayerRefresh(t *testing.T) {
 		assert.False(t, entities.RefreshEnabled(config, projectConfig, "typescript"))
 	})
 
-	t.Run("should let the operator's own refresh keep the last word", func(t *testing.T) {
+	t.Run("should let an explicit operator refresh:false veto the repository", func(t *testing.T) {
 		t.Parallel()
 
-		// given -- the operator's file is a later layer, so `refresh: false` there is the
-		// veto that survives a repository asking for one
-		disabled := false
-		base := &entities.GlobalConfig{Refresh: &disabled} //nolint:exhaustruct // only this key
-		projectConfig := &entities.ProjectConfig{
-			Refresh: &disabled, //nolint:exhaustruct // only this key matters
-		}
+		// given -- the veto has to come from a real operator document, because it is
+		// the key's *presence* there that distinguishes "the operator said no" from
+		// "nobody said anything". The repository is folded afterwards, as it is in a
+		// real run, and asks for the refresh the operator has forbidden.
+		base, err := entities.ResolveGlobalConfig([]entities.ConfigLayer{
+			defaultsLayer("# nothing\n"),
+			operatorLayer("refresh: false\n"),
+		})
+		require.NoError(t, err)
+
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
 		layer := restrictedLayer("refresh: true\n")
 
 		// when
-		_, err := entities.ApplyProjectLayer(base, projectConfig, layer)
+		config, err := entities.ApplyProjectLayer(base, projectConfig, layer)
 
-		// then -- the repository is folded first, so it does move the entry; what the
-		// operator keeps is the ability to say so in a layer the repository cannot reach
+		// then -- and the resolved answer is what matters, not just the entry:
+		// RefreshEnabled reads projectConfig.Refresh before anything on GlobalConfig,
+		// so a veto that only guarded the latter would be read straight past
 		require.NoError(t, err)
-		assert.True(t, *projectConfig.Refresh)
+		assert.Nil(t, projectConfig.Refresh,
+			"a vetoed enable must not reach the project entry at all")
+		assert.False(t, entities.RefreshEnabled(config, projectConfig, "typescript"))
+	})
+
+	t.Run("should veto a per-language enable from the repository too", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		base, err := entities.ResolveGlobalConfig([]entities.ConfigLayer{
+			defaultsLayer("# nothing\n"),
+			operatorLayer("refresh: false\n"),
+		})
+		require.NoError(t, err)
+
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("languages:\n  typescript:\n    refresh: true\n")
+
+		// when
+		config, err := entities.ApplyProjectLayer(base, projectConfig, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.False(t, entities.RefreshEnabled(config, projectConfig, "typescript"))
+	})
+
+	t.Run("should let the repository enable when the operator only omitted it", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- silence is not a veto. This is the case the feature exists for, and
+		// the one the veto must not swallow.
+		base, err := entities.ResolveGlobalConfig([]entities.ConfigLayer{
+			defaultsLayer("# nothing\n"),
+			operatorLayer("bump_branch_prefix: 'chore/bump-'\n"),
+		})
+		require.NoError(t, err)
+
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("refresh: true\n")
+
+		// when
+		config, err := entities.ApplyProjectLayer(base, projectConfig, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, entities.RefreshEnabled(config, projectConfig, "typescript"))
+	})
+
+	t.Run("should let a later operator document lift an earlier veto", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- last writer wins within the operator scope, as for every other key
+		base, err := entities.ResolveGlobalConfig([]entities.ConfigLayer{
+			operatorLayer("refresh: false\n"),
+			operatorLayer("refresh: true\n"),
+		})
+		require.NoError(t, err)
+
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("refresh: true\n")
+
+		// when
+		config, err := entities.ApplyProjectLayer(base, projectConfig, layer)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, entities.RefreshEnabled(config, projectConfig, "typescript"))
 	})
 }

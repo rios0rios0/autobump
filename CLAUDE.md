@@ -130,7 +130,27 @@ the only party that reliably knows whether a version bump leaves its lockfile st
 refused from `LayerPublishedDefaults`, which arrives over the network from a document
 nobody in the room wrote. Scope is what a layer may *say*; trust is a separate question,
 and `refresh` is where the two come apart. AutoBump still owns the argv, so this decides
-only *whether* a package manager runs, never *what* it runs. That is the whole enforcement — not a check that has to run at the
+only *whether* a package manager runs, never *what* it runs.
+
+The operator's veto is **not** the layer order, and assuming it was is a bug this feature
+shipped with once. The project layer is folded *after* the operator's file
+(`loadProjectConfigOverrides` -> `ApplyProjectLayer`), and `RefreshEnabled` reads
+`projectConfig.Refresh` before either field on `GlobalConfig` — so an operator's
+`refresh: false` is both overwritten and then never consulted. `resolveRefreshVeto` records
+an explicit operator `false` in the unexported `GlobalConfig.refreshVetoed`, read from the
+document's own keys rather than the decoded pointer, because only the key's *presence*
+separates "the operator said no" from "an earlier layer did and this one is silent". Both
+`acceptRefresh` and `applyToProject` refuse a project enable against it; the second is the
+one that decides, for the `RefreshEnabled` ordering reason above.
+
+Silence is deliberately not a veto — an operator who never wrote the key has expressed no
+opinion, and the repository may enable its own refresh. That asymmetry is load-bearing in
+discovery mode: with `providers:` the operator names an org rather than each repository, so
+anyone who can land a config file in anything the API returns can turn the refresh on for
+them. Documented in the README rather than blocked, because the operator has a one-line
+answer (`refresh: false`, then enable per repository through `projects[]`).
+
+That is the whole enforcement — not a check that has to run at the
 right moment, but a struct with nowhere for those keys to land. `operatorOnlyKeys` exists
 only to say out loud that they were ignored. Strictness is per layer: the embedded defaults
 and the operator's file are strict (a typo is worth reporting), the fetched and project
