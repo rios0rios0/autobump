@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'declared test files as test sources for SonarCloud Automatic Analysis in `.sonarcloud.properties`, so duplicated setup in `**/*_test.go` and the support packages under `test/` no longer fails the "Duplication on New Code" quality gate'
+time: '2026-09-06T01:04:51.590599952Z'
