@@ -553,9 +553,15 @@ func goSwaggerLanguagesConfig() map[string]entities.LanguageConfig {
 				{Path: "docs/swagger.json", Patterns: swaggerJSONPatterns},
 				{Path: "cmd/docs/swagger.json", Patterns: swaggerJSONPatterns},
 				{Path: "cmd/*/docs/swagger.json", Patterns: swaggerJSONPatterns},
+				{Path: "docs/openapi.json", Patterns: swaggerJSONPatterns},
+				{Path: "cmd/docs/openapi.json", Patterns: swaggerJSONPatterns},
+				{Path: "cmd/*/docs/openapi.json", Patterns: swaggerJSONPatterns},
 				{Path: "docs/swagger.yaml", Patterns: swaggerYAMLPatterns},
 				{Path: "cmd/docs/swagger.yaml", Patterns: swaggerYAMLPatterns},
 				{Path: "cmd/*/docs/swagger.yaml", Patterns: swaggerYAMLPatterns},
+				{Path: "docs/openapi.yaml", Patterns: swaggerYAMLPatterns},
+				{Path: "cmd/docs/openapi.yaml", Patterns: swaggerYAMLPatterns},
+				{Path: "cmd/*/docs/openapi.yaml", Patterns: swaggerYAMLPatterns},
 			},
 		},
 	}
@@ -677,6 +683,100 @@ func assertGoSwaggerProjectBumped(t *testing.T, projectPath, mainRelPath, docsRe
 	assert.NotContains(t, string(swaggerYAML), "1.2.3")
 }
 
+// writeGoOpenAPIProject writes a swaggo project whose generated document was renamed to the
+// OpenAPI 3 file names. swag never writes those itself -- `swag init --v3.1` still emits
+// swagger.json and swagger.yaml -- so the rename is the project's, and the pair usually
+// replaces the swag names rather than sitting beside them. A 3.1 document sorts its
+// top-level keys, so `components` -- carrying decoy `version` values -- precedes `info`.
+// That order is what the YAML rule has to survive, by skipping the earlier, deeper-indented
+// decoy; the JSON rule never sees it, because its match is anchored at `"info": {`.
+func writeGoOpenAPIProject(t *testing.T, projectPath, mainRelPath, docsRelDir string) {
+	t.Helper()
+
+	mainGoContent := `package main
+
+// @title Example API
+// @version 1.2.3
+// @description Example service used in tests.
+func main() {}
+`
+	openAPIJSONContent := `{
+    "components": {
+        "schemas": {
+            "entities.Widget": {
+                "example": {
+                    "version": "9.9.9"
+                },
+                "properties": {
+                    "version": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    },
+    "info": {
+        "description": "Example service used in tests.",
+        "title": "Example API",
+        "version": "1.2.3"
+    },
+    "openapi": "3.1.0",
+    "paths": {}
+}
+`
+	openAPIYAMLContent := `components:
+  schemas:
+    entities.Widget:
+      example:
+        version: 9.9.9
+      properties:
+        version:
+          type: string
+info:
+  description: Example service used in tests.
+  title: Example API
+  version: 1.2.3
+openapi: 3.1.0
+paths: {}
+`
+
+	docsDir := filepath.Join(projectPath, docsRelDir)
+	// A directory needs the owner execute bit; 0o700 is least-privilege (rule's 0o600 is file-only).
+	// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(projectPath, mainRelPath)), 0o700))
+	// A directory needs the owner execute bit; 0o700 is least-privilege (rule's 0o600 is file-only).
+	// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+	require.NoError(t, os.MkdirAll(docsDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(projectPath, mainRelPath), []byte(mainGoContent), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "openapi.json"), []byte(openAPIJSONContent), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "openapi.yaml"), []byte(openAPIYAMLContent), 0o644))
+}
+
+// assertGoOpenAPIProjectBumped verifies that the annotation and both OpenAPI 3 documents
+// carry the new version while the decoy `version` values under components were left alone.
+func assertGoOpenAPIProjectBumped(t *testing.T, projectPath, mainRelPath, docsRelDir string) {
+	t.Helper()
+
+	mainGo, err := os.ReadFile(filepath.Join(projectPath, mainRelPath))
+	require.NoError(t, err)
+	assert.Contains(t, string(mainGo), "// @version 2.0.0")
+	assert.NotContains(t, string(mainGo), "1.2.3")
+
+	openAPIJSON, err := os.ReadFile(filepath.Join(projectPath, docsRelDir, "openapi.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(openAPIJSON), `"version": "2.0.0"`)
+	assert.Contains(t, string(openAPIJSON), `"version": "9.9.9"`,
+		"the string-valued version inside components, which precedes info, must not be touched")
+	assert.NotContains(t, string(openAPIJSON), "1.2.3")
+
+	openAPIYAML, err := os.ReadFile(filepath.Join(projectPath, docsRelDir, "openapi.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(openAPIYAML), "  version: 2.0.0")
+	assert.Contains(t, string(openAPIYAML), "        version: 9.9.9",
+		"the example version inside components, which precedes info, must not be touched")
+	assert.NotContains(t, string(openAPIYAML), "1.2.3")
+}
+
 // newGoSwaggerBumpConfigs builds the global/project config pair shared by the Go
 // Swagger bump scenarios: default Go version files, language "go", bump to 2.0.0.
 func newGoSwaggerBumpConfigs(projectPath string) (*entities.GlobalConfig, *entities.ProjectConfig) {
@@ -691,14 +791,17 @@ func newGoSwaggerBumpConfigs(projectPath string) (*entities.GlobalConfig, *entit
 	return globalConfig, projectConfig
 }
 
-func TestUpdateVersionGoSwagger(t *testing.T) {
-	t.Parallel()
+// goDocsLayout is one place swag output can live relative to the entrypoint that carries
+// the "@version" annotation.
+type goDocsLayout struct {
+	name        string
+	mainRelPath string
+	docsRelDir  string
+}
 
-	layouts := []struct {
-		name        string
-		mainRelPath string
-		docsRelDir  string
-	}{
+// goDocsLayouts lists the root and cmd layouts the default Go version files cover.
+func goDocsLayouts() []goDocsLayout {
+	return []goDocsLayout{
 		{name: "docs at the root", mainRelPath: "main.go", docsRelDir: "docs"},
 		{
 			name:        "docs under cmd",
@@ -706,10 +809,17 @@ func TestUpdateVersionGoSwagger(t *testing.T) {
 			docsRelDir:  filepath.Join("cmd", "docs"),
 		},
 	}
-	for _, layout := range layouts {
+}
+
+func TestUpdateVersionGoSwagger(t *testing.T) {
+	t.Parallel()
+
+	for _, layout := range goDocsLayouts() {
 		t.Run(
 			"should update Swagger annotation and generated docs when Go project keeps "+layout.name,
 			func(t *testing.T) {
+				t.Parallel()
+
 				// given
 				tmpDir := t.TempDir()
 				writeGoSwaggerProject(t, tmpDir, layout.mainRelPath, layout.docsRelDir)
@@ -762,6 +872,31 @@ func TestUpdateVersionGoSwagger(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, mainGoContent, string(result))
 	})
+}
+
+func TestUpdateVersionGoOpenAPI(t *testing.T) {
+	t.Parallel()
+
+	for _, layout := range goDocsLayouts() {
+		t.Run(
+			"should update the OpenAPI 3 documents when Go project renamed swag output and keeps "+layout.name,
+			func(t *testing.T) {
+				t.Parallel()
+
+				// given
+				tmpDir := t.TempDir()
+				writeGoOpenAPIProject(t, tmpDir, layout.mainRelPath, layout.docsRelDir)
+				globalConfig, projectConfig := newGoSwaggerBumpConfigs(tmpDir)
+
+				// when
+				err := commands.UpdateVersion(globalConfig, projectConfig)
+
+				// then
+				require.NoError(t, err)
+				assertGoOpenAPIProjectBumped(t, tmpDir, layout.mainRelPath, layout.docsRelDir)
+			},
+		)
+	}
 }
 
 // dartLanguagesConfig mirrors the "dart" block shipped in configs/autobump.yaml,

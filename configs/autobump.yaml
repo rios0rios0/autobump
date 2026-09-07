@@ -74,6 +74,10 @@ languages:
     # "@version" general-info annotation and in the generated docs artifacts.
     # A file is only updated when it exists and one of its patterns matches,
     # so plain Go projects keep the changelog-only behavior.
+    # swag names its output swagger.json/swagger.yaml whatever the spec version, and a
+    # project publishing OpenAPI 3.x commonly renames the pair to openapi.json/openapi.yaml.
+    # The same info.version rule covers both names, and a project carrying only one of the
+    # two is never asked about the other: a path that does not exist matches nothing.
     version_files:
       - path: "main.go"
         patterns: [ "(?m)(^//\\s*@version\\s+)\\S+" ]
@@ -93,11 +97,23 @@ languages:
         patterns: [ "(?s)(\"info\":\\s*\\{.*?\"version\":\\s*\")[^\"]*(\")" ]
       - path: "cmd/*/docs/swagger.json"
         patterns: [ "(?s)(\"info\":\\s*\\{.*?\"version\":\\s*\")[^\"]*(\")" ]
+      - path: "docs/openapi.json"
+        patterns: [ "(?s)(\"info\":\\s*\\{.*?\"version\":\\s*\")[^\"]*(\")" ]
+      - path: "cmd/docs/openapi.json"
+        patterns: [ "(?s)(\"info\":\\s*\\{.*?\"version\":\\s*\")[^\"]*(\")" ]
+      - path: "cmd/*/docs/openapi.json"
+        patterns: [ "(?s)(\"info\":\\s*\\{.*?\"version\":\\s*\")[^\"]*(\")" ]
       - path: "docs/swagger.yaml"
         patterns: [ "(?m)(^  version:\\s*['\"]?)[^\\s'\"]+(['\"]?)" ]
       - path: "cmd/docs/swagger.yaml"
         patterns: [ "(?m)(^  version:\\s*['\"]?)[^\\s'\"]+(['\"]?)" ]
       - path: "cmd/*/docs/swagger.yaml"
+        patterns: [ "(?m)(^  version:\\s*['\"]?)[^\\s'\"]+(['\"]?)" ]
+      - path: "docs/openapi.yaml"
+        patterns: [ "(?m)(^  version:\\s*['\"]?)[^\\s'\"]+(['\"]?)" ]
+      - path: "cmd/docs/openapi.yaml"
+        patterns: [ "(?m)(^  version:\\s*['\"]?)[^\\s'\"]+(['\"]?)" ]
+      - path: "cmd/*/docs/openapi.yaml"
         patterns: [ "(?m)(^  version:\\s*['\"]?)[^\\s'\"]+(['\"]?)" ]
 
   helm:
