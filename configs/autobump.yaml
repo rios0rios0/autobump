@@ -76,8 +76,8 @@ languages:
     # so plain Go projects keep the changelog-only behavior.
     # swag names its output swagger.json/swagger.yaml whatever the spec version, and a
     # project publishing OpenAPI 3.x commonly renames the pair to openapi.json/openapi.yaml.
-    # The same info.version rule covers both names; the content filter above is what keeps
-    # a project carrying only one of the two from being asked about the other.
+    # The same info.version rule covers both names, and a project carrying only one of the
+    # two is never asked about the other: a path that does not exist matches nothing.
     version_files:
       - path: "main.go"
         patterns: [ "(?m)(^//\\s*@version\\s+)\\S+" ]

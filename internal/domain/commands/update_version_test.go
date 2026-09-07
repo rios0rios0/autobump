@@ -687,8 +687,9 @@ func assertGoSwaggerProjectBumped(t *testing.T, projectPath, mainRelPath, docsRe
 // OpenAPI 3 file names. swag never writes those itself -- `swag init --v3.1` still emits
 // swagger.json and swagger.yaml -- so the rename is the project's, and the pair usually
 // replaces the swag names rather than sitting beside them. A 3.1 document sorts its
-// top-level keys, so `components` -- carrying a string-valued decoy `version` -- precedes
-// `info`, which is the order the info.version pattern has to survive.
+// top-level keys, so `components` -- carrying decoy `version` values -- precedes `info`.
+// That order is what the YAML rule has to survive, by skipping the earlier, deeper-indented
+// decoy; the JSON rule never sees it, because its match is anchored at `"info": {`.
 func writeGoOpenAPIProject(t *testing.T, projectPath, mainRelPath, docsRelDir string) {
 	t.Helper()
 
@@ -817,6 +818,8 @@ func TestUpdateVersionGoSwagger(t *testing.T) {
 		t.Run(
 			"should update Swagger annotation and generated docs when Go project keeps "+layout.name,
 			func(t *testing.T) {
+				t.Parallel()
+
 				// given
 				tmpDir := t.TempDir()
 				writeGoSwaggerProject(t, tmpDir, layout.mainRelPath, layout.docsRelDir)
