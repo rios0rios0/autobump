@@ -22,6 +22,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.0.5] - 2026-09-07
+
+### Fixed
+
+- declared test files as test sources for SonarCloud Automatic Analysis in `.sonarcloud.properties`, so duplicated setup in `**/*_test.go` and the support packages under `test/` no longer fails the "Duplication on New Code" quality gate
+
 ## [3.0.4] - 2026-09-04
 
 ### Changed
