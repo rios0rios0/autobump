@@ -22,6 +22,22 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-09-08
+
+### Added
+
+- added `openapi.json` and `openapi.yaml` beside the Go `swagger.json`/`swagger.yaml` version files under `docs/`, `cmd/docs/` and `cmd/*/docs/`, so `swag` output renamed to the OpenAPI 3 file names is bumped together with the `@version` annotation instead of failing the project's spec sync gate
+
+### Changed
+
+- changed both `chlog new` examples in the AI-assistant instruction block of `CLAUDE.md` and `.github/copilot-instructions.md` to `--body '<past-tense description>'`: changelog bodies here are written in simple past tense, and the body is single-quoted because it carries backticks that a double-quoted shell argument would command-substitute, and added the line telling the reader to write an apostrophe inside the single-quoted body as `'\''`, since bodies here carry possessives, and switched the 4 other hand-written `chlog new` examples in `CONTRIBUTING.md`, `.github/pull_request_template.md`, `.github/pull_request_template/default.md`, and `.github/skills/code-review/SKILL.md` to the same single-quoted body argument
+- changed the Go module dependencies to their latest versions
+- refreshed `.github/copilot-instructions.md` to record the Go module version as `1.27.1`
+
+### Fixed
+
+- regenerated 1 hand-written changelog fragment with `chlog new`, keeping its kind and body, so the filename prefix and the `time` field come from chlog's own clock like every other fragment's
+
 ## [3.0.5] - 2026-09-07
 
 ### Fixed
