@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `openapi.json` and `openapi.yaml` beside the Go `swagger.json`/`swagger.yaml` version files under `docs/`, `cmd/docs/` and `cmd/*/docs/`, so `swag` output renamed to the OpenAPI 3 file names is bumped together with the `@version` annotation instead of failing the project''s spec sync gate'
-time: '2026-09-07T22:11:18.571946048Z'

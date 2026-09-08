@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'regenerated 1 hand-written changelog fragment with `chlog new`, keeping its kind and body, so the filename prefix and the `time` field come from chlog''s own clock like every other fragment''s'
-time: '2026-09-07T23:56:37.434676814Z'
