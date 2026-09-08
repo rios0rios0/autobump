@@ -1393,13 +1393,15 @@ func buildGitforgeRepo(remoteURL string, defaultBranch string) globalEntities.Re
 // Entries already written by hand into [Unreleased] are kept: during a migration to
 // chlog both sources can hold real work, and dropping either would lose a release note.
 //
-// The section is then normalised, which is what applies the changelog rules -- repaired
-// headings, one spelling of the breaking-change marker, deduplication, verb-based
-// reclassification, ordering -- to fragments as well as to hand-written entries. Doing it
-// at the boundary rather than inside one release path is deliberate: fragments are the case
-// that needs the rules most, since each one is written alone and nobody ever sees them side
-// by side, and fork versioning rewrites the section without consulting the SemVer pipeline
-// that used to be the only place the rules lived.
+// The whole document is then unwrapped and the section normalised, which is what applies
+// the changelog rules -- one physical line per entry, repaired headings, one spelling of the
+// breaking-change marker, deduplication, verb-based reclassification, ordering -- to
+// fragments as well as to hand-written entries. Doing it at the boundary rather than inside
+// one release path is deliberate: fragments are the case that needs the rules most, since
+// each one is written alone and nobody ever sees them side by side, and fork versioning
+// rewrites the section without consulting the SemVer pipeline that used to be the only place
+// the rules lived. Unwrapping specifically has to happen here and not only inside that
+// pipeline, because fork versioning does not call it either.
 func readChangelogLines(
 	globalConfig *entities.GlobalConfig,
 	projectConfig *entities.ProjectConfig,
@@ -1418,7 +1420,7 @@ func readChangelogLines(
 		lines = MergeChlogIntoUnreleased(lines, RenderChlogFragments(fragments, config))
 	}
 
-	return entities.NormalizeUnreleasedSection(lines), nil
+	return entities.NormalizeUnreleasedSection(entities.UnwrapChangelogEntries(lines)), nil
 }
 
 // collectChlogFragments reads the pending chlog fragments of a project, if it uses chlog

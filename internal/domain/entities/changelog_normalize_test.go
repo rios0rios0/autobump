@@ -245,6 +245,148 @@ func TestNormalizeUnreleasedSection(t *testing.T) {
 	})
 }
 
+func TestUnwrapChangelogEntries(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		lines    []string
+		expected []string
+	}{
+		{
+			name: "should join a two-line entry onto one line",
+			lines: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff",
+				"  removed the exponential cap while doing so",
+			},
+			expected: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff removed the exponential cap while doing so",
+			},
+		},
+		{
+			name: "should join every continuation line when an entry spans more than two lines",
+			lines: []string{
+				"### Added", "",
+				"- added detection for projects using chlog,",
+				"  which keeps pending changes as one YAML file per change under",
+				"  `.changes/unreleased/` instead of in `CHANGELOG.md`",
+			},
+			expected: []string{
+				"### Added", "",
+				"- added detection for projects using chlog, which keeps pending changes as " +
+					"one YAML file per change under `.changes/unreleased/` instead of in `CHANGELOG.md`",
+			},
+		},
+		{
+			name:  "should leave an already single-line entry unchanged",
+			lines: []string{"### Added", "", "- added OAuth2 login"},
+			expected: []string{
+				"### Added", "", "- added OAuth2 login",
+			},
+		},
+		{
+			// NormalizeUnreleasedSection only ever touches [Unreleased] and returns released
+			// sections verbatim; this is what makes the correction retroactive for a
+			// changelog's whole history rather than just its newest entry.
+			name: "should join a wrapped entry in an already released section",
+			lines: []string{
+				"# Changelog", "",
+				"## [Unreleased]", "",
+				"## [1.2.0] - 2026-01-01", "",
+				"### Fixed", "",
+				"- fixed the retry backoff",
+				"  removed the exponential cap while doing so",
+			},
+			expected: []string{
+				"# Changelog", "",
+				"## [Unreleased]", "",
+				"## [1.2.0] - 2026-01-01", "",
+				"### Fixed", "",
+				"- fixed the retry backoff removed the exponential cap while doing so",
+			},
+		},
+		{
+			// A wrapped entry immediately followed by the next section must not swallow that
+			// section's own heading.
+			name: "should stop joining at the next heading",
+			lines: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff",
+				"  and its logging",
+				"### Added", "",
+				"- added OAuth2 login",
+			},
+			expected: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff and its logging",
+				"### Added", "",
+				"- added OAuth2 login",
+			},
+		},
+		{
+			// A blank line closes the entry rather than being folded into it: a
+			// reference-style link block at the end of the file is blank-separated from the
+			// last release section, and reading it as one more continuation line would
+			// splice it into the entry above and break the link definition.
+			name: "should not join a comparison link separated from the last entry by a blank line",
+			lines: []string{
+				"### Added", "",
+				"- added zulu",
+				"",
+				"[Unreleased]: https://github.com/user/repo/compare/v1.0.0...HEAD",
+			},
+			expected: []string{
+				"### Added", "",
+				"- added zulu",
+				"",
+				"[Unreleased]: https://github.com/user/repo/compare/v1.0.0...HEAD",
+			},
+		},
+		{
+			name:     "should leave a document with no entries unchanged",
+			lines:    []string{"# Changelog", "", "## [Unreleased]", ""},
+			expected: []string{"# Changelog", "", "## [Unreleased]", ""},
+		},
+		{
+			name:     "should return an empty slice for empty input",
+			lines:    []string{},
+			expected: []string{},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			// given / when
+			unwrapped := entities.UnwrapChangelogEntries(testCase.lines)
+
+			// then
+			assert.Equal(t, testCase.expected, unwrapped)
+		})
+	}
+
+	t.Run("should change nothing when the document is unwrapped twice", func(t *testing.T) {
+		t.Parallel()
+
+		// given the changelog is read several times per run
+		lines := []string{
+			"### Fixed", "",
+			"- fixed the retry backoff",
+			"  removed the exponential cap while doing so",
+		}
+
+		// when
+		once := entities.UnwrapChangelogEntries(lines)
+		twice := entities.UnwrapChangelogEntries(once)
+
+		// then
+		assert.Equal(t, once, twice)
+	})
+}
+
 func TestMatchChangelogVersionHeader(t *testing.T) {
 	t.Parallel()
 

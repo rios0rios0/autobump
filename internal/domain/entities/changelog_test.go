@@ -560,16 +560,19 @@ func TestProcessChangelogAppliesTheRules(t *testing.T) {
 			// A continuation line read as an entry of its own is counted as a change,
 			// compared for duplication, and -- opening with a verb -- moved to a section of
 			// its own, orphaned from the bullet it explains.
-			name: "should keep an entry whole when it spans several lines",
+			name: "should join an entry onto one line when it spans several lines",
 			body: []string{
 				"### Fixed", "",
 				"- fixed the retry backoff",
 				"  removed the exponential cap while doing so",
 			},
 			contains: []string{
+				"- fixed the retry backoff removed the exponential cap while doing so",
+			},
+			absent: []string{
+				"### Removed",
 				"- fixed the retry backoff\n  removed the exponential cap while doing so",
 			},
-			absent: []string{"### Removed"},
 		},
 		{
 			// The bump counter matches one spelling only.
@@ -579,11 +582,13 @@ func TestProcessChangelogAppliesTheRules(t *testing.T) {
 			contains: []string{"- **BREAKING CHANGE:** dropped the v1 endpoint"},
 		},
 		{
-			// Multi-line entries travel as one line through the pipeline and are split apart
-			// again on the way out.
-			name:   "should leave no fold separator behind when entries are processed",
-			body:   []string{"### Fixed", "", "- fixed the retry backoff", "  and its logging"},
-			absent: []string{"\x00"},
+			// AutoBump never writes a wrapped line itself, so a changelog wrapped by hand is
+			// repaired rather than carried through to the release, and no trace of how the
+			// join was done leaks into it either.
+			name:     "should never write a wrapped line to the release",
+			body:     []string{"### Fixed", "", "- fixed the retry backoff", "  and its logging"},
+			contains: []string{"- fixed the retry backoff and its logging"},
+			absent:   []string{"\x00", "backoff\n  and"},
 		},
 	}
 

@@ -34,5 +34,8 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```bash
    chlog new --kind Added --body 'added the thing that was not there before'
    ```
+   Write the `--body` as one line, however long, rather than hand-wrapping it — every entry
+   is rendered as a single physical line in `CHANGELOG.md`, and a wrapped one only invites the
+   next release's sort or the dependency-bump automation's insert to tear it apart.
 8. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
 9. Open a pull request against `main`
