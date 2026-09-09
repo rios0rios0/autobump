@@ -434,22 +434,30 @@ func UnwrapChangelogEntries(lines []string) []string {
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		switch {
-		case isChangelogFence(trimmed):
+
+		// A fenced block is copied out as it stands, before anything else looks at it:
+		// nothing between its two fences is a bullet, a heading or a wrapped sentence,
+		// however much it may resemble one.
+		if fence := isChangelogFence(trimmed); fenced || fence {
+			if fence {
+				fenced = !fenced
+			}
+
 			unwrapped = append(unwrapped, line)
 			open = -1
-			fenced = !fenced
-		case fenced:
-			unwrapped = append(unwrapped, line)
-		case trimmed == "":
+
+			continue
+		}
+
+		switch {
+		// Both close the entry. The heading is matched at column 0, which is where a
+		// changelog's headings sit, so an indented "#" stays the continuation it is.
+		case trimmed == "", strings.HasPrefix(line, "#"):
 			unwrapped = append(unwrapped, line)
 			open = -1
 		case isChangelogListItem(trimmed):
 			unwrapped = append(unwrapped, line)
 			open = len(unwrapped) - 1
-		case strings.HasPrefix(line, "#"):
-			unwrapped = append(unwrapped, line)
-			open = -1
 		case open >= 0:
 			unwrapped[open] += " " + trimmed
 		default:
