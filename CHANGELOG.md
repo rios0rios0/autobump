@@ -22,6 +22,16 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-09-09
+
+### Changed
+
+- changed the Go module dependencies to their latest versions
+
+### Fixed
+
+- fixed a wrapped changelog entry being torn apart by ordering or by fragment insertion: `SortChangelogEntries` reorders every contiguous run of `- ` lines in the whole document on every run, including released history, and a continuation line breaks that contiguity, so sorting a wrapped entry could reorder its bullet away from its own continuation -- exactly what corrupted the `[2.34.0]` `### Changed` section in this project's own history. `UnwrapChangelogEntries` now joins every entry onto a single physical line across the whole file, not only `[Unreleased]`, before either ordering runs or a new release section is written, and AutoBump never wrote a wrapped line itself to begin with. The corrupted historical entry, and every other wrapped entry inherited from before this rule existed, has been corrected in this release. Only a wrapped sentence is joined: a nested list, a fenced code block and an indented issue reference under an entry are structure a writer put there, so they are left as they are
+
 ## [3.1.0] - 2026-09-08
 
 ### Added
@@ -255,8 +265,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added an automatic cleanup of the bump branches left behind by earlier runs: before creating the branch for a release, AutoBump now deletes every remote branch carrying the bump prefix and closes (on Azure DevOps, abandons) the pull request attached to each one. Unattended runs no longer pile up abandoned release branches when nobody reviews and merges them. Merged and unmerged branches are treated alike, because the branch needed for the current release is recreated immediately afterwards
-- added the `cleanup_stale_branches` configuration key and the `--skip-cleanup` flag to turn that cleanup off. Cleanup is opt-out, so it runs unless it is explicitly disabled; the flag overrides the configuration for a single run
 - added the `bump_branch_prefix` configuration key to customise the `chore/bump-` branch prefix. The same value drives branch creation and cleanup, so the two can never match different branches
+- added the `cleanup_stale_branches` configuration key and the `--skip-cleanup` flag to turn that cleanup off. Cleanup is opt-out, so it runs unless it is explicitly disabled; the flag overrides the configuration for a single run
 
 ### Changed
 
@@ -267,8 +277,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Fixed
 
 - fixed cleanup deleting a stale branch even when closing its pull request had failed, which stranded an open pull request whose source branch no longer existed. Because cleanup only considers branches that still exist, no later run would have seen it to retry the close; the branch is now kept so the pair stays retryable. Only a genuine close failure keeps a branch: one with no pull request at all is still deleted, since having nothing to close is a no-op rather than a failure, and a missing token also still deletes, because without one no pull request was ever opened to strand
-- fixed the pull request close call running without a deadline, so an unresponsive provider could stall a release behind cleanup. Each close is now bounded, keeping cleanup best-effort
 - fixed the Gitleaks stage failing every build on `main`. The allowlisted fingerprints in `.gitleaksignore` embed the hash of the commit a finding came from, so when a rebase moved the commit holding the `README.md` token placeholder, the entries stopped matching and the long-suppressed false positive came back. Re-pointed both of them at the commit's current hash
+- fixed the pull request close call running without a deadline, so an unresponsive provider could stall a release behind cleanup. Each close is now bounded, keeping cleanup best-effort
 
 ## [2.33.2] - 2026-07-16
 
