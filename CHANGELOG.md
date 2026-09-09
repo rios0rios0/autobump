@@ -235,8 +235,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
-- refreshed `.github/copilot-instructions.md` to document chlog detection support, list `chlog.go` and
-  `cleanup.go` in the repository structure, and correct the Go version to 1.26.5
+- refreshed `.github/copilot-instructions.md` to document chlog detection support, list `chlog.go` and `cleanup.go` in the repository structure, and correct the Go version to 1.26.5
 
 ## [2.35.1] - 2026-07-30
 
@@ -248,53 +247,28 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added detection and release support for projects using [chlog](https://github.com/luizjhonata/chlog),
-  which keeps pending changes as one YAML file per change under `.changes/unreleased/` instead of in
-  `CHANGELOG.md`. Those repositories have a permanently empty `[Unreleased]` section, so AutoBump used
-  to skip them silently while real unreleased work was waiting. The fragments are now folded into the
-  release, merged with anything already written by hand in `[Unreleased]`, and deleted in the same
-  commit that publishes their content. Detection needs no configuration and no `chlog` binary on the
-  runner, and the `changelogPath` declared in `.chlog.yaml` is honoured
-- added the `detect_chlog` configuration key to turn that detection off. Detection is opt-out, so it
-  runs unless it is explicitly disabled, and the key works at both the global and per-project level
+- added detection and release support for projects using [chlog](https://github.com/luizjhonata/chlog), which keeps pending changes as one YAML file per change under `.changes/unreleased/` instead of in `CHANGELOG.md`. Those repositories have a permanently empty `[Unreleased]` section, so AutoBump used to skip them silently while real unreleased work was waiting. The fragments are now folded into the release, merged with anything already written by hand in `[Unreleased]`, and deleted in the same commit that publishes their content. Detection needs no configuration and no `chlog` binary on the runner, and the `changelogPath` declared in `.chlog.yaml` is honoured
+- added the `detect_chlog` configuration key to turn that detection off. Detection is opt-out, so it runs unless it is explicitly disabled, and the key works at both the global and per-project level
 
 ## [2.34.0] - 2026-07-27
 
 ### Added
 
-- added an automatic cleanup of the bump branches left behind by earlier runs: before creating the
-  branch for a release, AutoBump now deletes every remote branch carrying the bump prefix and closes
-  (on Azure DevOps, abandons) the pull request attached to each one. Unattended runs no longer pile up
-  abandoned release branches when nobody reviews and merges them. Merged and unmerged branches are
-  treated alike, because the branch needed for the current release is recreated immediately afterwards
-- added the `cleanup_stale_branches` configuration key and the `--skip-cleanup` flag to turn that
-  cleanup off. Cleanup is opt-out, so it runs unless it is explicitly disabled; the flag overrides the
-  configuration for a single run
-- added the `bump_branch_prefix` configuration key to customise the `chore/bump-` branch prefix. The
-  same value drives branch creation and cleanup, so the two can never match different branches
+- added an automatic cleanup of the bump branches left behind by earlier runs: before creating the branch for a release, AutoBump now deletes every remote branch carrying the bump prefix and closes (on Azure DevOps, abandons) the pull request attached to each one. Unattended runs no longer pile up abandoned release branches when nobody reviews and merges them. Merged and unmerged branches are treated alike, because the branch needed for the current release is recreated immediately afterwards
+- added the `cleanup_stale_branches` configuration key and the `--skip-cleanup` flag to turn that cleanup off. Cleanup is opt-out, so it runs unless it is explicitly disabled; the flag overrides the configuration for a single run
+- added the `bump_branch_prefix` configuration key to customise the `chore/bump-` branch prefix. The same value drives branch creation and cleanup, so the two can never match different branches
 
 ### Changed
 
-- changed cleanup to run only once a bump is known to be needed, so a pull request is never closed
+- changed cleanup to run only once a bump is known to be needed, so a pull request is never closed without a replacement being opened for it
 - changed the Go module dependencies to their latest versions
-  without a replacement being opened for it
-- changed the sample configuration to show `cleanup_stale_branches: false`, since the key is opt-out
-  and `true` is the one value that has no effect
+- changed the sample configuration to show `cleanup_stale_branches: false`, since the key is opt-out and `true` is the one value that has no effect
 
 ### Fixed
 
-- fixed cleanup deleting a stale branch even when closing its pull request had failed, which stranded
-  an open pull request whose source branch no longer existed. Because cleanup only considers branches
-  that still exist, no later run would have seen it to retry the close; the branch is now kept so the
-  pair stays retryable. Only a genuine close failure keeps a branch: one with no pull request at all
-  is still deleted, since having nothing to close is a no-op rather than a failure, and a missing
-  token also still deletes, because without one no pull request was ever opened to strand
-- fixed the pull request close call running without a deadline, so an unresponsive provider could
-  stall a release behind cleanup. Each close is now bounded, keeping cleanup best-effort
-- fixed the Gitleaks stage failing every build on `main`. The allowlisted fingerprints in
-  `.gitleaksignore` embed the hash of the commit a finding came from, so when a rebase moved the
-  commit holding the `README.md` token placeholder, the entries stopped matching and the
-  long-suppressed false positive came back. Re-pointed both of them at the commit's current hash
+- fixed cleanup deleting a stale branch even when closing its pull request had failed, which stranded an open pull request whose source branch no longer existed. Because cleanup only considers branches that still exist, no later run would have seen it to retry the close; the branch is now kept so the pair stays retryable. Only a genuine close failure keeps a branch: one with no pull request at all is still deleted, since having nothing to close is a no-op rather than a failure, and a missing token also still deletes, because without one no pull request was ever opened to strand
+- fixed the pull request close call running without a deadline, so an unresponsive provider could stall a release behind cleanup. Each close is now bounded, keeping cleanup best-effort
+- fixed the Gitleaks stage failing every build on `main`. The allowlisted fingerprints in `.gitleaksignore` embed the hash of the commit a finding came from, so when a rebase moved the commit holding the `README.md` token placeholder, the entries stopped matching and the long-suppressed false positive came back. Re-pointed both of them at the commit's current hash
 
 ## [2.33.2] - 2026-07-16
 
@@ -304,18 +278,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
-- fixed the `delivery:binary` pipeline job failing and publishing a release with no binaries attached, by pointing
-  GoReleaser at `./cmd/autobump` explicitly. The shared pipeline detects the entry point by grepping for a line
-  starting with `func main()` and taking the first hit, which since the Swagger version-bumping tests is the sample
-  program embedded in `internal/domain/commands/update_version_test.go` rather than `cmd/autobump/main.go`. It built
-  `internal/domain/commands`, a package with no `main` function, so release `2.33.1` shipped with zero assets and
-  `autobump self-update` had nothing to download
+- fixed the `delivery:binary` pipeline job failing and publishing a release with no binaries attached, by pointing GoReleaser at `./cmd/autobump` explicitly. The shared pipeline detects the entry point by grepping for a line starting with `func main()` and taking the first hit, which since the Swagger version-bumping tests is the sample program embedded in `internal/domain/commands/update_version_test.go` rather than `cmd/autobump/main.go`. It built `internal/domain/commands`, a package with no `main` function, so release `2.33.1` shipped with zero assets and `autobump self-update` had nothing to download
 
 ### Security
 
-- hardened test-fixture directory permissions from `0o755` to owner-only `0o700` in the update-version and
-  process-repo tests, resolving the Semgrep `incorrect-default-permission` CI failures (a directory needs the
-  owner execute bit, so the rule's `0o600` file threshold is documented as inapplicable and suppressed per line)
+- hardened test-fixture directory permissions from `0o755` to owner-only `0o700` in the update-version and process-repo tests, resolving the Semgrep `incorrect-default-permission` CI failures (a directory needs the owner execute bit, so the rule's `0o600` file threshold is documented as inapplicable and suppressed per line)
 
 ## [2.33.1] - 2026-07-14
 
@@ -325,9 +292,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
-- fixed the `sast:gitleaks` pipeline job failing on every `main` build by allowlisting the GitLab token
-  placeholder documented in `README.md` for both detection passes: it was suppressed only under the rule
-  id used by the default ruleset, while the second pass reports the same match under a different rule id
+- fixed the `sast:gitleaks` pipeline job failing on every `main` build by allowlisting the GitLab token placeholder documented in `README.md` for both detection passes: it was suppressed only under the rule id used by the default ruleset, while the second pass reports the same match under a different rule id
 
 ## [2.33.0] - 2026-07-13
 

@@ -245,6 +245,256 @@ func TestNormalizeUnreleasedSection(t *testing.T) {
 	})
 }
 
+func TestUnwrapChangelogEntries(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		lines    []string
+		expected []string
+	}{
+		{
+			name: "should join a two-line entry onto one line",
+			lines: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff",
+				"  removed the exponential cap while doing so",
+			},
+			expected: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff removed the exponential cap while doing so",
+			},
+		},
+		{
+			name: "should join every continuation line when an entry spans more than two lines",
+			lines: []string{
+				"### Added", "",
+				"- added detection for projects using chlog,",
+				"  which keeps pending changes as one YAML file per change under",
+				"  `.changes/unreleased/` instead of in `CHANGELOG.md`",
+			},
+			expected: []string{
+				"### Added", "",
+				"- added detection for projects using chlog, which keeps pending changes as " +
+					"one YAML file per change under `.changes/unreleased/` instead of in `CHANGELOG.md`",
+			},
+		},
+		{
+			name:  "should leave an already single-line entry unchanged",
+			lines: []string{"### Added", "", "- added OAuth2 login"},
+			expected: []string{
+				"### Added", "", "- added OAuth2 login",
+			},
+		},
+		{
+			// NormalizeUnreleasedSection only ever touches [Unreleased] and returns released
+			// sections verbatim; this is what makes the correction retroactive for a
+			// changelog's whole history rather than just its newest entry.
+			name: "should join a wrapped entry in an already released section",
+			lines: []string{
+				"# Changelog", "",
+				"## [Unreleased]", "",
+				"## [1.2.0] - 2026-01-01", "",
+				"### Fixed", "",
+				"- fixed the retry backoff",
+				"  removed the exponential cap while doing so",
+			},
+			expected: []string{
+				"# Changelog", "",
+				"## [Unreleased]", "",
+				"## [1.2.0] - 2026-01-01", "",
+				"### Fixed", "",
+				"- fixed the retry backoff removed the exponential cap while doing so",
+			},
+		},
+		{
+			// A wrapped entry immediately followed by the next section must not swallow that
+			// section's own heading.
+			name: "should stop joining at the next heading",
+			lines: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff",
+				"  and its logging",
+				"### Added", "",
+				"- added OAuth2 login",
+			},
+			expected: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff and its logging",
+				"### Added", "",
+				"- added OAuth2 login",
+			},
+		},
+		{
+			// A blank line closes the entry rather than being folded into it: a
+			// reference-style link block at the end of the file is blank-separated from the
+			// last release section, and reading it as one more continuation line would
+			// splice it into the entry above and break the link definition.
+			name: "should not join a comparison link separated from the last entry by a blank line",
+			lines: []string{
+				"### Added", "",
+				"- added zulu",
+				"",
+				"[Unreleased]: https://github.com/user/repo/compare/v1.0.0...HEAD",
+			},
+			expected: []string{
+				"### Added", "",
+				"- added zulu",
+				"",
+				"[Unreleased]: https://github.com/user/repo/compare/v1.0.0...HEAD",
+			},
+		},
+		{
+			// A nested list is structure the writer put there, not a wrapped sentence, and
+			// this runs over released history where flattening it would be permanent.
+			name: "should keep a nested list nested instead of folding it into its parent",
+			lines: []string{
+				"## [1.4.0] - 2026-02-01", "",
+				"### Added", "",
+				"- added multi-provider support:",
+				"  - GitHub",
+				"  - GitLab",
+				"  - Azure DevOps",
+			},
+			expected: []string{
+				"## [1.4.0] - 2026-02-01", "",
+				"### Added", "",
+				"- added multi-provider support:",
+				"  - GitHub",
+				"  - GitLab",
+				"  - Azure DevOps",
+			},
+		},
+		{
+			// A nested item opens an entry of its own, so its wrap joins onto itself, and
+			// the entry that follows the sub-list is not folded into the parent either.
+			name: "should join a wrapped nested item onto itself rather than onto its parent",
+			lines: []string{
+				"### Added", "",
+				"- added multi-provider support:",
+				"  - GitHub, which needs a token",
+				"    carrying the repo scope",
+				"- added a second entry",
+			},
+			expected: []string{
+				"### Added", "",
+				"- added multi-provider support:",
+				"  - GitHub, which needs a token carrying the repo scope",
+				"- added a second entry",
+			},
+		},
+		{
+			name: "should keep an ordered nested list nested",
+			lines: []string{
+				"### Added", "",
+				"- added a migration guide:",
+				"  1. stop the service",
+				"  2. run the migration",
+			},
+			expected: []string{
+				"### Added", "",
+				"- added a migration guide:",
+				"  1. stop the service",
+				"  2. run the migration",
+			},
+		},
+		{
+			// A version opening a wrapped line is not an ordered list item: the marker only
+			// matches when whitespace follows it, and "1.26" has none after its first dot.
+			name: "should join a wrapped line that opens with a version",
+			lines: []string{
+				"### Changed", "",
+				"- changed the toolchain to Go",
+				"  1.26 for the new vet checks",
+			},
+			expected: []string{
+				"### Changed", "",
+				"- changed the toolchain to Go 1.26 for the new vet checks",
+			},
+		},
+		{
+			name: "should keep a fenced code block under an entry verbatim",
+			lines: []string{
+				"### Added", "",
+				"- added the `refresh` key:",
+				"  ```yaml",
+				"  # enable it per project",
+				"  refresh: true",
+				"  ```",
+				"- added a second entry",
+			},
+			expected: []string{
+				"### Added", "",
+				"- added the `refresh` key:",
+				"  ```yaml",
+				"  # enable it per project",
+				"  refresh: true",
+				"  ```",
+				"- added a second entry",
+			},
+		},
+		{
+			// Only a "#" at column 0 is a heading. An indented one is an issue reference
+			// inside the entry, and closing the entry on it left the wrap this removes.
+			name: "should treat an indented issue reference as a continuation",
+			lines: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff",
+				"  #123 tracked the exponential cap",
+			},
+			expected: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff #123 tracked the exponential cap",
+			},
+		},
+		{
+			name:     "should leave a document with no entries unchanged",
+			lines:    []string{"# Changelog", "", "## [Unreleased]", ""},
+			expected: []string{"# Changelog", "", "## [Unreleased]", ""},
+		},
+		{
+			name:     "should return an empty slice for empty input",
+			lines:    []string{},
+			expected: []string{},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			// given / when
+			unwrapped := entities.UnwrapChangelogEntries(testCase.lines)
+
+			// then
+			assert.Equal(t, testCase.expected, unwrapped)
+		})
+	}
+
+	t.Run("should change nothing when the document is unwrapped twice", func(t *testing.T) {
+		t.Parallel()
+
+		// given the changelog is read several times per run
+		lines := []string{
+			"### Fixed", "",
+			"- fixed the retry backoff",
+			"  removed the exponential cap while doing so",
+			"- fixed the provider list:",
+			"  - GitHub",
+			"  ```yaml",
+			"  refresh: true",
+			"  ```",
+		}
+
+		// when
+		once := entities.UnwrapChangelogEntries(lines)
+		twice := entities.UnwrapChangelogEntries(once)
+
+		// then
+		assert.Equal(t, once, twice)
+	})
+}
+
 func TestMatchChangelogVersionHeader(t *testing.T) {
 	t.Parallel()
 

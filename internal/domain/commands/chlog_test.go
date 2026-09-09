@@ -909,6 +909,35 @@ func TestReadChangelogLinesWithChlog(t *testing.T) {
 		assert.Equal(t, baseChangelog, lines)
 	})
 
+	t.Run("should join a wrapped hand-written entry onto one line", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- this is the boundary fork versioning reads through too, and fork mode
+		// never calls the SemVer pipeline that would otherwise unwrap it
+		tmpDir := t.TempDir()
+		wrapped := []string{
+			"# Changelog", "",
+			"## [Unreleased]", "",
+			"### Fixed", "",
+			"- fixed the retry backoff",
+			"  removed the exponential cap while doing so",
+			"",
+			"## [1.2.0] - 2026-01-01", "",
+			"### Added", "",
+			"- added the first release",
+		}
+		changelogPath := writeChangelog(t, tmpDir, wrapped)
+
+		// when
+		lines, err := commands.ReadChangelogLines(nil, &entities.ProjectConfig{Path: tmpDir}, changelogPath)
+
+		// then
+		require.NoError(t, err)
+		joined := strings.Join(lines, "\n")
+		assert.Contains(t, joined, "- fixed the retry backoff removed the exponential cap while doing so")
+		assert.NotContains(t, joined, "backoff\n  removed")
+	})
+
 	t.Run("should ignore the fragments when detection is disabled", func(t *testing.T) {
 		t.Parallel()
 
@@ -1114,15 +1143,15 @@ func TestChlogFragmentChangelogRules(t *testing.T) {
 		},
 		{
 			// A continuation line judged on its own would be filed under "### Removed",
-			// orphaned from the bullet it explains.
-			name: "should keep a multi-line fragment whole when a continuation opens with a verb",
+			// orphaned from the bullet it explains. It is also never written to the release
+			// as a second physical line: AutoBump does not wrap changelog entries.
+			name: "should join a multi-line fragment onto one line when a continuation opens with a verb",
 			fragments: []string{
 				"kind: Fixed\nbody: |\n  fixed the retry backoff\n  removed the exponential cap while doing so\n",
 			},
 			released: []string{
 				"", "### Fixed", "",
-				"- fixed the retry backoff",
-				"  removed the exponential cap while doing so",
+				"- fixed the retry backoff removed the exponential cap while doing so",
 				"",
 			},
 		},

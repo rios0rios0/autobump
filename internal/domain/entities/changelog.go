@@ -33,33 +33,35 @@ func FindLatestVersion(lines []string) (*semver.Version, error) {
 
 // ProcessChangelog delegates to gitforge's Changelog.Process and sorts entries alphabetically.
 //
-// The [Unreleased] section is normalised and folded first. Normalising repairs what the
-// SemVer pipeline cannot see past -- a mis-cased heading whose entries it would drop, a
-// breaking-change marker spelled in a way it does not count -- and folding makes it read a
-// multi-line entry as the single entry it is. See NormalizeUnreleasedSection and
-// foldUnreleasedEntries.
+// The whole document is unwrapped and the [Unreleased] section is normalised first.
+// Unwrapping repairs what both the SemVer pipeline and the sort below cannot see past -- a
+// multi-line entry read as more than one line -- and normalising repairs a mis-cased heading
+// whose entries it would drop, or a breaking-change marker spelled in a way it does not
+// count. See UnwrapChangelogEntries and NormalizeUnreleasedSection. Unwrapping runs again
+// immediately before the sort so the invariant holds locally at the one call that needs it,
+// regardless of what the pipeline in between did to the content.
 func ProcessChangelog(lines []string) (*semver.Version, []string, error) {
-	prepared := foldUnreleasedEntries(NormalizeUnreleasedSection(lines))
+	prepared := NormalizeUnreleasedSection(UnwrapChangelogEntries(lines))
 
 	version, content, err := changelogEntities.NewChangelog(prepared).Process()
 	if err != nil {
 		return nil, nil, err
 	}
-	return version, unfoldChangelogEntries(SortChangelogEntries(content)), nil
+	return version, SortChangelogEntries(UnwrapChangelogEntries(content)), nil
 }
 
 // ProcessNewChangelog delegates to gitforge's Changelog.ProcessNew and sorts entries alphabetically.
 //
-// The [Unreleased] section is normalised and folded first, for the reasons given on
-// ProcessChangelog.
+// The whole document is unwrapped and the [Unreleased] section is normalised first, for the
+// reasons given on ProcessChangelog.
 func ProcessNewChangelog(lines []string) (*semver.Version, []string, error) {
-	prepared := foldUnreleasedEntries(NormalizeUnreleasedSection(lines))
+	prepared := NormalizeUnreleasedSection(UnwrapChangelogEntries(lines))
 
 	version, content, err := changelogEntities.NewChangelog(prepared).ProcessNew()
 	if err != nil {
 		return nil, nil, err
 	}
-	return version, unfoldChangelogEntries(SortChangelogEntries(content)), nil
+	return version, SortChangelogEntries(UnwrapChangelogEntries(content)), nil
 }
 
 // SortChangelogEntries sorts bullet entries (lines starting with "- ")

@@ -23,14 +23,6 @@ const (
 // by a Keep a Changelog version header.
 const UnreleasedHeaderName = "Unreleased"
 
-// changelogFoldSeparator joins an entry's continuation lines onto its bullet so the whole
-// entry travels as a single line. It is a NUL surrounded by spaces: NUL does not occur in
-// changelog prose, and the spaces leave it a one-character word, which the similarity
-// comparison discards along with every other one-character token -- so folding an entry
-// does not change how it compares against the others. Folding is undone before anything is
-// written, so the separator never reaches disk.
-const changelogFoldSeparator = " \x00 "
-
 // changelogSectionOrder is the order sections are rendered in. It mirrors the order the
 // release renderer uses, so a normalised [Unreleased] section and the release section
 // built from it come out in the same order and normalising twice changes nothing.
@@ -376,67 +368,102 @@ func isChangelogBullet(line string) bool {
 	return strings.HasPrefix(line, "- ")
 }
 
-// foldUnreleasedEntries collapses every entry in the [Unreleased] section onto a single
-// line so the SemVer pipeline, which reads one entry per line, sees whole entries.
+// changelogListMarkerRegex matches the list markers CommonMark recognises -- "-", "*" and
+// "+", and an ordered "1." or "1)" -- each followed by whitespace.
+var changelogListMarkerRegex = regexp.MustCompile(`^(?:[-*+]|\d+[.)])\s`)
+
+// isChangelogListItem reports whether a trimmed line opens a list item at any depth. It is
+// deliberately wider than isChangelogBullet: that one answers "does this open an entry",
+// which only an unindented bullet does, while this one answers "is this structure the
+// writer put here", which a nested item is as well. The whitespace the marker requires is
+// what keeps the ordered form off a wrapped line that merely opens with a version --
+// "1.26 for the new toolchain" has no space after its first dot.
+func isChangelogListItem(trimmed string) bool {
+	return changelogListMarkerRegex.MatchString(trimmed)
+}
+
+// isChangelogFence reports whether a trimmed line opens or closes a fenced code block.
+func isChangelogFence(trimmed string) bool {
+	return strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~")
+}
+
+// UnwrapChangelogEntries rewrites every entry in the whole document -- released sections
+// included, not only [Unreleased] -- onto a single physical line, joining a bullet with the
+// continuation lines that follow it using a single space. AutoBump never wraps a line it
+// writes itself; this is what makes that true retroactively for a changelog that reaches
+// disk some other way, such as a hand-written entry wrapped at a column width, and it is
+// applied to the whole file on every run for the same reason SortChangelogEntries reorders
+// the whole file on every run: whichever one of them saw the file first would otherwise be
+// the one still working with stale assumptions.
 //
-// Without this the pipeline treats a continuation line as an entry of its own: it counts
-// as a change, it is compared for duplication against real entries, and -- if it happens to
-// start with "removed", "added", "fixed" or "deprecated" -- it is moved to another section,
-// leaving the bullet it explained behind. Folding is undone on the way out.
-func foldUnreleasedEntries(lines []string) []string {
-	headerIdx, nextIdx := unreleasedBounds(lines)
-	if headerIdx == -1 {
-		return lines
-	}
-
-	folded := make([]string, 0, len(lines))
-	folded = append(folded, lines[:headerIdx+1]...)
-	folded = append(folded, foldEntries(lines[headerIdx+1:nextIdx])...)
-	folded = append(folded, lines[nextIdx:]...)
-
-	return folded
-}
-
-// foldEntries joins each bullet with the continuation lines that follow it. Blank lines are
-// dropped: the pipeline ignores them and re-emits its own.
-func foldEntries(body []string) []string {
-	folded := make([]string, 0, len(body))
+// A wrapped entry is not just a cosmetic issue. SortChangelogEntries reorders every
+// contiguous run of "- " lines in the whole document, and a continuation line breaks that
+// contiguity -- so sorting a wrapped entry can silently reorder its bullet away from its own
+// continuation, leaving the two either side of whatever now sorts between them. This
+// project's own history carries exactly that: a dependency-bump commit inserted a new bullet
+// between an existing one and its continuation, because the insertion logic it used also
+// stops at the first line that is not itself a "- " line. Running this before either kind of
+// write, over the whole file, removes every continuation line before either of them can trip
+// on one.
+//
+// Only a wrapped sentence is a continuation. Structure a writer put under a bullet is kept
+// as it is rather than flattened into it, which matters far more here than it did in the
+// mechanism this replaced: that one ran over [Unreleased] alone and round-tripped through a
+// separator, whereas this one rewrites released history too and does so permanently. A
+// nested list item therefore opens an entry of its own -- so its own wrapped lines join onto
+// it and never onto its parent -- which is the promise isChangelogBullet makes eight lines
+// above, that an indented bullet belongs to the entry above it rather than being folded into
+// it. The body of a fenced code block is emitted verbatim for the same reason.
+//
+// A heading closes the entry only when its "#" sits at column 0, which is where a Markdown
+// heading in a changelog sits. An indented "#" is inside the entry -- an issue reference
+// such as "#123", or a comment in a fenced block -- so treating it as a heading used to
+// strand the rest of that entry on lines of its own, leaving behind exactly the wrapped
+// entry this function exists to remove.
+//
+// It is idempotent, because the changelog is read several times per run, and it leaves alone
+// anything that is not part of a bulleted entry: version headers, section headings, blank
+// lines, and prose a writer put outside a list. A blank line closes the entry rather than
+// being folded into it -- otherwise a reference-style link block at the end of the file
+// (never blank-separated from its own kind, but always separated from the last release
+// section) would be read as one more continuation line and spliced into the entry above it.
+func UnwrapChangelogEntries(lines []string) []string {
+	unwrapped := make([]string, 0, len(lines))
 	open := -1
-
-	for _, line := range body {
-		trimmed := strings.TrimSpace(line)
-		switch {
-		case trimmed == "":
-			continue
-		case isChangelogBullet(line):
-			folded = append(folded, line)
-			open = len(folded) - 1
-		case strings.HasPrefix(trimmed, "#"):
-			folded = append(folded, line)
-			open = -1
-		case open >= 0:
-			folded[open] += changelogFoldSeparator + line
-		default:
-			folded = append(folded, line)
-		}
-	}
-
-	return folded
-}
-
-// unfoldChangelogEntries splits folded entries back into their original lines. It runs over
-// the whole document because the pipeline moves the folded entries into the release section
-// it writes.
-func unfoldChangelogEntries(lines []string) []string {
-	unfolded := make([]string, 0, len(lines))
+	fenced := false
 
 	for _, line := range lines {
-		if !strings.Contains(line, changelogFoldSeparator) {
-			unfolded = append(unfolded, line)
+		trimmed := strings.TrimSpace(line)
+
+		// A fenced block is copied out as it stands, before anything else looks at it:
+		// nothing between its two fences is a bullet, a heading or a wrapped sentence,
+		// however much it may resemble one.
+		if fence := isChangelogFence(trimmed); fenced || fence {
+			if fence {
+				fenced = !fenced
+			}
+
+			unwrapped = append(unwrapped, line)
+			open = -1
+
 			continue
 		}
-		unfolded = append(unfolded, strings.Split(line, changelogFoldSeparator)...)
+
+		switch {
+		// Both close the entry. The heading is matched at column 0, which is where a
+		// changelog's headings sit, so an indented "#" stays the continuation it is.
+		case trimmed == "", strings.HasPrefix(line, "#"):
+			unwrapped = append(unwrapped, line)
+			open = -1
+		case isChangelogListItem(trimmed):
+			unwrapped = append(unwrapped, line)
+			open = len(unwrapped) - 1
+		case open >= 0:
+			unwrapped[open] += " " + trimmed
+		default:
+			unwrapped = append(unwrapped, line)
+		}
 	}
 
-	return unfolded
+	return unwrapped
 }
