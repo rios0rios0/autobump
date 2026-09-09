@@ -368,6 +368,25 @@ func isChangelogBullet(line string) bool {
 	return strings.HasPrefix(line, "- ")
 }
 
+// changelogListMarkerRegex matches the list markers CommonMark recognises -- "-", "*" and
+// "+", and an ordered "1." or "1)" -- each followed by whitespace.
+var changelogListMarkerRegex = regexp.MustCompile(`^(?:[-*+]|\d+[.)])\s`)
+
+// isChangelogListItem reports whether a trimmed line opens a list item at any depth. It is
+// deliberately wider than isChangelogBullet: that one answers "does this open an entry",
+// which only an unindented bullet does, while this one answers "is this structure the
+// writer put here", which a nested item is as well. The whitespace the marker requires is
+// what keeps the ordered form off a wrapped line that merely opens with a version --
+// "1.26 for the new toolchain" has no space after its first dot.
+func isChangelogListItem(trimmed string) bool {
+	return changelogListMarkerRegex.MatchString(trimmed)
+}
+
+// isChangelogFence reports whether a trimmed line opens or closes a fenced code block.
+func isChangelogFence(trimmed string) bool {
+	return strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~")
+}
+
 // UnwrapChangelogEntries rewrites every entry in the whole document -- released sections
 // included, not only [Unreleased] -- onto a single physical line, joining a bullet with the
 // continuation lines that follow it using a single space. AutoBump never wraps a line it
@@ -387,6 +406,21 @@ func isChangelogBullet(line string) bool {
 // write, over the whole file, removes every continuation line before either of them can trip
 // on one.
 //
+// Only a wrapped sentence is a continuation. Structure a writer put under a bullet is kept
+// as it is rather than flattened into it, which matters far more here than it did in the
+// mechanism this replaced: that one ran over [Unreleased] alone and round-tripped through a
+// separator, whereas this one rewrites released history too and does so permanently. A
+// nested list item therefore opens an entry of its own -- so its own wrapped lines join onto
+// it and never onto its parent -- which is the promise isChangelogBullet makes eight lines
+// above, that an indented bullet belongs to the entry above it rather than being folded into
+// it. The body of a fenced code block is emitted verbatim for the same reason.
+//
+// A heading closes the entry only when its "#" sits at column 0, which is where a Markdown
+// heading in a changelog sits. An indented "#" is inside the entry -- an issue reference
+// such as "#123", or a comment in a fenced block -- so treating it as a heading used to
+// strand the rest of that entry on lines of its own, leaving behind exactly the wrapped
+// entry this function exists to remove.
+//
 // It is idempotent, because the changelog is read several times per run, and it leaves alone
 // anything that is not part of a bulleted entry: version headers, section headings, blank
 // lines, and prose a writer put outside a list. A blank line closes the entry rather than
@@ -396,17 +430,24 @@ func isChangelogBullet(line string) bool {
 func UnwrapChangelogEntries(lines []string) []string {
 	unwrapped := make([]string, 0, len(lines))
 	open := -1
+	fenced := false
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		switch {
+		case isChangelogFence(trimmed):
+			unwrapped = append(unwrapped, line)
+			open = -1
+			fenced = !fenced
+		case fenced:
+			unwrapped = append(unwrapped, line)
 		case trimmed == "":
 			unwrapped = append(unwrapped, line)
 			open = -1
-		case isChangelogBullet(line):
+		case isChangelogListItem(trimmed):
 			unwrapped = append(unwrapped, line)
 			open = len(unwrapped) - 1
-		case strings.HasPrefix(trimmed, "#"):
+		case strings.HasPrefix(line, "#"):
 			unwrapped = append(unwrapped, line)
 			open = -1
 		case open >= 0:

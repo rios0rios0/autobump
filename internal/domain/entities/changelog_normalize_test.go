@@ -345,6 +345,109 @@ func TestUnwrapChangelogEntries(t *testing.T) {
 			},
 		},
 		{
+			// A nested list is structure the writer put there, not a wrapped sentence, and
+			// this runs over released history where flattening it would be permanent.
+			name: "should keep a nested list nested instead of folding it into its parent",
+			lines: []string{
+				"## [1.4.0] - 2026-02-01", "",
+				"### Added", "",
+				"- added multi-provider support:",
+				"  - GitHub",
+				"  - GitLab",
+				"  - Azure DevOps",
+			},
+			expected: []string{
+				"## [1.4.0] - 2026-02-01", "",
+				"### Added", "",
+				"- added multi-provider support:",
+				"  - GitHub",
+				"  - GitLab",
+				"  - Azure DevOps",
+			},
+		},
+		{
+			// A nested item opens an entry of its own, so its wrap joins onto itself, and
+			// the entry that follows the sub-list is not folded into the parent either.
+			name: "should join a wrapped nested item onto itself rather than onto its parent",
+			lines: []string{
+				"### Added", "",
+				"- added multi-provider support:",
+				"  - GitHub, which needs a token",
+				"    carrying the repo scope",
+				"- added a second entry",
+			},
+			expected: []string{
+				"### Added", "",
+				"- added multi-provider support:",
+				"  - GitHub, which needs a token carrying the repo scope",
+				"- added a second entry",
+			},
+		},
+		{
+			name: "should keep an ordered nested list nested",
+			lines: []string{
+				"### Added", "",
+				"- added a migration guide:",
+				"  1. stop the service",
+				"  2. run the migration",
+			},
+			expected: []string{
+				"### Added", "",
+				"- added a migration guide:",
+				"  1. stop the service",
+				"  2. run the migration",
+			},
+		},
+		{
+			// A version opening a wrapped line is not an ordered list item: the marker only
+			// matches when whitespace follows it, and "1.26" has none after its first dot.
+			name: "should join a wrapped line that opens with a version",
+			lines: []string{
+				"### Changed", "",
+				"- changed the toolchain to Go",
+				"  1.26 for the new vet checks",
+			},
+			expected: []string{
+				"### Changed", "",
+				"- changed the toolchain to Go 1.26 for the new vet checks",
+			},
+		},
+		{
+			name: "should keep a fenced code block under an entry verbatim",
+			lines: []string{
+				"### Added", "",
+				"- added the `refresh` key:",
+				"  ```yaml",
+				"  # enable it per project",
+				"  refresh: true",
+				"  ```",
+				"- added a second entry",
+			},
+			expected: []string{
+				"### Added", "",
+				"- added the `refresh` key:",
+				"  ```yaml",
+				"  # enable it per project",
+				"  refresh: true",
+				"  ```",
+				"- added a second entry",
+			},
+		},
+		{
+			// Only a "#" at column 0 is a heading. An indented one is an issue reference
+			// inside the entry, and closing the entry on it left the wrap this removes.
+			name: "should treat an indented issue reference as a continuation",
+			lines: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff",
+				"  #123 tracked the exponential cap",
+			},
+			expected: []string{
+				"### Fixed", "",
+				"- fixed the retry backoff #123 tracked the exponential cap",
+			},
+		},
+		{
 			name:     "should leave a document with no entries unchanged",
 			lines:    []string{"# Changelog", "", "## [Unreleased]", ""},
 			expected: []string{"# Changelog", "", "## [Unreleased]", ""},
@@ -376,6 +479,11 @@ func TestUnwrapChangelogEntries(t *testing.T) {
 			"### Fixed", "",
 			"- fixed the retry backoff",
 			"  removed the exponential cap while doing so",
+			"- fixed the provider list:",
+			"  - GitHub",
+			"  ```yaml",
+			"  refresh: true",
+			"  ```",
 		}
 
 		// when
