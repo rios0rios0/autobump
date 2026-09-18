@@ -2,6 +2,7 @@ package commands_test
 
 import (
 	"errors"
+	"net"
 	"path/filepath"
 	"testing"
 
@@ -126,7 +127,7 @@ func TestDescribeMissingSSHCredential(t *testing.T) {
 
 		// given
 		config := &entities.GlobalConfig{SSHAuthSock: "/nonexistent/agent.sock"}
-		env := commands.SSHEnvironment{AuthSockUsable: false}
+		env := commands.SSHEnvironment{}
 
 		// when
 		message := commands.DescribeMissingSSHCredential(config, env)
@@ -167,19 +168,40 @@ func TestDescribeMissingSSHCredential(t *testing.T) {
 		assert.Contains(t, message, "\"ssh.exe\"")
 	})
 
-	t.Run("should omit the WSL hint when an agent socket is usable", func(t *testing.T) {
+	t.Run("should keep the WSL hint when a detected agent socket answers nothing", func(t *testing.T) {
 		t.Parallel()
 
-		// given -- a reachable agent means the pipe is already bridged, so the push failed
-		// for some other reason and blaming WSL would send the operator down a dead end
+		// given -- a dead relay leaves its socket file behind. Nothing reaches this renderer
+		// until every detected socket has failed to dial, so an existing socket here means a
+		// bridge that died, which is exactly when the operator needs the explanation
 		config := &entities.GlobalConfig{}
-		env := commands.SSHEnvironment{IsWSL: true, AuthSockUsable: true}
+		env := commands.SSHEnvironment{
+			IsWSL:                true,
+			UnusableAgentSockets: []string{"/home/u/.ssh/agent.sock"},
+		}
 
 		// when
 		message := commands.DescribeMissingSSHCredential(config, env)
 
 		// then
-		assert.NotContains(t, message, "named pipe")
+		assert.Contains(t, message, "named pipe")
+	})
+
+	t.Run("should name a detected socket that answers nothing when ssh_auth_sock is unset", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- SSH_AUTH_SOCK is exported and points at a dead socket; telling the operator
+		// to export it is the least useful thing the message could say
+		config := &entities.GlobalConfig{}
+		env := commands.SSHEnvironment{UnusableAgentSockets: []string{"/home/u/.ssh/agent.sock"}}
+
+		// when
+		message := commands.DescribeMissingSSHCredential(config, env)
+
+		// then
+		assert.Contains(t, message, "/home/u/.ssh/agent.sock")
+		assert.Contains(t, message, "nothing is listening on it")
+		assert.NotContains(t, message, "export SSH_AUTH_SOCK")
 	})
 
 	t.Run("should omit the WSL hint when not running on WSL", func(t *testing.T) {
@@ -391,5 +413,48 @@ func TestExplainSSHPushFailure(t *testing.T) {
 
 		// then
 		assert.Equal(t, pushErr, result)
+	})
+}
+
+// TestDetectSSHEnvironment is deliberately not parallel: it mutates SSH_AUTH_SOCK with
+// t.Setenv, which the runtime forbids in a parallel test.
+//
+// It covers the seam an earlier revision got wrong. detectSSHAgentSockets only stats for
+// ModeSocket, so a socket file that answers nothing still appears here -- and because this
+// runs only after collectSSHAuthMethods failed to dial every one of those paths, that is the
+// only thing it can mean. Asserting it against a real socket is what keeps the field's name
+// honest; the renderer tests build the struct by hand and would not notice it drifting.
+func TestDetectSSHEnvironment(t *testing.T) {
+	t.Run("should report a socket that exists as unusable", func(t *testing.T) {
+		// given -- a real listener, closed before the probe, so the file outlives the agent
+		// exactly as it does when a relay dies
+		socketPath := filepath.Join(t.TempDir(), "agent.sock")
+		listener, err := net.Listen("unix", socketPath)
+		require.NoError(t, err)
+		// Go unlinks a Unix socket on Close; a relay that dies does not, and the leftover
+		// file is the whole point of the case, so the cleanup is turned off here.
+		unixListener, ok := listener.(*net.UnixListener)
+		require.True(t, ok)
+		unixListener.SetUnlinkOnClose(false)
+		require.NoError(t, listener.Close())
+		t.Setenv("SSH_AUTH_SOCK", socketPath)
+
+		// when
+		env := commands.DetectSSHEnvironment("ssh.exe")
+
+		// then
+		assert.Contains(t, env.UnusableAgentSockets, socketPath)
+		assert.Equal(t, "ssh.exe", env.SSHCommand)
+	})
+
+	t.Run("should report no sockets when SSH_AUTH_SOCK names nothing", func(t *testing.T) {
+		// given
+		t.Setenv("SSH_AUTH_SOCK", filepath.Join(t.TempDir(), "absent.sock"))
+
+		// when
+		env := commands.DetectSSHEnvironment("")
+
+		// then
+		assert.NotContains(t, env.UnusableAgentSockets, "absent.sock")
 	})
 }

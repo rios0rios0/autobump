@@ -182,10 +182,21 @@ AutoBump alone cannot find a key, because the keys are behind a Windows named pi
 cannot dial. `internal/domain/commands/ssh_diagnostics.go` says so out loud —
 `explainSSHPushFailure` wraps a failed push in `ErrNoSSHCredential` plus the reason, but
 only when the remote is SSH *and* no SSH method was collected, so it never displaces a more
-specific failure or fires on a token-authenticated HTTPS push. The WSL paragraph is
-withheld when an agent socket is reachable: the pipe is then already bridged, and blaming
-WSL would send the reader down a dead end. `sshEnvironment` is plain data so the message is
-tested by constructing host facts rather than a host.
+specific failure or fires on a token-authenticated HTTPS push. `sshEnvironment` is plain
+data so the message is tested by constructing host facts rather than a host.
+
+**Everything that reaches the renderers has already failed to dial**, and forgetting it
+produced the one bug this feature shipped with. `explainSSHPushFailure` runs only after
+`collectSSHAuthMethods` returned nothing, and that function's auto-detect loop dials every
+path `detectSSHAgentSockets` reports — so by the time the diagnosis is rendered, a detected
+socket is a *dead* one by construction. The field used to be `AuthSockUsable`, set from
+`len(detectSSHAgentSockets()) > 0`, which only stats for `ModeSocket`; it therefore meant
+the exact inverse of its name here, and the two guards resting on it fired only in the state
+they meant to exclude — a WSL host whose relay had died got no WSL paragraph and was told to
+export a variable it had already exported. It is now `UnusableAgentSockets`, which names
+what the call site can actually know, and the dead socket is reported by path. Renderer
+tests build the struct by hand and cannot catch that drift, so `TestDetectSSHEnvironment`
+covers the seam against a real socket left behind by a closed listener.
 
 Versioning modes: `semver` (default), `fork-dot`, `fork-dash`. Fork modes increment only the trailing fork digit (e.g. `3.3.0.16` → `3.3.0.17`) and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`.
 

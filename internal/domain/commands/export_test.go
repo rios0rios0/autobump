@@ -235,3 +235,6 @@ var KernelIsWSL = kernelIsWSL //nolint:gochecknoglobals // test export
 
 // ExplainSSHPushFailure exports explainSSHPushFailure for testing.
 var ExplainSSHPushFailure = explainSSHPushFailure //nolint:gochecknoglobals // test export
+
+// DetectSSHEnvironment exports detectSSHEnvironment for testing.
+var DetectSSHEnvironment = detectSSHEnvironment //nolint:gochecknoglobals // test export

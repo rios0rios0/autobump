@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the SSH push diagnosis suppressing its WSL explanation and its dead-socket line when an agent socket existed but answered nothing, which is the only state that call site can observe'
+time: '2026-09-18T22:44:25.131648508Z'

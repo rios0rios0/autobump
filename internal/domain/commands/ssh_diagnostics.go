@@ -28,8 +28,14 @@ const (
 // SSH push. It is plain data so the diagnosis can be rendered — and tested — without
 // touching the host it describes.
 type sshEnvironment struct {
-	// AuthSockUsable reports whether SSH_AUTH_SOCK names a Unix-domain socket Go can dial.
-	AuthSockUsable bool
+	// UnusableAgentSockets lists agent sockets that exist on disk but yielded no credential.
+	//
+	// The list is not "sockets that might work": this is built only after
+	// collectSSHAuthMethods returned nothing, and its auto-detect loop has by then dialed
+	// every path detectSSHAgentSockets reports. So a non-empty list means a dead agent — a
+	// relay that exited leaving its socket behind, or an ssh-agent that is gone — which is
+	// the opposite of what the existence of the file suggests.
+	UnusableAgentSockets []string
 
 	// IsWSL reports whether AutoBump is running under the Windows Subsystem for Linux.
 	IsWSL bool
@@ -102,9 +108,9 @@ func gitSSHCommand(config *gitconfig.Config) string {
 // git's core.sshCommand, which the caller already holds.
 func detectSSHEnvironment(sshCommand string) sshEnvironment {
 	return sshEnvironment{
-		AuthSockUsable: len(detectSSHAgentSockets()) > 0,
-		IsWSL:          runningUnderWSL(),
-		SSHCommand:     sshCommand,
+		UnusableAgentSockets: detectSSHAgentSockets(),
+		IsWSL:                runningUnderWSL(),
+		SSHCommand:           sshCommand,
 	}
 }
 
@@ -169,15 +175,23 @@ func describeKeyPathState(config *entities.GlobalConfig) string {
 	)
 }
 
-// describeAgentSocketState reports what became of the agent socket. A socket that is named
-// but unreachable is called out separately, because the fix is to start the agent rather
-// than to configure anything.
+// describeAgentSocketState reports what became of the agent socket. A socket that exists but
+// answers nothing is called out separately from one that was never configured, because the
+// fix is to restart the agent rather than to configure anything — and telling someone to
+// export a variable they have already exported is the least useful thing this can say.
 func describeAgentSocketState(config *entities.GlobalConfig, env sshEnvironment) string {
-	if config.SSHAuthSock != "" && !env.AuthSockUsable {
+	if config.SSHAuthSock != "" {
 		return fmt.Sprintf(
 			"  - a Unix-domain SSH agent socket: \"ssh_auth_sock\" is set to %q but nothing is "+
 				"listening there\n",
 			config.SSHAuthSock,
+		)
+	}
+
+	if len(env.UnusableAgentSockets) > 0 {
+		return fmt.Sprintf(
+			"  - a Unix-domain SSH agent socket: %s exists but nothing is listening on it\n",
+			strings.Join(env.UnusableAgentSockets, ", "),
 		)
 	}
 
@@ -187,8 +201,14 @@ func describeAgentSocketState(config *entities.GlobalConfig, env sshEnvironment)
 // describeWSLHint returns the WSL-specific cause when the host shows it, and an empty string
 // otherwise. Interop makes every other git command work, so without this the failure reads
 // as AutoBump losing a key that demonstrably exists.
+//
+// Being on WSL is the whole condition. An earlier version also withheld the hint when an
+// agent socket had been detected, on the reasoning that the pipe was then already bridged —
+// but nothing reaches this function until every detected socket has failed to dial, so that
+// guard only ever fired for a bridge that had died, which is exactly when the explanation is
+// most needed. describeAgentSocketState names the dead socket; this supplies the why.
 func describeWSLHint(env sshEnvironment) string {
-	if !env.IsWSL || env.AuthSockUsable {
+	if !env.IsWSL {
 		return ""
 	}
 
