@@ -149,6 +149,49 @@ ssh_key_passphrase: ''
 ssh_auth_sock: '~/.1password/agent.sock'
 ```
 
+### SSH Authentication on WSL
+
+AutoBump pushes with [go-git](https://github.com/go-git/go-git), a pure-Go SSH client. It **never executes the `ssh` binary**, so the usual WSL interop tricks do not apply to the push:
+
+- `git config core.sshCommand ssh.exe` is not read — that setting only redirects git's own `ssh` invocations.
+- An `ssh` wrapper earlier on `PATH` (a shell script calling `ssh.exe`) is never invoked.
+
+Commit *signing* is the exception and works normally, because it shells out to whatever `gpg.ssh.program` names (for example 1Password's `op-ssh-sign-wsl`). That asymmetry is why signing succeeds while the push cannot find a key: they travel different code paths.
+
+AutoBump needs either a private key file it can read, or a **Unix-domain socket** speaking the SSH agent protocol. Keys held by the *Windows* agent (1Password, Windows OpenSSH) live behind the named pipe `\\.\pipe\openssh-ssh-agent`, and Go cannot dial a Windows named pipe.
+
+To keep using the Windows agent, bridge that pipe to a Unix socket with [npiperelay](https://github.com/jstarks/npiperelay). With systemd enabled in WSL, socket activation does the relaying and no extra daemon is needed:
+
+```ini
+# ~/.config/systemd/user/ssh-agent-bridge.socket
+[Socket]
+ListenStream=%h/.ssh/agent.sock
+SocketMode=0600
+Accept=yes
+
+[Install]
+WantedBy=sockets.target
+```
+
+```ini
+# ~/.config/systemd/user/ssh-agent-bridge@.service
+[Service]
+ExecStart=%h/.local/bin/npiperelay.exe -ei -s //./pipe/openssh-ssh-agent
+StandardInput=socket
+StandardOutput=socket
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now ssh-agent-bridge.socket
+export SSH_AUTH_SOCK="$HOME/.ssh/agent.sock"   # add to ~/.zshenv or ~/.bashrc
+ssh-add -l                                      # should list the Windows agent's keys
+```
+
+Without systemd, `socat UNIX-LISTEN:$SSH_AUTH_SOCK,fork,mode=600 EXEC:'npiperelay.exe -ei -s //./pipe/openssh-ssh-agent'` achieves the same thing.
+
+If you would rather not bridge, either point `ssh_key_path` at a key stored inside WSL, or use an HTTPS remote so the push authenticates with the provider token instead.
+
 ### Stale Branch Cleanup
 
 Before creating the branch for a release, AutoBump deletes every remote branch carrying the bump prefix (`chore/bump-*`) and closes the pull request attached to each one — on Azure DevOps the pull request is abandoned. Without this, running AutoBump repeatedly on a repository nobody reviews leaves a trail of abandoned release branches and open pull requests.

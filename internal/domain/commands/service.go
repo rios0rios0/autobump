@@ -406,7 +406,12 @@ func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error
 	username := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
 	authMethods := collectAuthMethods(serviceType, username, ctx.GlobalConfig, ctx.ProjectConfig)
 
-	return gitInfra.PushWithTransportDetection(ctx.Repo, refSpec, authMethods)
+	err = gitInfra.PushWithTransportDetection(ctx.Repo, refSpec, authMethods)
+	if err != nil {
+		return explainSSHPushFailure(ctx, err)
+	}
+
+	return nil
 }
 
 func shouldBumpProject(ctx *RepoContext, changelogPath string) (bool, error) {
@@ -738,7 +743,12 @@ func pushChanges(ctx *RepoContext, branchName string) error {
 	username := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
 	authMethods := collectAuthMethods(serviceType, username, ctx.GlobalConfig, ctx.ProjectConfig)
 
-	return gitInfra.PushWithTransportDetection(ctx.Repo, refSpec, authMethods)
+	err = gitInfra.PushWithTransportDetection(ctx.Repo, refSpec, authMethods)
+	if err != nil {
+		return explainSSHPushFailure(ctx, err)
+	}
+
+	return nil
 }
 
 func createAndCheckoutPullRequest(ctx *RepoContext, branchName string) error {

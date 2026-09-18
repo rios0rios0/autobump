@@ -213,3 +213,28 @@ func RefreshRecipeLanguages() []string {
 	}
 	return languages
 }
+
+// SSHEnvironment exports sshEnvironment for testing. An alias rather than a definition, so
+// a test can build the host facts directly instead of arranging a host that exhibits them.
+type SSHEnvironment = sshEnvironment
+
+// DescribeMissingSSHCredential exports describeMissingSSHCredential for testing.
+var DescribeMissingSSHCredential = describeMissingSSHCredential //nolint:gochecknoglobals // test export
+
+// IsSSHRemote exports isSSHRemote for testing.
+var IsSSHRemote = isSSHRemote //nolint:gochecknoglobals // test export
+
+// OriginRemoteURL exports originRemoteURL for testing.
+var OriginRemoteURL = originRemoteURL //nolint:gochecknoglobals // test export
+
+// GitSSHCommand exports gitSSHCommand for testing.
+var GitSSHCommand = gitSSHCommand //nolint:gochecknoglobals // test export
+
+// KernelIsWSL exports kernelIsWSL for testing.
+var KernelIsWSL = kernelIsWSL //nolint:gochecknoglobals // test export
+
+// ExplainSSHPushFailure exports explainSSHPushFailure for testing.
+var ExplainSSHPushFailure = explainSSHPushFailure //nolint:gochecknoglobals // test export
+
+// DetectSSHEnvironment exports detectSSHEnvironment for testing.
+var DetectSSHEnvironment = detectSSHEnvironment //nolint:gochecknoglobals // test export

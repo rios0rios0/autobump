@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added a diagnostic explaining that an SSH push failed because AutoBump never executes the `ssh` binary, naming the WSL named-pipe case and the credential shapes it does accept'
+time: '2026-09-18T22:14:04.046765474Z'
