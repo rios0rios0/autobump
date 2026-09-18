@@ -172,6 +172,21 @@ a token path off disk even when the next layer replaced it. SSH push auth is con
 `ssh_key_path`, `ssh_key_passphrase` and `ssh_auth_sock`; common agent sockets are
 auto-detected when not set.
 
+The push runs on go-git's **pure-Go** SSH client, which is the whole of what
+`collectSSHAuthMethods` can feed: a private key file it reads itself, or a Unix-domain
+socket it can `net.Dial`. It never executes the `ssh` binary, so `core.sshCommand` and an
+`ssh` wrapper on `PATH` are invisible to it — while commit *signing* does shell out to
+`gpg.ssh.program`. That asymmetry is the entire bug report it generates: on WSL, signing
+through 1Password's `op-ssh-sign-wsl` works, every interactive `git push` works, and
+AutoBump alone cannot find a key, because the keys are behind a Windows named pipe that Go
+cannot dial. `internal/domain/commands/ssh_diagnostics.go` says so out loud —
+`explainSSHPushFailure` wraps a failed push in `ErrNoSSHCredential` plus the reason, but
+only when the remote is SSH *and* no SSH method was collected, so it never displaces a more
+specific failure or fires on a token-authenticated HTTPS push. The WSL paragraph is
+withheld when an agent socket is reachable: the pipe is then already bridged, and blaming
+WSL would send the reader down a dead end. `sshEnvironment` is plain data so the message is
+tested by constructing host facts rather than a host.
+
 Versioning modes: `semver` (default), `fork-dot`, `fork-dash`. Fork modes increment only the trailing fork digit (e.g. `3.3.0.16` → `3.3.0.17`) and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`.
 
 A repository's own `.autobump.yaml` may set `refresh`, `changelog_path`, `versioning`,
