@@ -267,6 +267,14 @@ func (r RestrictedConfig) applyToProject(projectConfig *ProjectConfig, refreshVe
 	if r.Refresh != nil && (!refreshVetoed || !*r.Refresh) {
 		projectConfig.Refresh = r.Refresh
 	}
+	// The opt-out is carried from here and from nowhere else, for the same reason: this is
+	// the one fold that is always the repository's own file. The reason reaches a log line
+	// verbatim, so its whitespace is collapsed -- a newline inside it would otherwise print
+	// a line of its own that reads as if AutoBump had written it.
+	if r.Skip {
+		projectConfig.skip = true
+		projectConfig.skipReason = strings.Join(strings.Fields(r.Reason), " ")
+	}
 }
 
 // RestrictedConfig is what a configuration layer that is not the operator's own may say.
@@ -287,6 +295,15 @@ type RestrictedConfig struct {
 	ExcludeArchived      *bool                     `yaml:"exclude_archived"`
 	ChangelogPath        string                    `yaml:"changelog_path"`
 	Versioning           string                    `yaml:"versioning"`
+
+	// Reason and Skip are the repository's opt-out. Every restricted layer decodes them,
+	// because the schema is shared, but only applyToProject carries them anywhere:
+	// GlobalConfig has no field for them, so applyTo -- the fold every restricted layer
+	// takes -- can only warn when a layer other than the repository's own tried. A plain
+	// bool is enough: no other layer can set a skip, so there is no inherited one for an
+	// explicit `false` to turn off.
+	Reason string `yaml:"reason"`
+	Skip   bool   `yaml:"skip"`
 }
 
 // applyTo folds the restricted layer onto config, returning a copy.
@@ -319,6 +336,12 @@ func (r RestrictedConfig) applyTo(config *GlobalConfig, layer ConfigLayer) *Glob
 	if r.ExcludeArchived != nil {
 		next.ExcludeArchived = *r.ExcludeArchived
 	}
+	// A skip is a repository speaking for itself. Honoured from the defaults, shipped or
+	// fetched, it would stop every release the run reaches at once, and the published copy
+	// is a document nobody running AutoBump wrote.
+	if r.Skip && !fromProject {
+		logger.Warnf("Ignoring %q from the %s: %s", "skip", layerName, reasonSkipScope)
+	}
 
 	next.LanguagesConfig = MergeLanguagesConfig(
 		config.LanguagesConfig,
@@ -339,6 +362,8 @@ const (
 		"the repository's own committed configuration may decide that"
 	reasonCleanupSwitch = "it deletes remote branches and closes their pull requests, and " +
 		"--skip-cleanup is applied before this layer, so honouring it would override the flag"
+	reasonSkipScope = "only a repository's own .autobump.yaml may take that repository " +
+		"out of a release"
 )
 
 // acceptSwitchOff reports whether a restricted layer's toggle may be honoured.

@@ -496,3 +496,162 @@ func refreshVetoCases() []vetoCase {
 		},
 	}
 }
+
+// TestApplyProjectLayerSkip covers the repository's opt-out. `skip` takes a repository out
+// of every release, so it is honoured from the repository's own .autobump.yaml and from no
+// other layer: a skip shipped in the binary or fetched over the network would stop every
+// release a run reaches at once.
+func TestApplyProjectLayerSkip(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should carry the skip and its reason when the repository's own file sets them", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("skip: true\nreason: 'released upstream'\n")
+
+		// when
+		_, err := entities.ApplyProjectLayer(
+			&entities.GlobalConfig{}, projectConfig, layer, //nolint:exhaustruct // ditto
+		)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, projectConfig.IsSkipped())
+		assert.Equal(t, "released upstream", projectConfig.SkipReason())
+	})
+
+	t.Run("should skip without a reason when the repository's own file gives none", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("skip: true\n")
+
+		// when
+		_, err := entities.ApplyProjectLayer(
+			&entities.GlobalConfig{}, projectConfig, layer, //nolint:exhaustruct // ditto
+		)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, projectConfig.IsSkipped())
+		assert.Empty(t, projectConfig.SkipReason())
+	})
+
+	t.Run("should not skip when the repository's own file omits the key", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- a reason on its own asks for nothing
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("versioning: 'fork-dot'\nreason: 'no skip was asked for'\n")
+
+		// when
+		_, err := entities.ApplyProjectLayer(
+			&entities.GlobalConfig{}, projectConfig, layer, //nolint:exhaustruct // ditto
+		)
+
+		// then -- the rest of the document still applies
+		require.NoError(t, err)
+		assert.False(t, projectConfig.IsSkipped())
+		assert.Empty(t, projectConfig.SkipReason())
+		assert.Equal(t, entities.VersioningForkDot, projectConfig.Versioning)
+	})
+
+	t.Run("should not skip when the repository's own file sets the key to false", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer("skip: false\nreason: 'kept for later'\n")
+
+		// when
+		_, err := entities.ApplyProjectLayer(
+			&entities.GlobalConfig{}, projectConfig, layer, //nolint:exhaustruct // ditto
+		)
+
+		// then
+		require.NoError(t, err)
+		assert.False(t, projectConfig.IsSkipped())
+		assert.Empty(t, projectConfig.SkipReason())
+	})
+
+	t.Run("should collapse a multi-line reason onto one line when the skip is carried", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the reason is logged, and a second line in it would print as a log line
+		// of its own
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+		layer := restrictedLayer(
+			"skip: true\nreason: |\n  mirror of the upstream repository\n" +
+				"  level=info msg=\"Successfully processed project\"\n",
+		)
+
+		// when
+		_, err := entities.ApplyProjectLayer(
+			&entities.GlobalConfig{}, projectConfig, layer, //nolint:exhaustruct // ditto
+		)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, projectConfig.IsSkipped())
+		assert.Equal(t,
+			"mirror of the upstream repository level=info msg=\"Successfully processed project\"",
+			projectConfig.SkipReason(),
+		)
+	})
+
+	t.Run("should not skip any project when only the defaults set the key", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the shipped and the fetched defaults both decode through the same
+		// restricted schema as the repository's file
+		base, err := entities.ResolveGlobalConfig([]entities.ConfigLayer{
+			defaultsLayer("skip: true\nreason: 'shipped in the binary'\n"),
+			publishedLayer("skip: true\nreason: 'fetched from the network'\n"),
+		})
+		require.NoError(t, err)
+
+		projectConfig := &entities.ProjectConfig{} //nolint:exhaustruct // the layer fills it
+
+		// when
+		_, err = entities.ApplyProjectLayer(base, projectConfig, restrictedLayer("versioning: 'semver'\n"))
+
+		// then
+		require.NoError(t, err)
+		assert.False(t, projectConfig.IsSkipped())
+		assert.Empty(t, projectConfig.SkipReason())
+	})
+
+	t.Run("should refuse a skip in an entry of the operator's own projects list", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- an operator who does not want a project released leaves it out of
+		// `projects[]`; the skip is the repository's to declare, not the operator's
+		layer := operatorLayer("projects:\n  - path: '/home/operator/repo'\n    skip: true\n")
+
+		// when
+		cfg, err := entities.ApplyLayer(&entities.GlobalConfig{}, layer) //nolint:exhaustruct // empty base
+
+		// then
+		require.Error(t, err)
+		assert.Nil(t, cfg)
+		assert.Contains(t, err.Error(), "skip")
+	})
+
+	t.Run("should report no skip when the project entry is nil", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		var projectConfig *entities.ProjectConfig
+
+		// when
+		skipped := projectConfig.IsSkipped()
+		reason := projectConfig.SkipReason()
+
+		// then
+		assert.False(t, skipped)
+		assert.Empty(t, reason)
+	})
+}
