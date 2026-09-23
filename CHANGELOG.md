@@ -22,6 +22,16 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-09-23
+
+### Added
+
+- added a diagnostic explaining that an SSH push failed because AutoBump never executes the `ssh` binary, naming the WSL named-pipe case and the credential shapes it does accept
+
+### Fixed
+
+- fixed the SSH push diagnosis suppressing its WSL explanation and its dead-socket line when an agent socket existed but answered nothing, which is the only state that call site can observe
+
 ## [3.1.2] - 2026-09-10
 
 ### Changed
