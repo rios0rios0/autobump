@@ -886,6 +886,13 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 	// Load per-project config overrides (must happen after clone so files are available)
 	ctx.GlobalConfig = loadProjectConfigOverrides(ctx.GlobalConfig, ctx.ProjectConfig, ctx.ProjectConfig.Path)
 
+	// A repository that opted out is left exactly as it was found. Everything below can
+	// touch it: a missing changelog is created and pushed, stale bump branches are deleted
+	// and their pull requests closed, and a release opens a branch and a pull request.
+	if honourSkipRequest(ctx.ProjectConfig) {
+		return nil
+	}
+
 	changelogPath, err := resolveChangelogPath(ctx)
 	if err != nil {
 		return err
@@ -963,6 +970,31 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 
 	logger.Infof("Successfully processed project '%s'", ctx.ProjectConfig.Name)
 	return nil
+}
+
+// honourSkipRequest reports whether the repository's own .autobump.yaml asked to be left
+// out of every release, and says so in the log when it did.
+//
+// The project name is empty when AutoBump was pointed at a path rather than handed a
+// `projects[]` entry or a discovered repository, so the path's last element stands in for
+// it, the way FinalizeGlobalConfig names an entry that has no name.
+func honourSkipRequest(projectConfig *entities.ProjectConfig) bool {
+	if !projectConfig.IsSkipped() {
+		return false
+	}
+
+	name := projectConfig.Name
+	if name == "" {
+		name = strings.TrimSuffix(filepath.Base(projectConfig.Path), ".git")
+	}
+
+	if reason := projectConfig.SkipReason(); reason != "" {
+		logger.Infof("Skipping project '%s': .autobump.yaml requested skip (%s)", name, reason)
+	} else {
+		logger.Infof("Skipping project '%s': .autobump.yaml requested skip", name)
+	}
+
+	return true
 }
 
 // handleExistingBranchWithoutPR handles the case where a bump branch exists but no PR was found.

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -122,12 +123,76 @@ func TestProcessRepoIntegration(t *testing.T) {
 		require.NoError(t, statusErr)
 		assert.Empty(t, status, "the commit should have captured the changelog and both fragment removals")
 	})
+
+	t.Run("should leave the repository untouched when its own .autobump.yaml requests a skip", func(t *testing.T) {
+		// given -- pending entries that would otherwise be released, and the skip committed
+		// beside them, the way a mirror or a fork released upstream would carry it
+		changelog := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- added new feature\n\n" +
+			"## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
+		fixture := newBumpFixture(t, changelog, map[string]string{
+			".autobump.yaml": "skip: true\nreason: 'released upstream'\n",
+		})
+		headBefore := fixture.headRef(t)
+		branchesBefore := fixture.branchNames(t)
+
+		// when
+		err := commands.ProcessRepo(fixture.globalConfig, fixture.projectConfig)
+
+		// then -- no error, because nothing was attempted: not even the push that fails for
+		// every other fixture in this file, which has no remote to push to
+		require.NoError(t, err)
+		assert.Equal(t, changelog, fixture.readChangelog(t), "the changelog must not be released")
+		assert.Equal(t, headBefore, fixture.headRef(t), "HEAD must neither move nor gain a commit")
+		assert.Equal(t, branchesBefore, fixture.branchNames(t), "no bump branch may be created")
+
+		status, statusErr := fixture.worktree.Status()
+		require.NoError(t, statusErr)
+		assert.True(t, status.IsClean(), "the worktree must be exactly as it was found")
+	})
+
+	t.Run("should not create a missing changelog when its own .autobump.yaml requests a skip", func(t *testing.T) {
+		// given -- without the skip, a missing changelog is created, committed and pushed to
+		// the default branch before anything else is decided
+		fixture := newBumpFixture(t, "", map[string]string{".autobump.yaml": "skip: true\n"})
+		_, err := fixture.worktree.Remove("CHANGELOG.md")
+		require.NoError(t, err)
+		require.NoFileExists(t, fixture.changelogPath)
+		_, err = fixture.worktree.Commit("drop the changelog", &git.CommitOptions{
+			Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
+		})
+		require.NoError(t, err)
+		headBefore := fixture.headRef(t)
+
+		// when
+		err = commands.ProcessRepo(fixture.globalConfig, fixture.projectConfig)
+
+		// then
+		require.NoError(t, err)
+		assert.NoFileExists(t, fixture.changelogPath)
+		assert.Equal(t, headBefore, fixture.headRef(t), "no changelog commit may be made")
+	})
+
+	t.Run("should still release when its own .autobump.yaml sets skip to false", func(t *testing.T) {
+		// given
+		fixture := newBumpFixture(t,
+			"# Changelog\n\n## [Unreleased]\n\n### Added\n\n- added new feature\n\n"+
+				"## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n",
+			map[string]string{".autobump.yaml": "skip: false\n"})
+
+		// when
+		err := commands.ProcessRepo(fixture.globalConfig, fixture.projectConfig)
+
+		// then -- the push fails because the test repo has no remote, but the release was cut
+		require.Error(t, err)
+		assert.Contains(t, fixture.readChangelog(t), "[1.1.0]")
+	})
 }
 
 // bumpFixture is a committed repository wired up so ProcessRepo can run against it.
 type bumpFixture struct {
 	repoPath      string
 	changelogPath string
+	repo          *git.Repository
 	worktree      *git.Worktree
 	globalConfig  *entities.GlobalConfig
 	projectConfig *entities.ProjectConfig
@@ -164,6 +229,7 @@ func newBumpFixture(t *testing.T, changelog string, extraFiles map[string]string
 	return bumpFixture{
 		repoPath:      repoPath,
 		changelogPath: changelogPath,
+		repo:          repo,
 		worktree:      worktree,
 		globalConfig: entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{}).
@@ -181,6 +247,28 @@ func (f bumpFixture) readChangelog(t *testing.T) string {
 	content, err := os.ReadFile(f.changelogPath)
 	require.NoError(t, err)
 	return string(content)
+}
+
+// headRef returns where the fixture's HEAD points: the branch it is on and its commit.
+func (f bumpFixture) headRef(t *testing.T) string {
+	t.Helper()
+	head, err := f.repo.Head()
+	require.NoError(t, err)
+	return head.String()
+}
+
+// branchNames returns every local branch in the fixture's repository.
+func (f bumpFixture) branchNames(t *testing.T) []string {
+	t.Helper()
+	branches, err := f.repo.Branches()
+	require.NoError(t, err)
+
+	names := make([]string, 0)
+	require.NoError(t, branches.ForEach(func(ref *plumbing.Reference) error {
+		names = append(names, ref.Name().Short())
+		return nil
+	}))
+	return names
 }
 
 // TestProcessRepoAdditionalBranches is deliberately not parallel: it mutates package-level globals that other tests read.

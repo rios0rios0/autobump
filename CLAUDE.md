@@ -201,8 +201,8 @@ covers the seam against a real socket left behind by a closed listener.
 Versioning modes: `semver` (default), `fork-dot`, `fork-dash`. Fork modes increment only the trailing fork digit (e.g. `3.3.0.16` → `3.3.0.17`) and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`.
 
 A repository's own `.autobump.yaml` may set `refresh`, `changelog_path`, `versioning`,
-`detect_chlog`, `cleanup_stale_branches`, `exclude_forks`, `exclude_archived` and
-`languages`. `ApplyProjectLayer` folds it onto the configuration *and* onto the project
+`detect_chlog`, `cleanup_stale_branches`, `exclude_forks`, `exclude_archived`,
+`languages`, `skip` and `reason`. `ApplyProjectLayer` folds it onto the configuration *and* onto the project
 entry, and the entry pass reads what *that document* declared rather than the folded
 result — reading the folded value would let the operator's own global default overwrite the
 `projects[]` entry they wrote beside it, which is the opposite of the precedence everything
@@ -210,6 +210,22 @@ else follows. The repository's file now wins over that entry, where before it on
 what the entry left empty. `resolveChangelogPath` gained the global fallback to match, so
 `GlobalConfig.ChangelogPath` — decoded and never read before layering — finally means
 something.
+
+`skip` (with an optional `reason`) is the repository taking itself out of every release, and
+it is the one key only the project layer may set. `RestrictedConfig` decodes it in all three
+restricted layers because the schema is shared, but `applyToProject` -- reached only from
+`ApplyProjectLayer`, so only with the repository's own file -- is its sole writer: it lands
+in the *unexported* `ProjectConfig.skip`/`skipReason` (the `refreshVetoed` pattern, so no
+YAML document can set it and the operator's strict `projects[]` decode rejects the key),
+read through `IsSkipped`/`SkipReason`. `applyTo` warns when the built-in or published
+defaults carry it, because a skip there would stop every release a run reaches. The reason
+has its whitespace collapsed on the way in, since it is logged verbatim. `ProcessRepo`
+checks it (`honourSkipRequest`) immediately after `loadProjectConfigOverrides` and before
+`resolveChangelogPath` -- ahead of `setupChangelog`, which creates and pushes a missing
+changelog, and of stale-branch cleanup, which deletes branches and closes pull requests -- so
+a skipped repository is left exactly as it was found. All three entry points (`IterateProjects`,
+`DiscoverAndProcess`, `RootController`) go through `ProcessRepo`, so the skip holds in every
+mode.
 
 The refresh (`refresh`, top-level or per-language, opt-in) regenerates what the version
 files derive. AutoBump rewrites version files with regexes and runs no package manager, so a

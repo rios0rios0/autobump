@@ -76,15 +76,19 @@ AutoBump folds four configuration sources, each overriding only the keys it decl
 |---|-------|---------------------|---------|
 | 1 | **built-in defaults** | `configs/autobump.yaml`, compiled into the binary | languages and behaviour |
 | 2 | **published defaults** | the same file fetched from `main`, best effort | languages and behaviour |
-| 3 | **operator configuration** | `-c <path\|URL>`, else `~/.autobump.yaml` or `~/.config/autobump.yaml` | **everything** |
-| 4 | **project configuration** | `.autobump.yaml` in the repository being released | languages and behaviour |
+| 3 | **operator configuration** | `-c <path\|URL>`, else `~/.autobump.yaml` or `~/.config/autobump.yaml` | **everything** but `skip` |
+| 4 | **project configuration** | `.autobump.yaml` in the repository being released | languages and behaviour, and `skip` |
 
 Layer 1 always exists, so AutoBump knows every language it supports with no configuration
 and no network. Layer 2 lets a language fix reach an installed binary without a release;
 when it cannot be fetched, the run says so and carries on. Layer 3 is the only one that
 may name a credential, a `providers`/`projects` list, or the bump branch prefix -- the
 other three decode through a schema that has no field for them, so a repository cannot
-hand AutoBump credentials or aim its branch deletion.
+hand AutoBump credentials or aim its branch deletion. [`skip`](#skipping-a-repository)
+runs the other way: only layer 4 may set it. A repository may take *itself* out of a
+release, while a skip shipped in the binary or fetched over the network would stop every
+release at once -- so layers 1 and 2 are answered with a warning, and layer 3 has no key
+for it.
 
 Set the same key at several levels and the last one wins:
 
@@ -343,6 +347,8 @@ The keys a per-project file may set:
 | `cleanup_stale_branches` | Only `false`, to keep this project's bump branches. An enable here would arrive after `--skip-cleanup` had been applied and would override it |
 | `exclude_forks`, `exclude_archived` | Accepted, but they filter what *discovery selects*; by the time this file is read the repository has already been selected and cloned, so they do nothing here |
 | `languages` | Per-language `extensions`, `special_patterns`, `version_files`, and `refresh` under the same rule |
+| `skip` | `true` to take this repository out of every release — see [Skipping a repository](#skipping-a-repository). Honoured from this file and from no other layer |
+| `reason` | Free text logged beside a `skip`, so whoever reads the run knows why the repository was left alone |
 
 And the keys it may **not**, which are reported and ignored when a repository sets one:
 
@@ -362,6 +368,29 @@ land.
 changelog_path: 'CHANGELOG_PROPRIETARY.md'
 versioning: 'fork-dot'
 ```
+
+### Skipping a repository
+
+Some repositories must never be released by AutoBump — a mirror or a fork whose releases
+are cut upstream, say — yet a run that discovers repositories through `providers` reaches
+them anyway. Such a repository opts out with its own file:
+
+```yaml
+# .autobump.yaml at the root of a mirror whose releases are cut upstream
+skip: true
+reason: 'mirror of the upstream repository; releases are cut there'
+```
+
+AutoBump reads the file before it changes anything, logs the skip with its reason, and
+leaves the repository exactly as it found it: no changelog is created, no bump branch is cut,
+nothing is committed or pushed, and no pull request is opened. That includes
+[stale branch cleanup](#stale-branch-cleanup) — a bump branch or pull request an earlier
+run opened stays where it is, so close it by hand. The skip holds in every mode, and only
+the repository's own file can declare it: the same key in the built-in or published
+defaults is ignored with a warning, and the operator's configuration has no key for it.
+A per-project file that cannot be parsed is ignored with a warning, as it always has been,
+so a malformed one releases rather than skips -- check the run log for that warning when
+a skip does not take.
 
 ## Refresh
 
@@ -602,13 +631,14 @@ versioning: 'fork-dot'
 ## How It Works
 
 1. **Repository Discovery** *(run mode with providers)*: Queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations
-2. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
-3. **Version Detection**: Reads the current version from CHANGELOG.md
-4. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
-5. **Refresh**: Regenerates the lockfile when [`refresh`](#refresh) is on, so it travels in the same commit
-6. **CHANGELOG Update**: Folds in any pending [chlog](#fragment-based-changelogs-chlog) fragments, applies the [changelog rules](#changelog-rules), and moves the result to the new version section with the current date
-7. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
-8. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
+2. **Opt-out Check**: Leaves a repository exactly as it was found when its own `.autobump.yaml` sets [`skip: true`](#skipping-a-repository)
+3. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
+4. **Version Detection**: Reads the current version from CHANGELOG.md
+5. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
+6. **Refresh**: Regenerates the lockfile when [`refresh`](#refresh) is on, so it travels in the same commit
+7. **CHANGELOG Update**: Folds in any pending [chlog](#fragment-based-changelogs-chlog) fragments, applies the [changelog rules](#changelog-rules), and moves the result to the new version section with the current date
+8. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
+9. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
 
 ## Contributing
 

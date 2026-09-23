@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added a per-project `skip` opt-out to `.autobump.yaml`: a repository that sets `skip: true`, with an optional `reason`, is left exactly as it was found (no changelog is created, no stale branch is cleaned up, and no branch, commit, push or pull request is made), and only the repository''s own file can declare it, so the same key in the built-in or published defaults is ignored with a warning'
+time: '2026-09-23T15:44:50.129583998Z'

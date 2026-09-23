@@ -103,6 +103,32 @@ type ProjectConfig struct {
 	Versioning         string `yaml:"versioning"`
 	DetectChlog        *bool  `yaml:"detect_chlog"`
 	Refresh            *bool  `yaml:"refresh"`
+
+	// skipReason and skip record that the repository's own .autobump.yaml asked to be
+	// left out of every release.
+	//
+	// Unexported for the reason refreshVetoed is: no YAML document can set them. Not the
+	// operator's `projects[]` entry, whose strict decode has no key for them, and not the
+	// defaults shipped in the binary or fetched from DefaultConfigURL, which share the
+	// restricted schema but never reach applyToProject. That function is their only
+	// writer, and it is reached only with the repository's own file -- so the one party
+	// able to take a repository out of a release is the repository itself.
+	skipReason string
+	skip       bool
+}
+
+// IsSkipped reports whether the repository's own .autobump.yaml asked AutoBump to leave it
+// out of every release.
+func (p *ProjectConfig) IsSkipped() bool {
+	return p != nil && p.skip
+}
+
+// SkipReason returns the reason the repository gave for its skip, or "" when it gave none.
+func (p *ProjectConfig) SkipReason() string {
+	if p == nil {
+		return ""
+	}
+	return p.skipReason
 }
 
 // ResolveVersioning returns the effective versioning mode for a project.

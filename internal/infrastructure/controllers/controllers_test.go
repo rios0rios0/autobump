@@ -8,6 +8,7 @@ import (
 	"time"
 
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -575,6 +576,59 @@ func TestRootControllerExecute(t *testing.T) {
 		assert.NotPanics(t, func() {
 			ctrl.Execute(cmd, []string{repoPath})
 		})
+	})
+
+	t.Run("should leave the repository untouched when its own .autobump.yaml requests a skip", func(t *testing.T) {
+		// given -- the same pending release as above, which a path run would otherwise cut,
+		// and a skip committed beside it. A path run names no project, so this also covers
+		// the skip being logged under the directory's name.
+		repoPath, repo := createTestRepo(t)
+		changelog := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- added new feature\n\n" +
+			"## [1.0.0] - 2026-01-01\n\n### Added\n\n- added initial release\n"
+		require.NoError(t, os.WriteFile(filepath.Join(repoPath, "CHANGELOG.md"), []byte(changelog), 0o644))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(repoPath, ".autobump.yaml"), []byte("skip: true\nreason: 'released upstream'\n"), 0o644,
+		))
+
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+		require.NoError(t, wt.AddWithOptions(&git.AddOptions{All: true}))
+		_, err = wt.Commit("add changelog and skip", &git.CommitOptions{
+			Author: &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()},
+		})
+		require.NoError(t, err)
+
+		headBefore, err := repo.Head()
+		require.NoError(t, err)
+
+		cfgPath := writeConfigFile(t, "languages:\n  golang:\n    extensions:\n      - 'go'\n")
+
+		ctrl := controllers.NewRootController()
+		cmd := newTestCmd()
+		ctrl.AddFlags(cmd)
+		require.NoError(t, cmd.Flags().Set("config", cfgPath))
+		require.NoError(t, cmd.Flags().Set("language", "golang"))
+
+		// when
+		ctrl.Execute(cmd, []string{repoPath})
+
+		// then
+		written, err := os.ReadFile(filepath.Join(repoPath, "CHANGELOG.md"))
+		require.NoError(t, err)
+		assert.Equal(t, changelog, string(written), "the changelog must not be released")
+
+		headAfter, err := repo.Head()
+		require.NoError(t, err)
+		assert.Equal(t, headBefore.String(), headAfter.String(), "HEAD must neither move nor gain a commit")
+
+		branches, err := repo.Branches()
+		require.NoError(t, err)
+		branchCount := 0
+		require.NoError(t, branches.ForEach(func(*plumbing.Reference) error {
+			branchCount++
+			return nil
+		}))
+		assert.Equal(t, 1, branchCount, "no bump branch may be created")
 	})
 }
 
