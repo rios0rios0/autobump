@@ -22,6 +22,21 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-09-30
+
+### Added
+
+- added a diagnostic explaining that an SSH push failed because AutoBump never executes the `ssh` binary, naming the WSL named-pipe case and the credential shapes it does accept
+- added a per-project `skip` opt-out to `.autobump.yaml`: a repository that sets `skip: true`, with an optional `reason`, is left exactly as it was found (no changelog is created, no stale branch is cleaned up, and no branch, commit, push or pull request is made), and only the repository's own file can declare it, so the same key in the built-in or published defaults is ignored with a warning
+
+### Changed
+
+- changed the Go module dependencies to their latest versions
+
+### Fixed
+
+- fixed the SSH push diagnosis suppressing its WSL explanation and its dead-socket line when an agent socket existed but answered nothing, which is the only state that call site can observe
+
 ## [3.1.2] - 2026-09-10
 
 ### Changed
