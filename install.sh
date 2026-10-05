@@ -3,7 +3,8 @@
 # AutoBump Installation Script
 #
 # Downloads and installs autobump from GitHub releases.
-# Automatically detects your operating system and architecture.
+# Automatically detects your operating system and architecture. On Windows it
+# runs from Git Bash, MSYS2 or Cygwin, and needs unzip.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh | sh
@@ -11,7 +12,7 @@
 #
 # Options:
 #   --help              Show this help message
-#   --version VERSION   Install specific version (e.g. v1.0.0)
+#   --version VERSION   Install specific version (e.g. 1.0.0)
 #   --install-dir DIR   Custom installation directory (default: ~/.local/bin)
 #   --force             Force reinstallation
 #   --dry-run           Show what would be done without installing
@@ -29,6 +30,8 @@ set -e
 REPO_OWNER="rios0rios0"
 REPO_NAME="autobump"
 BINARY_NAME="autobump"
+# The file the binary is installed as, which main() sets per platform.
+BINARY_FILE="$BINARY_NAME"
 
 # Defaults
 DEFAULT_INSTALL_DIR="$HOME/.local/bin"
@@ -77,7 +80,7 @@ ENVIRONMENT VARIABLES:
 
 EXAMPLES:
     $0
-    $0 --version v1.0.0
+    $0 --version 1.0.0
     $0 --install-dir /usr/local/bin
     $0 --dry-run
     $0 --force
@@ -105,18 +108,28 @@ detect_os() {
         Linux*)                   echo "linux" ;;
         Darwin*)                  echo "darwin" ;;
         CYGWIN*|MINGW*|MSYS*)    echo "windows" ;;
-        *)  error "Unsupported operating system: $(uname -s)"; exit 1 ;;
+        *)  error "Unsupported operating system: $(uname -s). On Windows, run this script from Git Bash, MSYS2 or Cygwin."; exit 1 ;;
     esac
+}
+
+# The file name the binary is installed under: Windows only runs an executable
+# through its .exe extension.
+binary_file() {
+    if [ "$1" = "windows" ]; then
+        echo "${BINARY_NAME}.exe"
+    else
+        echo "${BINARY_NAME}"
+    fi
 }
 
 # Detect architecture
 detect_arch() {
     case "$(uname -m)" in
         x86_64|amd64)    echo "amd64" ;;
-        i386|i686)       echo "386" ;;
         arm64|aarch64)   echo "arm64" ;;
-        armv7l|armv6l)   echo "arm" ;;
-        *)  error "Unsupported architecture: $(uname -m)"; exit 1 ;;
+        # Releases are built for amd64 and arm64 only, so a 32-bit x86 or ARM
+        # machine would otherwise get a 404 for an asset that never existed.
+        *)  error "Unsupported architecture: $(uname -m). Releases are published for amd64 and arm64 only."; exit 1 ;;
     esac
 }
 
@@ -137,7 +150,7 @@ check_download_tool() {
 
 # Download a URL to a local file
 download_file() {
-    local url="$1" output="$2"
+    url="$1"; output="$2"
     if [ "$DOWNLOAD_CMD" = "curl" ]; then
         curl -fsSL -o "$output" "$url"
     else
@@ -147,8 +160,7 @@ download_file() {
 
 # Resolve the tag name for the latest release
 get_latest_tag() {
-    local api_url="${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
-    local tmp
+    api_url="${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
     tmp=$(mktemp)
 
     if ! download_file "$api_url" "$tmp"; then
@@ -157,7 +169,6 @@ get_latest_tag() {
         exit 1
     fi
 
-    local tag
     tag=$(grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$tmp" | cut -d'"' -f4)
     rm -f "$tmp"
 
@@ -171,11 +182,10 @@ get_latest_tag() {
 # Build the download URL for a given version, OS, and architecture.
 # GoReleaser naming: {project}-{version}-{os}-{arch}.tar.gz (.zip on Windows)
 build_download_url() {
-    local tag="$1" os="$2" arch="$3"
-    local ver
+    tag="$1"; os="$2"; arch="$3"
     ver=$(echo "$tag" | sed 's/^v//')
 
-    local ext="tar.gz"
+    ext="tar.gz"
     [ "$os" = "windows" ] && ext="zip"
 
     echo "${GITHUB_RELEASE_BASE}/${REPO_OWNER}/${REPO_NAME}/releases/download/${tag}/${BINARY_NAME}-${ver}-${os}-${arch}.${ext}"
@@ -183,9 +193,9 @@ build_download_url() {
 
 # Check if the binary is already installed
 check_existing_installation() {
-    if [ -f "${INSTALL_DIR}/${BINARY_NAME}" ]; then
+    if [ -f "${INSTALL_DIR}/${BINARY_FILE}" ]; then
         if [ "$FORCE" = "false" ]; then
-            warn "${BINARY_NAME} is already installed at ${INSTALL_DIR}/${BINARY_NAME}"
+            warn "${BINARY_NAME} is already installed at ${INSTALL_DIR}/${BINARY_FILE}"
             warn "Use --force to reinstall"
             return 1
         fi
@@ -196,16 +206,21 @@ check_existing_installation() {
 
 # Main installation logic
 install_binary() {
-    local download_url="$1" os="$2" tag="$3"
+    download_url="$1"; os="$2"; tag="$3"
 
     if [ "$DRY_RUN" = "true" ]; then
         info "[DRY RUN] Would download: $download_url"
-        info "[DRY RUN] Would install to: ${INSTALL_DIR}/${BINARY_NAME}"
+        info "[DRY RUN] Would install to: ${INSTALL_DIR}/${BINARY_FILE}"
         return 0
     fi
 
+    # Windows releases are zip archives, which tar cannot read
+    if [ "$os" = "windows" ] && ! command_exists unzip; then
+        error "unzip is required to extract the Windows release; install it, or download the .zip from the releases page"
+        exit 1
+    fi
+
     # Prepare temp workspace
-    local tmp_archive tmp_dir
     tmp_archive=$(mktemp)
     tmp_dir=$(mktemp -d)
 
@@ -231,35 +246,34 @@ install_binary() {
     fi
 
     # Locate binary inside the extracted directory
-    local src_binary="${tmp_dir}/${BINARY_NAME}"
-    [ "$os" = "windows" ] && src_binary="${src_binary}.exe"
+    src_binary="${tmp_dir}/${BINARY_FILE}"
 
     if [ ! -f "$src_binary" ]; then
         rm -f "$tmp_archive"; rm -rf "$tmp_dir"
-        error "Binary '${BINARY_NAME}' not found inside the archive"
+        error "Binary '${BINARY_FILE}' not found inside the archive"
         exit 1
     fi
 
     # Install
     mkdir -p "$INSTALL_DIR"
-    mv "$src_binary" "${INSTALL_DIR}/${BINARY_NAME}"
-    chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
+    mv "$src_binary" "${INSTALL_DIR}/${BINARY_FILE}"
+    chmod +x "${INSTALL_DIR}/${BINARY_FILE}"
 
     # Cleanup
     rm -f "$tmp_archive"
     rm -rf "$tmp_dir"
 
-    success "${BINARY_NAME} has been installed to ${INSTALL_DIR}/${BINARY_NAME}"
+    success "${BINARY_NAME} has been installed to ${INSTALL_DIR}/${BINARY_FILE}"
 }
 
 # Post-install verification
 verify_installation() {
     if [ "$DRY_RUN" = "true" ]; then
-        info "[DRY RUN] Would verify installation at: ${INSTALL_DIR}/${BINARY_NAME}"
+        info "[DRY RUN] Would verify installation at: ${INSTALL_DIR}/${BINARY_FILE}"
         return 0
     fi
 
-    if [ -x "${INSTALL_DIR}/${BINARY_NAME}" ]; then
+    if [ -x "${INSTALL_DIR}/${BINARY_FILE}" ]; then
         success "Installation verified"
     else
         error "Installation verification failed"
@@ -273,6 +287,9 @@ verify_installation() {
             warn "${INSTALL_DIR} is not in your PATH"
             info "Add to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
             info "  export PATH=\"\$PATH:${INSTALL_DIR}\""
+            if [ "$1" = "windows" ]; then
+                info "To run it from PowerShell or cmd too, add that directory to your Windows user PATH."
+            fi
             ;;
     esac
 }
@@ -285,29 +302,28 @@ main() {
     parse_args "$@"
     check_download_tool
 
-    local os arch
     os=$(detect_os)
     arch=$(detect_arch)
+    BINARY_FILE=$(binary_file "$os")
     info "Detected platform: ${os}/${arch}"
 
     # Resolve version
-    local tag="$VERSION"
+    tag="$VERSION"
     if [ "$tag" = "latest" ]; then
         info "Fetching latest release..."
         tag=$(get_latest_tag)
     else
-        # Ensure tag has v prefix
-        case "$tag" in v*) ;; *) tag="v${tag}" ;; esac
+        # Release tags carry no "v" prefix, so "v1.0.0" names the tag "1.0.0"
+        tag="${tag#v}"
     fi
     info "Version: ${tag}"
 
-    local download_url
     download_url=$(build_download_url "$tag" "$os" "$arch")
 
     check_existing_installation || exit 0
 
     install_binary "$download_url" "$os" "$tag"
-    verify_installation
+    verify_installation "$os"
 
     info ""
     success "Installation complete! Run '${BINARY_NAME} --help' to get started."

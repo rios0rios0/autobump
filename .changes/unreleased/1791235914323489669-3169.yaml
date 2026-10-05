@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `install.sh` failing with a 404 for every pinned version: it prefixed the version given with `--version` or `AUTOBUMP_VERSION` with a `v` that the release tags do not carry, so it now accepts `1.0.0` and `v1.0.0` alike, and pointed the README example at a release that has assets'
+time: '2026-10-05T21:31:54.323425897Z'

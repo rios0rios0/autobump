@@ -50,7 +50,7 @@ wget -qO- https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh 
 
 ```bash
 # Install specific version
-curl -fsSL https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh | sh -s -- --version v1.0.0
+curl -fsSL https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh | sh -s -- --version 3.2.0
 
 # Install to custom directory
 curl -fsSL https://raw.githubusercontent.com/rios0rios0/autobump/main/install.sh | sh -s -- --install-dir /usr/local/bin

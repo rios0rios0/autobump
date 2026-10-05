@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `install.sh` installing the Windows binary without its `.exe` extension, which left it unrunnable from PowerShell and cmd: it now installs `autobump.exe` and checks for `unzip` before downloading'
+time: '2026-10-05T21:31:54.326409424Z'

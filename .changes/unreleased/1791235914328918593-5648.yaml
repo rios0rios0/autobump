@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `install.sh` ending in a 404 on 32-bit x86 and ARM machines, for a release asset that is never built: it now stops with a message that releases are published for amd64 and arm64 only'
+time: '2026-10-05T21:31:54.328869783Z'
