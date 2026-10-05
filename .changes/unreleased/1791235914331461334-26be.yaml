@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed `install.sh` to stop using `local`, which POSIX `sh` does not define, so the script runs under any POSIX shell and passes ShellCheck'
+time: '2026-10-05T21:31:54.331410399Z'
