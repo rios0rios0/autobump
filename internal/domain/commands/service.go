@@ -115,6 +115,10 @@ type RepoContext struct {
 	Repo            *git.Repository
 	Worktree        *git.Worktree
 	Head            *plumbing.Reference
+
+	// GoModulePathChange is the module path rewrite the release made, nil when it made
+	// none. It is kept so the pull request can say what moved.
+	GoModulePathChange *GoModulePathChange
 }
 
 // langIDJava is the user-facing config key alias shared by all Java langforge variants
@@ -316,6 +320,10 @@ func generatePRDescription(ctx *RepoContext) string {
 	for _, vf := range versionFiles {
 		fmt.Fprintf(&sb, "- Updated version in `%s`\n", filepath.Base(vf.Path))
 	}
+	if change := ctx.GoModulePathChange; change != nil {
+		fmt.Fprintf(&sb, "- Changed the Go module path from `%s` to `%s` in %d file(s)\n",
+			change.From, change.To, len(change.Files))
+	}
 
 	sb.WriteString("\n### Review Checklist\n\n")
 	sb.WriteString("- [ ] Verify build passes\n")
@@ -323,6 +331,10 @@ func generatePRDescription(ctx *RepoContext) string {
 	sb.WriteString("- [ ] Review changelog entries\n")
 	if len(versionFiles) > 0 {
 		sb.WriteString("- [ ] Verify version file updates\n")
+	}
+	if change := ctx.GoModulePathChange; change != nil {
+		fmt.Fprintf(&sb, "- [ ] Plan the consumers' move to `%s`: their imports change with the module path\n",
+			change.To)
 	}
 
 	sb.WriteString("\n---\n")
@@ -495,8 +507,17 @@ func createBumpBranch(ctx *RepoContext, changelogPath string) (string, entities.
 }
 
 func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) error {
+	// Prepared before the changelog is written: the release notes announce the rewrite, and
+	// a rewrite that cannot be made has to stop the release before anything on disk moved.
+	moduleChange, err := prepareGoModulePathChange(ctx, changelogPath)
+	if err != nil {
+		return err
+	}
+
 	logger.Infof("Updating changelog file %s", changelogPath)
-	version, err := updateChangelogFileString(ctx.GlobalConfig, ctx.ProjectConfig, changelogPath)
+	version, err := updateChangelogFileString(
+		ctx.GlobalConfig, ctx.ProjectConfig, changelogPath, moduleChange.ReleaseNote()...,
+	)
 	if err != nil {
 		logger.Errorf("No version found in changelog for project at %s\n", ctx.ProjectConfig.Path)
 		return err
@@ -526,6 +547,12 @@ func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) erro
 		}
 	}
 
+	rewrittenFiles, err := moduleChange.apply()
+	if err != nil {
+		return err
+	}
+	ctx.GoModulePathChange = moduleChange
+
 	// The fragments have been folded into the release section above, so they must go.
 	// Leaving them behind would ship the same entries again on the next run.
 	consumed, err := consumeChlogFragments(ctx)
@@ -533,7 +560,30 @@ func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) erro
 		return err
 	}
 
+	if err = stageRewrittenFiles(ctx, rewrittenFiles); err != nil {
+		return err
+	}
+
 	return addFilesToWorktree(ctx, changelogPath, refreshedFiles, consumed)
+}
+
+// stageRewrittenFiles stages the files the module path rewrite changed. They are staged
+// apart from the version files because no version_files rule names them: the rewrite
+// found them, and only the rewrite knows they moved.
+func stageRewrittenFiles(ctx *RepoContext, rewrittenPaths []string) error {
+	for _, rewrittenPath := range rewrittenPaths {
+		relativePath, err := filepath.Rel(ctx.ProjectConfig.Path, rewrittenPath)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path for rewritten file: %w", err)
+		}
+
+		logger.Debugf("Adding rewritten file %s", relativePath)
+		if _, err = ctx.Worktree.Add(relativePath); err != nil {
+			return fmt.Errorf("failed to add rewritten file %s: %w", relativePath, err)
+		}
+	}
+
+	return nil
 }
 
 // chlogConsumption is what a release did to the chlog fragment directory: the fragment
@@ -1519,15 +1569,23 @@ func logChlogDetection(ctx *RepoContext) {
 // updateChangelogFile reads the changelog, processes it with the SemVer
 // pipeline, and writes it back. Production callers should prefer
 // updateChangelogFileString to honor the project's versioning mode.
+//
+// releaseNotes are Keep a Changelog lines ("### Fixed", "", "- fixed ...") that the
+// release itself contributes, such as the announcement of a module path rewrite. They are
+// merged into [Unreleased] here rather than at the readChangelogLines boundary, because
+// that boundary also decides whether there is anything to release at all, and an entry
+// AutoBump wrote must never be the reason a release happens.
 func updateChangelogFile(
 	globalConfig *entities.GlobalConfig,
 	projectConfig *entities.ProjectConfig,
 	changelogPath string,
+	releaseNotes ...string,
 ) (*semver.Version, error) {
 	lines, err := readChangelogLines(globalConfig, projectConfig, changelogPath)
 	if err != nil {
 		return nil, err
 	}
+	lines = MergeChlogIntoUnreleased(lines, releaseNotes)
 
 	version, newContent, err := entities.ProcessChangelog(lines)
 	if err != nil {
@@ -1546,10 +1604,12 @@ func updateChangelogFile(
 // resolved from the global/project configuration and returns the next version
 // as a plain string. Fork modes preserve the upstream X.Y.Z and only
 // increment the trailing fork digit; SemVer mode delegates to gitforge.
+// releaseNotes reach only the SemVer pipeline; see updateChangelogFile.
 func updateChangelogFileString(
 	globalConfig *entities.GlobalConfig,
 	projectConfig *entities.ProjectConfig,
 	changelogPath string,
+	releaseNotes ...string,
 ) (string, error) {
 	mode := entities.ResolveVersioning(globalConfig, projectConfig)
 	if IsForkVersioning(mode) {
@@ -1567,7 +1627,7 @@ func updateChangelogFileString(
 		return nextVersion, nil
 	}
 
-	version, err := updateChangelogFile(globalConfig, projectConfig, changelogPath)
+	version, err := updateChangelogFile(globalConfig, projectConfig, changelogPath, releaseNotes...)
 	if err != nil {
 		return "", err
 	}

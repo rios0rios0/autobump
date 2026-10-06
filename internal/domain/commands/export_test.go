@@ -238,3 +238,23 @@ var ExplainSSHPushFailure = explainSSHPushFailure //nolint:gochecknoglobals // t
 
 // DetectSSHEnvironment exports detectSSHEnvironment for testing.
 var DetectSSHEnvironment = detectSSHEnvironment //nolint:gochecknoglobals // test export
+
+// GoModulePathForMajor exports goModulePathForMajor for testing.
+var GoModulePathForMajor = goModulePathForMajor //nolint:gochecknoglobals // test export
+
+// RewriteGoImports exports rewriteGoImports for testing.
+var RewriteGoImports = rewriteGoImports //nolint:gochecknoglobals // test export
+
+// RewriteModuleDirective exports rewriteModuleDirective for testing.
+var RewriteModuleDirective = rewriteModuleDirective //nolint:gochecknoglobals // test export
+
+// RewriteModuleReferences exports rewriteModuleReferences for testing.
+var RewriteModuleReferences = rewriteModuleReferences //nolint:gochecknoglobals // test export
+
+// PrepareGoModulePathChange exports prepareGoModulePathChange for testing.
+var PrepareGoModulePathChange = prepareGoModulePathChange //nolint:gochecknoglobals // test export
+
+// ApplyGoModulePathChange exports GoModulePathChange.apply for testing.
+func ApplyGoModulePathChange(change *GoModulePathChange) ([]string, error) {
+	return change.apply()
+}
