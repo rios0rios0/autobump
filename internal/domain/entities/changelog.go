@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	changelogEntities "github.com/rios0rios0/gitforge/pkg/changelog/domain/entities"
+	changelogEntities "github.com/rios0rios0/gitforge/v4/pkg/changelog/domain/entities"
 )
 
 // DefaultChangelogURL is the URL of the default CHANGELOG template.

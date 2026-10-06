@@ -82,6 +82,21 @@ func TestNormalizeUnreleasedSection(t *testing.T) {
 			expected: []string{"### Added", "", "- added support for the new provider adapter"},
 		},
 		{
+			// Every word of the second entry appears in the first, but they name different
+			// libraries; merging them would take `beta` out of the release notes.
+			name: "should keep two dependency entries that name different libraries",
+			body: []string{
+				"### Changed", "",
+				"- changed the Go modules `alpha` from `v1.0.0` to `v1.1.0` and `beta` from `v2.0.0` to `v2.1.0`",
+				"- changed the Go modules `alpha` from `v1.1.0` to `v1.2.0`",
+			},
+			expected: []string{
+				"### Changed", "",
+				"- changed the Go modules `alpha` from `v1.0.0` to `v1.1.0` and `beta` from `v2.0.0` to `v2.1.0`",
+				"- changed the Go modules `alpha` from `v1.1.0` to `v1.2.0`",
+			},
+		},
+		{
 			name: "should file the entry under the section its verb names",
 			body: []string{
 				"### Changed", "", "- removed the deprecated helper", "- changed the retry backoff",

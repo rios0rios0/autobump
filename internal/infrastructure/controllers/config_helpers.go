@@ -8,7 +8,7 @@ import (
 
 	"github.com/rios0rios0/autobump/configs"
 	"github.com/rios0rios0/autobump/internal/domain/entities"
-	downloadHelpers "github.com/rios0rios0/gitforge/pkg/config/infrastructure/helpers"
+	downloadHelpers "github.com/rios0rios0/gitforge/v4/pkg/config/infrastructure/helpers"
 )
 
 // applySkipCleanupFlag turns off stale bump-branch cleanup when --skip-cleanup is set.

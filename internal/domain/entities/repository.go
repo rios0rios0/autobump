@@ -1,7 +1,7 @@
 package entities
 
 import (
-	gitforgeEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
+	gitforgeEntities "github.com/rios0rios0/gitforge/v4/pkg/global/domain/entities"
 )
 
 // ServiceType is re-exported from gitforge.

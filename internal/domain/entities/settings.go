@@ -11,9 +11,9 @@ import (
 
 	logger "github.com/sirupsen/logrus"
 
-	configEntities "github.com/rios0rios0/gitforge/pkg/config/domain/entities"
-	configHelpers "github.com/rios0rios0/gitforge/pkg/config/domain/helpers"
-	downloadHelpers "github.com/rios0rios0/gitforge/pkg/config/infrastructure/helpers"
+	configEntities "github.com/rios0rios0/gitforge/v4/pkg/config/domain/entities"
+	configHelpers "github.com/rios0rios0/gitforge/v4/pkg/config/domain/helpers"
+	downloadHelpers "github.com/rios0rios0/gitforge/v4/pkg/config/infrastructure/helpers"
 )
 
 // Versioning modes supported by the bumper.

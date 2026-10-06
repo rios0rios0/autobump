@@ -8,8 +8,8 @@ import (
 	"go.uber.org/dig"
 
 	"github.com/rios0rios0/autobump/internal/infrastructure/repositories"
-	gitforgeEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
-	"github.com/rios0rios0/gitforge/pkg/providers/infrastructure/github"
+	gitforgeEntities "github.com/rios0rios0/gitforge/v4/pkg/global/domain/entities"
+	"github.com/rios0rios0/gitforge/v4/pkg/providers/infrastructure/github"
 )
 
 func TestNewProviderRegistry(t *testing.T) {

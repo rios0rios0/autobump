@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
-	configEntities "github.com/rios0rios0/gitforge/pkg/config/domain/entities"
+	configEntities "github.com/rios0rios0/gitforge/v4/pkg/config/domain/entities"
 )
 
 func TestMergeLanguagesConfig(t *testing.T) {

@@ -19,7 +19,7 @@ import (
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	"github.com/rios0rios0/autobump/internal/infrastructure/controllers"
 	"github.com/rios0rios0/autobump/internal/infrastructure/repositories"
-	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
+	gitInfra "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure"
 )
 
 func TestNewRootController(t *testing.T) {
