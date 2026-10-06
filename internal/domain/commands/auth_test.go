@@ -15,8 +15,8 @@ import (
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	"github.com/rios0rios0/autobump/internal/infrastructure/repositories"
 	"github.com/rios0rios0/autobump/test/domain/entitybuilders"
-	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
-	gitforgeEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
+	gitInfra "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure"
+	gitforgeEntities "github.com/rios0rios0/gitforge/v4/pkg/global/domain/entities"
 )
 
 func TestCollectSSHAuthMethodsExtended(t *testing.T) {

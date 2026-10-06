@@ -9,8 +9,8 @@ import (
 	logger "github.com/sirupsen/logrus"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
-	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
-	globalEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
+	gitInfra "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure"
+	globalEntities "github.com/rios0rios0/gitforge/v4/pkg/global/domain/entities"
 )
 
 // closePullRequestTimeout caps a single close call against the forge API.

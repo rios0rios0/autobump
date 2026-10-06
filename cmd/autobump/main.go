@@ -11,7 +11,7 @@ import (
 	"github.com/rios0rios0/autobump/internal"
 	"github.com/rios0rios0/autobump/internal/domain/commands"
 	"github.com/rios0rios0/autobump/internal/infrastructure/controllers"
-	gitInfra "github.com/rios0rios0/gitforge/pkg/git/infrastructure"
+	gitInfra "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure"
 )
 
 // version is set at build time via ldflags.

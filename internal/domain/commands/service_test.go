@@ -20,8 +20,8 @@ import (
 	"github.com/rios0rios0/autobump/internal/domain/commands"
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	"github.com/rios0rios0/autobump/test/domain/entitybuilders"
-	gitforgeEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
-	registryInfra "github.com/rios0rios0/gitforge/pkg/registry/infrastructure"
+	gitforgeEntities "github.com/rios0rios0/gitforge/v4/pkg/global/domain/entities"
+	registryInfra "github.com/rios0rios0/gitforge/v4/pkg/registry/infrastructure"
 	langEntities "github.com/rios0rios0/langforge/pkg/domain/entities"
 )
 

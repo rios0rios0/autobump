@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	changelogEntities "github.com/rios0rios0/gitforge/pkg/changelog/domain/entities"
+	changelogEntities "github.com/rios0rios0/gitforge/v4/pkg/changelog/domain/entities"
 )
 
 // The six Keep a Changelog sections. They are the only headings the release pipeline

@@ -1,10 +1,10 @@
 package repositories
 
 import (
-	globalEntities "github.com/rios0rios0/gitforge/pkg/global/domain/entities"
-	"github.com/rios0rios0/gitforge/pkg/providers/infrastructure/azuredevops"
-	"github.com/rios0rios0/gitforge/pkg/providers/infrastructure/github"
-	"github.com/rios0rios0/gitforge/pkg/providers/infrastructure/gitlab"
+	globalEntities "github.com/rios0rios0/gitforge/v4/pkg/global/domain/entities"
+	"github.com/rios0rios0/gitforge/v4/pkg/providers/infrastructure/azuredevops"
+	"github.com/rios0rios0/gitforge/v4/pkg/providers/infrastructure/github"
+	"github.com/rios0rios0/gitforge/v4/pkg/providers/infrastructure/gitlab"
 	"go.uber.org/dig"
 )
 

@@ -65,7 +65,7 @@ Dependencies always point inward: infrastructure → domain, never the reverse.
 
 ### Key External Libraries
 
-- **`gitforge`** (`github.com/rios0rios0/gitforge`) — Git provider adapters, changelog processing, PR creation
+- **`gitforge`** (`github.com/rios0rios0/gitforge/v4`) — Git provider adapters, changelog processing, PR creation
 - **`langforge`** (`github.com/rios0rios0/langforge`) — Language detection via marker files
 - **`cliforge`** (`github.com/rios0rios0/cliforge`) — CLI framework: self-update, version commands, startup update checks
 - **`testkit`** (`github.com/rios0rios0/testkit`) — Test builder base classes
