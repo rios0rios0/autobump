@@ -22,7 +22,7 @@ commit the changes, push the commits, and create a merge request/pull request on
 AutoBump supports automatic language detection and version updates for:
 
 - **Dart/Flutter**: Detects via `pubspec.yaml`, updates its `version` field. A Flutter build number is carried across the bump and incremented (`1.2.3+7` → `1.3.0+8`), preserving zero padding, because stores reject an upload whose build number did not increase
-- **Go**: Detects via `go.mod`; versions managed through git tags; APIs documented with Swagger (`swaggo`) also get the `@version` annotation in the entrypoint (`main.go`, `cmd/main.go`, or `cmd/*/main.go`) and the generated `docs.go`/`swagger.json`/`swagger.yaml` — or `openapi.json`/`openapi.yaml`, the OpenAPI 3 names the `swag` output is commonly renamed to — (under `docs/`, `cmd/docs/`, or `cmd/*/docs/`) updated
+- **Go**: Detects via `go.mod`; versions managed through git tags; APIs documented with Swagger (`swaggo`) also get the `@version` annotation in the entrypoint (`main.go`, `cmd/main.go`, or `cmd/*/main.go`) and the generated `docs.go`/`swagger.json`/`swagger.yaml` — or `openapi.json`/`openapi.yaml`, the OpenAPI 3 names the `swag` output is commonly renamed to — (under `docs/`, `cmd/docs/`, or `cmd/*/docs/`) updated; a library released at v2 or later also has its [module path](#go-module-major-versions) moved to the new major
 - **Helm**: Detects via `Chart.yaml`, updates the `version` field in `Chart.yaml`
 - **Java**: Detects via `build.gradle`, `pom.xml`, updates `build.gradle` and `application.yaml`
 - **Python**: Detects via `pyproject.toml`, `setup.py`, updates `__init__.py`
@@ -628,6 +628,41 @@ changelog_path: 'CHANGELOG_PROPRIETARY.md'
 versioning: 'fork-dot'
 ```
 
+## Go Module Major Versions
+
+Go requires a module released at v2 or later to carry its major version in its path:
+`github.com/acme/lib` up to v1, then `github.com/acme/lib/v2`. Go rejects a `v2.0.0` tag whose
+`go.mod` still declares the unsuffixed path, so `go get` never sees that release. Consumers stay
+on the newest v1, or on a pseudo-version, and `go get -u` never moves them.
+
+When a release crosses that line, AutoBump makes the change in the bump commit:
+
+- **`go.mod`** declares the path for the released major. A breaking release moves
+  `github.com/acme/lib/v4` to `github.com/acme/lib/v5`, and the first v2 release moves
+  `github.com/acme/lib` to `github.com/acme/lib/v2`.
+- **Imports** of the module's own packages move with it. Only the import paths change, and a
+  gofmt-clean file stays gofmt-clean.
+- **Other references** move too: install commands (`go get`, `go install`), quoted import paths
+  and inline code in the docs, `pkg.go.dev` links, and linker `-X` flags. Repository links such as
+  `https://github.com/acme/lib/releases` stay as they are. So do the changelog and the chlog
+  fragments, which are history.
+- **The release notes** say so. A new major gets a `**BREAKING CHANGE:**` entry naming the new path.
+  Sometimes a path falls behind a major that was already released: the repository is tagged
+  `v4.x`, but `go.mod` still declares the unsuffixed path. The next release repairs that, with an
+  entry under `Fixed`, so the version it calls for doesn't change.
+- **The pull request** lists the rewrite and reminds reviewers that consumers' imports change.
+
+It applies only to modules whose versions Go actually resolves, which means repositories that
+carry a `vX.Y.Z` tag. Go reads no other tag, so an application released as binaries under plain
+`X.Y.Z` tags is never fetched by version, and renaming its module would rewrite every import for
+no reader. Fork versioning modes are skipped too.
+
+The rewrite only touches files the repository tracks. It skips vendored code, `testdata`,
+`node_modules`, symlinks and submodules. A nested module (a directory with its own `go.mod`) is
+versioned by its own tags, so it keeps its imports. If one still requires the old path, AutoBump
+warns about it so it can be moved deliberately. A `gopkg.in` path encodes its major as `.vN`
+through the gopkg.in redirector, so it is left alone.
+
 ## How It Works
 
 1. **Repository Discovery** *(run mode with providers)*: Queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations
@@ -636,9 +671,10 @@ versioning: 'fork-dot'
 4. **Version Detection**: Reads the current version from CHANGELOG.md
 5. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
 6. **Refresh**: Regenerates the lockfile when [`refresh`](#refresh) is on, so it travels in the same commit
-7. **CHANGELOG Update**: Folds in any pending [chlog](#fragment-based-changelogs-chlog) fragments, applies the [changelog rules](#changelog-rules), and moves the result to the new version section with the current date
-8. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
-9. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
+7. **Go Module Path**: Moves a Go library's module path, imports and install instructions to the released major version when they name an older one (see [Go Module Major Versions](#go-module-major-versions))
+8. **CHANGELOG Update**: Folds in any pending [chlog](#fragment-based-changelogs-chlog) fragments, applies the [changelog rules](#changelog-rules), and moves the result to the new version section with the current date
+9. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
+10. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
 
 ## Contributing
 
