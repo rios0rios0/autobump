@@ -70,7 +70,8 @@ func createGoLibraryRepo(
 
 	for name, content := range files {
 		fullPath := filepath.Join(repoPath, filepath.FromSlash(name))
-		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o755))
+		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o700))
 		require.NoError(t, os.WriteFile(fullPath, []byte(content), 0o644))
 		_, err = wt.Add(name)
 		require.NoError(t, err)
