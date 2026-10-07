@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added the Go module major version rewrite: a release of a Go library (a repository with `vX.Y.Z` tags) whose module path names an older major than the version it publishes now moves `go.mod`, the module''s own imports and the references to it in the docs, build scripts and linker flags to the `/vN` path Go requires of a v2+ release, and announces it in the release notes, as a breaking change for a new major and under Fixed for a path that fell behind an earlier one, so consumers can resolve the release instead of being stuck on pseudo-versions'
-time: '2026-10-06T20:25:55.286098518Z'

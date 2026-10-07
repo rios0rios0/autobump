@@ -22,6 +22,25 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-10-07
+
+### Added
+
+- added the Go module major version rewrite: a release of a Go library (a repository with `vX.Y.Z` tags) whose module path names an older major than the version it publishes now moves `go.mod`, the module's own imports and the references to it in the docs, build scripts and linker flags to the `/vN` path Go requires of a v2+ release, and announces it in the release notes, as a breaking change for a new major and under Fixed for a path that fell behind an earlier one, so consumers can resolve the release instead of being stuck on pseudo-versions
+
+### Changed
+
+- changed `install.sh` to stop using `local`, which POSIX `sh` does not define, so the script runs under any POSIX shell and passes ShellCheck
+- changed the Go module dependencies to their latest versions
+
+### Fixed
+
+- fixed `install.sh` ending in a 404 on 32-bit x86 and ARM machines, for a release asset that is never built: it now stops with a message that releases are published for amd64 and arm64 only
+- fixed `install.sh` failing with a 404 for every pinned version: it prefixed the version given with `--version` or `AUTOBUMP_VERSION` with a `v` that the release tags do not carry, so it now accepts `1.0.0` and `v1.0.0` alike, and pointed the README example at a release that has assets
+- fixed `install.sh` installing the Windows binary without its `.exe` extension, which left it unrunnable from PowerShell and cmd: it now installs `autobump.exe` and checks for `unzip` before downloading
+- fixed a release dropping a changelog entry whose words a longer entry about other libraries happened to contain, such as a one-library dependency bump next to a line naming that library and another: the release deduplication now compares two entries word by word only when they name the same backticked identifiers, through gitforge moving from `github.com/rios0rios0/gitforge` `v1.0.1-0.20260827000225-8c05a4730240` to `github.com/rios0rios0/gitforge/v4` `v4.2.10`, the first release Go resolves at its major version
+- fixed shell completion checking for a newer release: `completion`, which a shell runs from its startup file, and the `__complete` requests behind every TAB press each started a lookup that never answered before they exited, spending the day's update check where nobody could see it
+
 ## [3.2.0] - 2026-09-30
 
 ### Added
