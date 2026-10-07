@@ -119,6 +119,12 @@ type RepoContext struct {
 	// GoModulePathChange is the module path rewrite the release made, nil when it made
 	// none. It is kept so the pull request can say what moved.
 	GoModulePathChange *GoModulePathChange
+
+	// ToolingDir is where the lockfile refresh keeps its package managers' caches and
+	// temporary files: the `tooling/` directory of a remote repository's workspace, which
+	// is removed with the clone. It is empty for a local project, whose refresh runs in
+	// the operator's own checkout with the operator's own caches.
+	ToolingDir string
 }
 
 // langIDJava is the user-facing config key alias shared by all Java langforge variants
@@ -236,11 +242,16 @@ func detectByExtensions(globalConfig *entities.GlobalConfig, absPath string) (st
 	return detected, nil
 }
 
-// cloneRepo clones a remote repository into a temporary directory.
+// cloneRepo clones a remote repository into a new workspace (see workspace.go) and
+// returns the workspace's root.
+//
+// The root is returned with the error too, whenever the directory was created: a clone
+// that fails halfway leaves the directory behind as surely as one that succeeds, so the
+// caller removes it either way.
 func cloneRepo(ctx *RepoContext) (string, error) {
-	tmpDir, err := os.MkdirTemp("", "autobump-")
+	root, err := newRepositoryWorkspace()
 	if err != nil {
-		return "", fmt.Errorf("failed to create temporary directory: %w", err)
+		return root, err
 	}
 
 	serviceType := gitOps.GetServiceTypeByURL(ctx.ProjectConfig.Path)
@@ -251,14 +262,16 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 		ctx.ProjectConfig,
 	)
 
-	repo, err := gitOps.CloneRepo(ctx.ProjectConfig.Path, tmpDir, authMethods)
+	repoDir := workspaceRepoPath(root)
+	repo, err := gitOps.CloneRepo(ctx.ProjectConfig.Path, repoDir, authMethods)
 	if err != nil {
-		return "", err
+		return root, err
 	}
 
 	ctx.Repo = repo
-	ctx.ProjectConfig.Path = tmpDir
-	return tmpDir, nil
+	ctx.ProjectConfig.Path = repoDir
+	ctx.ToolingDir = workspaceToolingPath(root)
+	return root, nil
 }
 
 func createPullRequest(
@@ -541,7 +554,7 @@ func updateChangelogAndVersionFiles(ctx *RepoContext, changelogPath string) erro
 			return err
 		}
 
-		refreshedFiles, err = runRefreshCommands(ctx.GlobalConfig, ctx.ProjectConfig)
+		refreshedFiles, err = runRefreshCommands(ctx.GlobalConfig, ctx.ProjectConfig, ctx.ToolingDir)
 		if err != nil {
 			return err
 		}
@@ -925,13 +938,14 @@ func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.Pr
 		return err
 	}
 
-	// Clone repository if needed
-	var tmpDir string
-	tmpDir, err = cloneRepoIfNeeded(ctx)
+	// Clone repository if needed. The workspace is removed on every way out of this
+	// function -- a release opened, nothing to release, a skip requested, or a failure,
+	// the clone's own included -- so no repository leaves anything behind for the next.
+	workspace, err := cloneRepoIfNeeded(ctx)
+	defer removeWorkspace(workspace)
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tmpDir)
 
 	// Load per-project config overrides (must happen after clone so files are available)
 	ctx.GlobalConfig = loadProjectConfigOverrides(ctx.GlobalConfig, ctx.ProjectConfig, ctx.ProjectConfig.Path)

@@ -65,6 +65,10 @@ func (it *RunController) Execute(cmd *cobra.Command, _ []string) {
 		return
 	}
 
+	// A run that was killed could not remove the clone it was working in, and on a
+	// machine that runs AutoBump on a schedule those would pile up from run to run.
+	commands.CleanupStaleWorkspaces()
+
 	// Run provider-based discovery if providers are configured
 	if hasProviders {
 		if validateErr := entities.ValidateProviders(globalConfig.Providers); validateErr != nil {

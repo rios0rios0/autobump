@@ -328,6 +328,23 @@ autobump run
 
 AutoBump will process all configured sources (static project list and/or provider API discovery).
 
+#### Disk Footprint
+
+Every repository AutoBump clones gets one working directory under the system temporary
+directory (`$TMPDIR`, `/tmp` by default), named `autobump-<digits>`. The clone goes there,
+and so does everything the [refresh](#refresh) writes outside the repository: the npm, pnpm,
+Yarn and corepack caches, and every temporary file.
+
+That directory is deleted as soon as AutoBump is done with the repository, whether it
+opened a pull request, found nothing to release, skipped the repository, or failed (a
+failed clone included). A run therefore never holds more than one repository on disk,
+however many it covers. Directories left behind by a run that was killed are removed by the
+next `autobump run` on the same machine once they are 30 minutes old.
+
+Only caches move. Your configuration is still read from where you keep it: `~/.npmrc`,
+`~/.yarnrc.yml` and the registry credentials in them. A local project (`autobump .`, or a
+local path in `projects`) is refreshed in your own checkout, with your own caches.
+
 ## Per-Project Configuration (`.autobump.yaml`)
 
 Drop a `.autobump.yaml` (or `.autobump.yml`, `autobump.yaml`, `autobump.yml`) at the root
@@ -675,6 +692,7 @@ through the gopkg.in redirector, so it is left alone.
 8. **CHANGELOG Update**: Folds in any pending [chlog](#fragment-based-changelogs-chlog) fragments, applies the [changelog rules](#changelog-rules), and moves the result to the new version section with the current date
 9. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
 10. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
+11. **Cleanup**: Deletes the repository's working directory, with the clone and the refresh's caches, whatever the outcome (see [Disk Footprint](#disk-footprint))
 
 ## Contributing
 

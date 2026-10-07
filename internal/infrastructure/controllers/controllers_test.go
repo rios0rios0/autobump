@@ -636,6 +636,9 @@ func TestRootControllerExecute(t *testing.T) {
 func TestRunControllerExecute(t *testing.T) {
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
+	// Execute sweeps the temporary directory for the workspaces a killed run left
+	// behind, and a test has no business sweeping the developer's own.
+	t.Setenv("TMPDIR", t.TempDir())
 	require.NoError(t, os.WriteFile(
 		filepath.Join(fakeHome, ".gitconfig"),
 		[]byte("[user]\n\tname = Test User\n\temail = test@test.com\n"),

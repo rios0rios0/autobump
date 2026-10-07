@@ -42,7 +42,7 @@ func TestRunRefreshCommands(t *testing.T) {
 		globalConfig, projectConfig := refreshConfig(dir, "typescript", false)
 
 		// when
-		files, err := commands.RunRefreshCommands(globalConfig, projectConfig)
+		files, err := commands.RunRefreshCommands(globalConfig, projectConfig, "")
 
 		// then
 		require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestRunRefreshCommands(t *testing.T) {
 		globalConfig, projectConfig := refreshConfig(t.TempDir(), "golang", true)
 
 		// when
-		files, err := commands.RunRefreshCommands(globalConfig, projectConfig)
+		files, err := commands.RunRefreshCommands(globalConfig, projectConfig, "")
 
 		// then
 		require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestRunRefreshCommands(t *testing.T) {
 		globalConfig, projectConfig := refreshConfig(t.TempDir(), "typescript", true)
 
 		// when
-		files, err := commands.RunRefreshCommands(globalConfig, projectConfig)
+		files, err := commands.RunRefreshCommands(globalConfig, projectConfig, "")
 
 		// then
 		require.NoError(t, err)
@@ -86,7 +86,7 @@ func TestRunRefreshCommands(t *testing.T) {
 		projectConfig.Language = ""
 
 		// when
-		files, err := commands.RunRefreshCommands(globalConfig, projectConfig)
+		files, err := commands.RunRefreshCommands(globalConfig, projectConfig, "")
 
 		// then
 		require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestRunRefreshCommandsWithoutPackageManager(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
 	// when
-	files, err := commands.RunRefreshCommands(globalConfig, projectConfig)
+	files, err := commands.RunRefreshCommands(globalConfig, projectConfig, "")
 
 	// then
 	require.ErrorIs(t, err, commands.ErrRefreshManagerMissing)
@@ -129,7 +129,7 @@ func TestRunRefreshCommandBounds(t *testing.T) {
 		// when
 		started := time.Now()
 		err := commands.RunRefreshRecipe(
-			t.TempDir(), run, []string{"yarn.lock"}, nil, time.Minute, 200*time.Millisecond,
+			t.TempDir(), "", run, []string{"yarn.lock"}, nil, time.Minute, 200*time.Millisecond,
 		)
 		elapsed := time.Since(started)
 
@@ -150,7 +150,7 @@ func TestRunRefreshCommandBounds(t *testing.T) {
 		// when
 		started := time.Now()
 		err := commands.RunRefreshRecipe(
-			dir, run, []string{"survivor.txt"}, nil, 200*time.Millisecond, time.Second,
+			dir, "", run, []string{"survivor.txt"}, nil, 200*time.Millisecond, time.Second,
 		)
 		elapsed := time.Since(started)
 

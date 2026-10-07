@@ -47,9 +47,13 @@ var ErrRefreshManagerMissing = errors.New("refresh package manager not found")
 // A failure aborts the release. The refresh exists to keep a derived file in step with the
 // version files, so continuing past a failure would open exactly the pull request it is
 // meant to prevent.
+//
+// toolingDir is where the package manager keeps its caches and temporary files (see
+// refreshEnv); empty leaves it on the process environment.
 func runRefreshCommands(
 	globalConfig *entities.GlobalConfig,
 	projectConfig *entities.ProjectConfig,
+	toolingDir string,
 ) ([]string, error) {
 	if projectConfig.Language == "" {
 		return nil, nil
@@ -86,7 +90,7 @@ func runRefreshCommands(
 	}
 
 	err := runRefreshRecipe(
-		projectConfig.Path, recipe, refreshCommandTimeout, refreshCommandWaitDelay,
+		projectConfig.Path, toolingDir, recipe, refreshCommandTimeout, refreshCommandWaitDelay,
 	)
 	if err != nil {
 		return nil, err
@@ -109,6 +113,7 @@ func runRefreshCommands(
 // can exercise both bounds without waiting minutes for them.
 func runRefreshRecipe(
 	projectPath string,
+	toolingDir string,
 	recipe refreshRecipe,
 	timeout time.Duration,
 	waitDelay time.Duration,
@@ -124,7 +129,7 @@ func runRefreshRecipe(
 	// config only says whether to refresh.
 	command := exec.CommandContext(ctx, recipe.Run[0], recipe.Run[1:]...)
 	command.Dir = projectPath
-	command.Env = append(os.Environ(), recipe.Env...)
+	command.Env = append(refreshEnv(toolingDir), recipe.Env...)
 	command.WaitDelay = waitDelay
 	configureProcessGroup(command)
 

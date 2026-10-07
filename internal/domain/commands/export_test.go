@@ -182,15 +182,31 @@ var ResolveRefreshedFiles = resolveRefreshedFiles //nolint:gochecknoglobals // t
 // rather than read from configuration -- which is the point of the redesign: production
 // recipes are compile-time constants, so the bounds tests need a synthetic one.
 func RunRefreshRecipe(
-	projectPath string, run, files, env []string,
+	projectPath, toolingDir string, run, files, env []string,
 	timeout time.Duration, waitDelay time.Duration,
 ) error {
 	return runRefreshRecipe(
 		projectPath,
+		toolingDir,
 		refreshRecipe{Manager: "test", Run: run, Files: files, Env: env},
 		timeout, waitDelay,
 	)
 }
+
+// RefreshEnv exports refreshEnv for testing.
+var RefreshEnv = refreshEnv //nolint:gochecknoglobals // test export
+
+// NewRepositoryWorkspace exports newRepositoryWorkspace for testing.
+var NewRepositoryWorkspace = newRepositoryWorkspace //nolint:gochecknoglobals // test export
+
+// RemoveWorkspace exports removeWorkspace for testing.
+var RemoveWorkspace = removeWorkspace //nolint:gochecknoglobals // test export
+
+// WorkspaceRepoPath exports workspaceRepoPath for testing.
+var WorkspaceRepoPath = workspaceRepoPath //nolint:gochecknoglobals // test export
+
+// WorkspaceToolingPath exports workspaceToolingPath for testing.
+var WorkspaceToolingPath = workspaceToolingPath //nolint:gochecknoglobals // test export
 
 // DetectNodeRecipe exports detectNodeRecipe for testing, flattening the unexported recipe
 // into the manager name and argv a test can assert on.
