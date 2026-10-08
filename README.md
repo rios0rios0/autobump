@@ -339,7 +339,9 @@ That directory is deleted as soon as AutoBump is done with the repository, wheth
 opened a pull request, found nothing to release, skipped the repository, or failed (a
 failed clone included). A run therefore never holds more than one repository on disk,
 however many it covers. Directories left behind by a run that was killed are removed by the
-next `autobump run` on the same machine once they are 30 minutes old.
+next `autobump run` on the same machine once they are 30 minutes old. Only directories named
+exactly `autobump-` followed by digits are touched, so one of your own such as
+`autobump-3.3.0` is left alone.
 
 Only caches move. Your configuration is still read from where you keep it: `~/.npmrc`,
 `~/.yarnrc.yml` and the registry credentials in them. A local project (`autobump .`, or a

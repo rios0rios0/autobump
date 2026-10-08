@@ -54,8 +54,8 @@ func TestNewRepositoryWorkspace(t *testing.T) {
 		require.NoError(t, err)
 		//nolint:usetesting // the system temporary directory is what is being tested
 		assert.Equal(t, filepath.Clean(os.TempDir()), filepath.Dir(root))
-		assert.Regexp(t, `^autobump-[0-9]`, filepath.Base(root),
-			"the stale-workspace sweep matches the workspace by this name")
+		assert.True(t, commands.IsWorkspaceName(filepath.Base(root)),
+			"the stale-workspace sweep only removes a directory it recognises by name, got %q", filepath.Base(root))
 		assert.NoDirExists(t, commands.WorkspaceRepoPath(root), "the clone creates its own directory")
 		assert.DirExists(t, filepath.Join(commands.WorkspaceToolingPath(root), "tmp"),
 			"mktemp fails in a TMPDIR that does not exist")
@@ -176,13 +176,21 @@ func TestCleanupStaleWorkspaces(t *testing.T) {
 		running := filepath.Join(tmpDir, "autobump-7654321")
 		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		require.NoError(t, os.MkdirAll(running, 0o700))
-		notOurs := filepath.Join(tmpDir, "autobump-notes")
-		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
-		require.NoError(t, os.MkdirAll(notOurs, 0o700))
+		// An operator's own directories: only a digit run and nothing else is a name
+		// MkdirTemp produces, so a version, a suffix or a word after the prefix is not.
+		notOurs := []string{
+			filepath.Join(tmpDir, "autobump-notes"),
+			filepath.Join(tmpDir, "autobump-3.3.0"),
+			filepath.Join(tmpDir, "autobump-1-wip"),
+		}
+		for _, dir := range notOurs {
+			// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+			require.NoError(t, os.MkdirAll(dir, 0o700))
+		}
 		notADirectory := filepath.Join(tmpDir, "autobump-2024.log")
 		require.NoError(t, os.WriteFile(notADirectory, []byte("log\n"), 0o600))
 		past := time.Now().Add(-time.Hour)
-		for _, path := range []string{abandoned, notOurs, notADirectory} {
+		for _, path := range append([]string{abandoned, notADirectory}, notOurs...) {
 			require.NoError(t, os.Chtimes(path, past, past))
 		}
 
@@ -192,8 +200,32 @@ func TestCleanupStaleWorkspaces(t *testing.T) {
 		// then
 		assert.NoDirExists(t, abandoned)
 		assert.DirExists(t, running, "a run still in progress keeps its workspace")
-		assert.DirExists(t, notOurs, "only names MkdirTemp produces are swept")
+		for _, dir := range notOurs {
+			assert.DirExists(t, dir, "only names MkdirTemp produces are swept")
+		}
 		assert.FileExists(t, notADirectory, "only directories are swept")
+	})
+
+	t.Run("should leave a link named like a workspace, and what it points to, alone", func(t *testing.T) {
+		// given -- an old directory elsewhere, linked into the temporary directory under
+		// a name the sweep would otherwise take
+		tmpDir := t.TempDir()
+		t.Setenv("TMPDIR", tmpDir)
+		target := t.TempDir()
+		kept := filepath.Join(target, "kept.txt")
+		require.NoError(t, os.WriteFile(kept, []byte("kept\n"), 0o600))
+		past := time.Now().Add(-time.Hour)
+		require.NoError(t, os.Chtimes(target, past, past))
+		link := filepath.Join(tmpDir, "autobump-1234567")
+		require.NoError(t, os.Symlink(target, link))
+
+		// when
+		commands.CleanupStaleWorkspaces()
+
+		// then
+		_, err := os.Lstat(link)
+		require.NoError(t, err, "the link itself is not a workspace")
+		assert.FileExists(t, kept)
 	})
 }
 

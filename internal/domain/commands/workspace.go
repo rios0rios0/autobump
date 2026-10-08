@@ -4,19 +4,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	logger "github.com/sirupsen/logrus"
 )
 
 // workspacePrefix names the directory a remote repository is cloned into, as an
-// [os.MkdirTemp] pattern. MkdirTemp appends a run of digits to it.
+// [os.MkdirTemp] pattern. MkdirTemp appends a run of digits to it and nothing else,
+// which is what isWorkspaceName relies on.
 const workspacePrefix = "autobump-"
-
-// staleWorkspaceGlob matches what workspacePrefix produces and, because the sweep
-// deletes whatever it matches, as little else as possible: a digit must follow the
-// prefix, so an operator's own `autobump-notes` in the temporary directory is safe.
-const staleWorkspaceGlob = workspacePrefix + "[0-9]*"
 
 // staleWorkspaceAge is how old a workspace must be before the sweep treats it as
 // abandoned. A repository takes seconds to release, so anything this old belongs to
@@ -117,20 +114,44 @@ func refreshEnv(toolingDir string) []string {
 	return env
 }
 
+// isWorkspaceName reports whether name is one [os.MkdirTemp] could have given a
+// workspace: the prefix followed by digits and nothing else. The sweep deletes whatever
+// this accepts, so it is exact -- an operator's own `autobump-notes`, `autobump-3.3.0` or
+// `autobump-1-wip` in the temporary directory is not a workspace.
+func isWorkspaceName(name string) bool {
+	digits, found := strings.CutPrefix(name, workspacePrefix)
+	return found && digits != "" && strings.Trim(digits, "0123456789") == ""
+}
+
 // CleanupStaleWorkspaces removes the workspaces a run left behind because it was killed
 // (SIGKILL, out of memory) before ProcessRepo could remove them. Each one holds a whole
 // clone, so on a machine that runs AutoBump on a schedule they would otherwise pile up
 // run after run. Only workspaces older than staleWorkspaceAge are touched, so a run
 // still in progress beside this one keeps its own.
+//
+// It lists the temporary directory instead of globbing it, because a glob cannot say
+// "digits and nothing else" and the sweep deletes whatever it selects.
 func CleanupStaleWorkspaces() {
-	matches, _ := filepath.Glob(filepath.Join(os.TempDir(), staleWorkspaceGlob))
+	tempDir := os.TempDir()
+	// A listing cut short by an error still returns the entries it read, and those are
+	// judged like any other.
+	entries, err := os.ReadDir(tempDir)
+	if err != nil {
+		logger.Debugf("Could not list the temporary directory %s: %v", tempDir, err)
+	}
 	cutoff := time.Now().Add(-staleWorkspaceAge)
-	for _, match := range matches {
-		info, err := os.Lstat(match)
-		if err != nil || !info.IsDir() || info.ModTime().After(cutoff) {
+	for _, entry := range entries {
+		// An entry describes a symbolic link as a link, never as the directory it points
+		// to, so a link named like a workspace is skipped rather than followed.
+		if !entry.IsDir() || !isWorkspaceName(entry.Name()) {
 			continue
 		}
-		logger.Debugf("Removing the stale workspace %s", match)
-		removeWorkspace(match)
+		info, infoErr := entry.Info()
+		if infoErr != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		workspace := filepath.Join(tempDir, entry.Name())
+		logger.Debugf("Removing the stale workspace %s", workspace)
+		removeWorkspace(workspace)
 	}
 }

@@ -208,6 +208,9 @@ var WorkspaceRepoPath = workspaceRepoPath //nolint:gochecknoglobals // test expo
 // WorkspaceToolingPath exports workspaceToolingPath for testing.
 var WorkspaceToolingPath = workspaceToolingPath //nolint:gochecknoglobals // test export
 
+// IsWorkspaceName exports isWorkspaceName for testing.
+var IsWorkspaceName = isWorkspaceName //nolint:gochecknoglobals // test export
+
 // DetectNodeRecipe exports detectNodeRecipe for testing, flattening the unexported recipe
 // into the manager name and argv a test can assert on.
 func DetectNodeRecipe(projectPath string) (string, []string, []string, bool) {
