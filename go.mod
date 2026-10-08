@@ -6,10 +6,10 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/go-git/go-git/v5 v5.19.3
-	github.com/rios0rios0/cliforge v0.4.7
+	github.com/rios0rios0/cliforge v0.5.0
 	github.com/rios0rios0/gitforge/v4 v4.2.10
-	github.com/rios0rios0/langforge v1.1.7
-	github.com/rios0rios0/testkit v0.3.4
+	github.com/rios0rios0/langforge v1.1.8
+	github.com/rios0rios0/testkit v0.3.5
 	github.com/sirupsen/logrus v1.10.2
 	github.com/skeema/knownhosts v1.3.3
 	github.com/spf13/cobra v1.10.2
