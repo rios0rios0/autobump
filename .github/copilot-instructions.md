@@ -166,6 +166,7 @@ autobump/
 - `SortChangelogEntries(lines) []string` -- sorts bullet entries alphabetically (case-insensitive) within contiguous runs
 - `UnwrapChangelogEntries(lines) []string` -- joins a bullet with its continuation lines into one physical line, over the whole document (not only `[Unreleased]`); always runs before `SortChangelogEntries`. Only wrapped prose is joined -- a nested list item, a fenced code block and an indented `#` are left as they are
 - `IsChangelogUnreleasedEmpty(lines) (bool, error)` -- checks whether the unreleased section has any entries
+- `ProcessRepo` clones a remote repository into a workspace (`workspace.go`: `autobump-<digits>` under the temporary directory, clone in `repo/`, refresh caches in `tooling/`) and defers `removeWorkspace` before checking the clone's error, so every outcome -- release, nothing to release, skip, failure -- removes it. `refreshEnv` points the refresh's package managers at `tooling/` (caches only; never `YARN_CACHE_FOLDER` or `npm_config_store_dir`), and `CleanupStaleWorkspaces` sweeps what a killed run left behind -- only directories named exactly `autobump-<digits>` (`isWorkspaceName`), never a glob match, since it deletes whatever it selects
 
 ## CLI Commands
 

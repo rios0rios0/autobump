@@ -695,10 +695,13 @@ func TestCloneRepoIfNeeded(t *testing.T) {
 		}
 
 		// when
-		_, err := commands.CloneRepoIfNeeded(ctx)
+		workspace, err := commands.CloneRepoIfNeeded(ctx)
+		t.Cleanup(func() { commands.RemoveWorkspace(workspace) })
 
-		// then -- should fail at clone (invalid repo) but the path is exercised
+		// then -- should fail at clone (invalid repo), and still hand back the workspace
+		// the clone was attempted in, so the caller can remove it
 		require.Error(t, err)
+		assert.DirExists(t, workspace)
 	})
 
 	t.Run("should attempt clone for git@ path", func(t *testing.T) {
@@ -717,10 +720,13 @@ func TestCloneRepoIfNeeded(t *testing.T) {
 		}
 
 		// when
-		_, err := commands.CloneRepoIfNeeded(ctx)
+		workspace, err := commands.CloneRepoIfNeeded(ctx)
+		t.Cleanup(func() { commands.RemoveWorkspace(workspace) })
 
-		// then -- should fail at clone (no auth) but the path is exercised
+		// then -- should fail at clone (no auth), and still hand back the workspace the
+		// clone was attempted in, so the caller can remove it
 		require.Error(t, err)
+		assert.DirExists(t, workspace)
 	})
 }
 
