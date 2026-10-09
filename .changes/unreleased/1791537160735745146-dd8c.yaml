@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the Go modules `github.com/Microsoft/go-winio` from `v0.6.2` to `v0.6.3` and `golang.org/x/net` from `v0.59.0` to `v0.60.0`'
+time: '2026-10-09T09:12:40.735745146Z'
