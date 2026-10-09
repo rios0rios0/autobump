@@ -1,6 +1,6 @@
 module github.com/rios0rios0/autobump
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -22,7 +22,7 @@ require (
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
-	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/Microsoft/go-winio v0.6.3 // indirect
 	github.com/ProtonMail/go-crypto v1.5.2 // indirect
 	github.com/cloudflare/circl v1.6.5 // indirect
 	github.com/cyphar/filepath-securejoin v0.7.0 // indirect
@@ -43,7 +43,7 @@ require (
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	gitlab.com/gitlab-org/api/client-go v1.46.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
