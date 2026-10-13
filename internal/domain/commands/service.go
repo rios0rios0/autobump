@@ -1248,9 +1248,11 @@ func resolveToken(
 		return globalConfig.GitLabCIJobToken
 	case entities.AZUREDEVOPS:
 		return globalConfig.AzureDevOpsAccessToken
-	default:
-		return ""
+	case entities.UNKNOWN, entities.BITBUCKET, entities.CODECOMMIT, entities.CODEBERG:
+		// These services have no global token of their own.
 	}
+
+	return ""
 }
 
 // collectTokens returns all possible tokens for authentication, ordered by priority.
@@ -1281,6 +1283,8 @@ func collectTokens(
 		if globalConfig.AzureDevOpsAccessToken != "" {
 			tokens = append(tokens, globalConfig.AzureDevOpsAccessToken)
 		}
+	case entities.UNKNOWN, entities.BITBUCKET, entities.CODECOMMIT, entities.CODEBERG:
+		// These services have no global token of their own.
 	}
 
 	return tokens
