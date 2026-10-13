@@ -7,14 +7,17 @@ import (
 // ServiceType is re-exported from gitforge.
 type ServiceType = gitforgeEntities.ServiceType
 
-//nolint:gochecknoglobals // re-exported constants from gitforge
-var (
+// Re-exported constants from gitforge. They must stay constants: the
+// `exhaustive` linter only credits `const` members as switch cases, so a
+// `var` alias would make every switch over `ServiceType` look non-exhaustive.
+const (
 	UNKNOWN     = gitforgeEntities.UNKNOWN
 	GITHUB      = gitforgeEntities.GITHUB
 	GITLAB      = gitforgeEntities.GITLAB
 	AZUREDEVOPS = gitforgeEntities.AZUREDEVOPS
 	BITBUCKET   = gitforgeEntities.BITBUCKET
 	CODECOMMIT  = gitforgeEntities.CODECOMMIT
+	CODEBERG    = gitforgeEntities.CODEBERG
 )
 
 // LatestTag is re-exported from gitforge.
