@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 're-exported the gitforge service types as constants and covered the unhandled services in the token lookup switches, clearing the exhaustive lint failures'
-time: '2026-10-13T14:45:09.112157849Z'
