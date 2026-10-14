@@ -22,6 +22,20 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.3.1] - 2026-10-14
+
+### Changed
+
+- changed the Go modules `github.com/Microsoft/go-winio` from `v0.6.2` to `v0.6.3` and `golang.org/x/net` from `v0.59.0` to `v0.61.0`
+- changed the Go modules `github.com/rios0rios0/cliforge` from `v0.4.7` to `v0.5.0`, `github.com/rios0rios0/langforge` from `v1.1.7` to `v1.1.8` and `github.com/rios0rios0/testkit` from `v0.3.4` to `v0.3.5`
+- changed the Go modules `golang.org/x/crypto` from `v0.57.0` to `v0.58.0`, `golang.org/x/mod` from `v0.41.0` to `v0.42.0`, `golang.org/x/sys` from `v0.48.0` to `v0.49.0` and `golang.org/x/term` from `v0.46.0` to `v0.47.0`
+- changed the Go version from `1.27.1` to `1.27.2`
+
+### Fixed
+
+- fixed `autobump run` leaving files behind on the machine it runs on as it moved through an organization: every cloned repository now gets one working directory holding the clone and the npm, pnpm, Yarn and corepack caches and temporary files of the lockfile refresh, and it is deleted on every outcome, a failed clone included, which used to leave its directory in the temporary directory; directories left by a killed run are swept by the next `autobump run` once they are 30 minutes old
+- re-exported the gitforge service types as constants and covered the unhandled services in the token lookup switches, clearing the exhaustive lint failures
+
 ## [3.3.0] - 2026-10-07
 
 ### Added
