@@ -185,6 +185,20 @@ only when the remote is SSH *and* no SSH method was collected, so it never displ
 specific failure or fires on a token-authenticated HTTPS push. `sshEnvironment` is plain
 data so the message is tested by constructing host facts rather than a host.
 
+Host key verification is a file problem rather than an agent one, and gets its own
+discovery: `internal/domain/commands/ssh_known_hosts.go` builds the callback from
+`SSH_KNOWN_HOSTS` (which replaces discovery when set, as in go-git), `~/.ssh/known_hosts`,
+`/etc/ssh/ssh_known_hosts` and — under WSL, reusing `runningUnderWSL` — every Windows
+profile's `known_hosts` under the automount root, honouring `[automount] root`/`enabled`
+in `/etc/wsl.conf`. A WSL setup that delegates SSH to Windows keeps its host keys in
+`/mnt/c/Users/<name>/.ssh/` only, and without them go-git fails every SSH operation with
+"unable to find any valid known_hosts file" *before a credential is even attempted*. The
+callback is memoized per process — it used to be rebuilt, and its warnings repeated, per
+auth method — and `main.go` hands the same callback to gitforge's
+`SetDefaultSSHHostKeyCallback`, so gitforge's default SSH agent fallback (the push and
+remote listing it performs with no explicit auth method) verifies against the same
+discovery instead of go-git's own blind lookup.
+
 **Everything that reaches the renderers has already failed to dial**, and forgetting it
 produced the one bug this feature shipped with. `explainSSHPushFailure` runs only after
 `collectSSHAuthMethods` returned nothing, and that function's auto-detect loop dials every

@@ -119,6 +119,18 @@ var UpdateChangelogAndVersionFiles = updateChangelogAndVersionFiles //nolint:goc
 // HostKeyCallback exports hostKeyCallback for testing.
 var HostKeyCallback = hostKeyCallback //nolint:gochecknoglobals // test export
 
+// BuildHostKeyCallback exports buildHostKeyCallback for testing.
+var BuildHostKeyCallback = buildHostKeyCallback //nolint:gochecknoglobals // test export
+
+// DiscoverKnownHostsFiles exports discoverKnownHostsFiles for testing.
+var DiscoverKnownHostsFiles = discoverKnownHostsFiles //nolint:gochecknoglobals // test export
+
+// WindowsKnownHostsFilesUnder exports windowsKnownHostsFilesUnder for testing.
+var WindowsKnownHostsFilesUnder = windowsKnownHostsFilesUnder //nolint:gochecknoglobals // test export
+
+// ParseWSLAutomountRoot exports parseWSLAutomountRoot for testing.
+var ParseWSLAutomountRoot = parseWSLAutomountRoot //nolint:gochecknoglobals // test export
+
 // IterateProjects is already exported (public), no need to re-export.
 
 // ProcessVersionFile exports processVersionFile for testing.
