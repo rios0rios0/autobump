@@ -138,12 +138,19 @@ func TestWindowsKnownHostsFilesUnder(t *testing.T) {
 		root := t.TempDir()
 		alice := filepath.Join(root, "c", "Users", "alice", ".ssh", "known_hosts")
 		carol := filepath.Join(root, "d", "Users", "carol", ".ssh", "known_hosts")
+		// Fixture directories need the owner search bit to be enterable, so 0o700 is
+		// the least-privilege mode a directory can take; the rule compares against
+		// 0600 regardless, as does the one on the 0o755 profile directory below.
+		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		require.NoError(t, os.MkdirAll(filepath.Dir(alice), 0o700))
+		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		require.NoError(t, os.MkdirAll(filepath.Dir(carol), 0o700))
 		require.NoError(t, os.WriteFile(alice, []byte("github.com ssh-ed25519 AAAA\n"), 0o600))
 		require.NoError(t, os.WriteFile(carol, []byte("github.com ssh-ed25519 AAAA\n"), 0o600))
 		// A profile without .ssh, a non-drive directory, and a stray file at the root
+		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		require.NoError(t, os.MkdirAll(filepath.Join(root, "c", "Users", "bob"), 0o755))
+		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		require.NoError(t, os.MkdirAll(filepath.Join(root, "wsl", "Users", "dave", ".ssh"), 0o700))
 		require.NoError(
 			t,
@@ -174,6 +181,7 @@ func TestDiscoverKnownHostsFiles(t *testing.T) {
 	t.Run("should let SSH_KNOWN_HOSTS replace discovery when it names existing files", func(t *testing.T) {
 		// given
 		home := t.TempDir()
+		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700))
 		require.NoError(t, os.WriteFile(filepath.Join(home, ".ssh", "known_hosts"), []byte("a\n"), 0o600))
 		explicit := filepath.Join(t.TempDir(), "explicit_known_hosts")
@@ -199,6 +207,7 @@ func TestDiscoverKnownHostsFiles(t *testing.T) {
 	t.Run("should include the home known_hosts when the env variable is unset", func(t *testing.T) {
 		// given
 		home := t.TempDir()
+		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700))
 		homeFile := filepath.Join(home, ".ssh", "known_hosts")
 		require.NoError(t, os.WriteFile(homeFile, []byte("a\n"), 0o600))
