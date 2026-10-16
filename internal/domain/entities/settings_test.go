@@ -741,6 +741,7 @@ func TestExpandHome(t *testing.T) {
 		assert.Equal(t, expected, value)
 	})
 
+	//nolint:paralleltest // subtests of this group stay sequential: a sibling above calls t.Setenv, and t.Setenv is refused anywhere under a parallel ancestor
 	t.Run("should not modify path when it does not start with ~/", func(t *testing.T) {
 		// given
 		value := "/absolute/path"
@@ -752,6 +753,7 @@ func TestExpandHome(t *testing.T) {
 		assert.Equal(t, "/absolute/path", value)
 	})
 
+	//nolint:paralleltest // subtests of this group stay sequential: a sibling above calls t.Setenv, and t.Setenv is refused anywhere under a parallel ancestor
 	t.Run("should not modify empty string", func(t *testing.T) {
 		// given
 		value := ""

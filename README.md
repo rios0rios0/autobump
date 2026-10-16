@@ -153,6 +153,8 @@ ssh_key_passphrase: ''
 ssh_auth_sock: '~/.1password/agent.sock'
 ```
 
+Host keys are verified against the `known_hosts` files AutoBump discovers — `~/.ssh/known_hosts`, the machine-wide file, and under WSL the Windows profiles' files; set `SSH_KNOWN_HOSTS` to point somewhere else explicitly. See [SSH Authentication on WSL](#ssh-authentication-on-wsl) for the full discovery order.
+
 ### SSH Authentication on WSL
 
 AutoBump pushes with [go-git](https://github.com/go-git/go-git), a pure-Go SSH client. It **never executes the `ssh` binary**, so the usual WSL interop tricks do not apply to the push:
@@ -195,6 +197,17 @@ ssh-add -l                                      # should list the Windows agent'
 Without systemd, `socat UNIX-LISTEN:$SSH_AUTH_SOCK,fork,mode=600 EXEC:'npiperelay.exe -ei -s //./pipe/openssh-ssh-agent'` achieves the same thing.
 
 If you would rather not bridge, either point `ssh_key_path` at a key stored inside WSL, or use an HTTPS remote so the push authenticates with the provider token instead.
+
+#### Host key verification (known_hosts)
+
+Before any credential is tried, go-git verifies the server's host key against a `known_hosts` file. AutoBump discovers the files in this order:
+
+1. `SSH_KNOWN_HOSTS` (a colon-separated list) — when set it replaces discovery entirely, the same semantics go-git itself applies;
+2. `~/.ssh/known_hosts` inside WSL;
+3. `/etc/ssh/ssh_known_hosts` (machine-wide);
+4. every Windows profile's `known_hosts` reachable through the WSL automount root — `/mnt/c/Users/*/.ssh/known_hosts` by default, honouring `[automount] root` and `enabled` in `/etc/wsl.conf`.
+
+So when your SSH life happens on the Windows side (`ssh.exe`, Git for Windows, a bridged Windows agent), the host keys it already trusts are picked up automatically — no need to duplicate the file into WSL, and Windows-written CRLF files parse fine. The same discovery backs gitforge's default SSH agent fallback, so the push and the stale-branch listing verify against the same files instead of failing with "unable to find any valid known_hosts file".
 
 ### Stale Branch Cleanup
 

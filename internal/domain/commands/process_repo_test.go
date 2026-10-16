@@ -30,6 +30,7 @@ func TestProcessRepoIntegration(t *testing.T) {
 		0o644,
 	))
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should return error when changelog_path escapes project root", func(t *testing.T) {
 		// given
 		repoPath, _ := createTestRepo(t)
@@ -53,6 +54,7 @@ func TestProcessRepoIntegration(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid changelog_path")
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should skip when unreleased section is empty", func(t *testing.T) {
 		// given
 		repoPath, _ := createTestRepo(t)
@@ -75,6 +77,7 @@ func TestProcessRepoIntegration(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should create bump branch and update files when unreleased entries exist", func(t *testing.T) {
 		// given
 		fixture := newBumpFixture(t,
@@ -92,6 +95,7 @@ func TestProcessRepoIntegration(t *testing.T) {
 		assert.Contains(t, fixture.readChangelog(t), "[1.1.0]")
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should release chlog fragments and stage their removal when the project uses chlog", func(t *testing.T) {
 		// given — the unreleased section is empty, exactly as chlog leaves it: the pending
 		// work lives in the fragments, which is what AutoBump used to miss entirely
@@ -124,6 +128,7 @@ func TestProcessRepoIntegration(t *testing.T) {
 		assert.Empty(t, status, "the commit should have captured the changelog and both fragment removals")
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should leave the repository untouched when its own .autobump.yaml requests a skip", func(t *testing.T) {
 		// given -- pending entries that would otherwise be released, and the skip committed
 		// beside them, the way a mirror or a fork released upstream would carry it
@@ -150,6 +155,7 @@ func TestProcessRepoIntegration(t *testing.T) {
 		assert.True(t, status.IsClean(), "the worktree must be exactly as it was found")
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should not create a missing changelog when its own .autobump.yaml requests a skip", func(t *testing.T) {
 		// given -- without the skip, a missing changelog is created, committed and pushed to
 		// the default branch before anything else is decided
@@ -172,6 +178,7 @@ func TestProcessRepoIntegration(t *testing.T) {
 		assert.Equal(t, headBefore, fixture.headRef(t), "no changelog commit may be made")
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should still release when its own .autobump.yaml sets skip to false", func(t *testing.T) {
 		// given
 		fixture := newBumpFixture(t,
@@ -312,6 +319,7 @@ func TestProcessRepoAdditionalBranches(t *testing.T) {
 		t.Setenv("HOME", fakeHome)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should handle custom changelog_path correctly", func(t *testing.T) {
 		// given
 		repoPath, _ := createTestRepo(t)
@@ -339,6 +347,7 @@ func TestProcessRepoAdditionalBranches(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should handle BranchExistsNoPR status", func(t *testing.T) {
 		// given
 		repoPath, repo := createTestRepo(t)
@@ -384,6 +393,8 @@ func TestProcessRepoAdditionalBranches(t *testing.T) {
 }
 
 // TestSetGitOperations is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestSetGitOperations(t *testing.T) {
 	t.Run("should not panic when setting git operations", func(t *testing.T) {
 		// given

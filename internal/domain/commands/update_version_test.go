@@ -68,6 +68,8 @@ func TestUpdateVersion(t *testing.T) {
 	t.Run(
 		"should update project version and not parent version in pom.xml when parent block exists",
 		func(t *testing.T) {
+			t.Parallel()
+
 			// given
 			tmpDir := t.TempDir()
 			pomContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -208,6 +210,8 @@ repositories {
 	})
 
 	t.Run("should update version in build.gradle when using single quotes and no equals sign", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		gradleContent := `plugins {
@@ -245,6 +249,8 @@ repositories {
 	})
 
 	t.Run("should update version in build.gradle when using double quotes and no equals sign", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		gradleContent := `plugins {
@@ -281,6 +287,8 @@ repositories {
 	})
 
 	t.Run("should update version and not appVersion in Chart.yaml", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		chartContent := `apiVersion: v2
@@ -315,6 +323,8 @@ appVersion: "1.0.0"
 	})
 
 	t.Run("should update quoted version in Chart.yaml", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		chartContent := `apiVersion: v2
@@ -348,6 +358,8 @@ appVersion: '1.0.0'
 	})
 
 	t.Run("should update pre-release version in Chart.yaml", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		chartContent := `apiVersion: v2
@@ -382,6 +394,8 @@ appVersion: "1.0.0-beta.2"
 	})
 
 	t.Run("should skip version file updates when language is empty", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{}).
@@ -399,6 +413,8 @@ appVersion: "1.0.0-beta.2"
 	})
 
 	t.Run("should warn and continue when language not found in config", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{}).
@@ -416,6 +432,8 @@ appVersion: "1.0.0-beta.2"
 	})
 
 	t.Run("should warn when no version files configured for language", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithLanguagesConfig(map[string]entities.LanguageConfig{
@@ -437,6 +455,8 @@ appVersion: "1.0.0-beta.2"
 	})
 
 	t.Run("should warn when version files do not exist", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
@@ -462,6 +482,8 @@ appVersion: "1.0.0-beta.2"
 	})
 
 	t.Run("should update version in build.gradle when using equals sign and single quotes", func(t *testing.T) {
+		t.Parallel()
+
 		// given
 		tmpDir := t.TempDir()
 		gradleContent := `plugins {

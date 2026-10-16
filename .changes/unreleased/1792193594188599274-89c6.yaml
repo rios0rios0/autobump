@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the CI style check failing on golangci-lint paralleltest findings: the parallel-safe tests (GitOperations stub and version-file tests) now run with t.Parallel(), and the genuinely sequential ones — tests that mutate package-level globals or use t.Setenv — document that with nolint directives'
+time: '2026-10-16T23:33:14.188429917Z'

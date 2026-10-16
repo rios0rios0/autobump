@@ -19,7 +19,7 @@ import (
 // swapping the second is the only way to observe what it does — hence the reassign
 // suppression.
 //
-//nolint:reassign // see the paragraph above
+//nolint:reassign,paralleltest // see the paragraph above; both subtests also assign commands.AutobumpVersion and swap os.Stdout, so the test cannot run in parallel
 func TestVersionCommand(t *testing.T) {
 	t.Run("should print the version to stdout when executed", func(t *testing.T) {
 		// given

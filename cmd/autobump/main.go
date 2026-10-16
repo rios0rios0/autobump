@@ -188,6 +188,12 @@ func main() {
 	commands.SetGitOperations(gitOps)
 	commands.SetProviderRegistry(providerRegistry)
 
+	// gitforge's default SSH agent fallback — the push and remote listing it performs
+	// with no explicit auth method — must verify hosts against the same known_hosts
+	// discovery AutoBump uses, which under WSL includes the Windows profiles' files,
+	// rather than go-git's own lookup, which fails when ~/.ssh/known_hosts is absent.
+	gitInfra.SetDefaultSSHHostKeyCallback(commands.SSHHostKeyCallback())
+
 	// Inject the root controller and create root command
 	rootController := injectRootController()
 	rootCmd := buildRootCommand(rootController)

@@ -323,6 +323,7 @@ languages:
 func TestResolveConfigLayersFromHome(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should run on the built-in defaults alone", func(t *testing.T) {
 		// given -- no -c, nothing in $HOME, and the published defaults unreachable
 		// when
@@ -334,6 +335,7 @@ func TestResolveConfigLayersFromHome(t *testing.T) {
 		assert.NotEmpty(t, cfg.LanguagesConfig)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should fold the published defaults when they can be fetched", func(t *testing.T) {
 		// given
 		published := func(string) ([]byte, error) {
@@ -350,6 +352,7 @@ func TestResolveConfigLayersFromHome(t *testing.T) {
 		assert.Contains(t, cfg.LanguagesConfig, "typescript")
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should ignore a credential the published defaults try to set", func(t *testing.T) {
 		// given -- bytes fetched over the network are not the operator speaking
 		published := func(string) ([]byte, error) {
@@ -426,6 +429,7 @@ func TestRootControllerExecute(t *testing.T) {
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should not panic when config file path is invalid", func(t *testing.T) {
 		// given
 		ctrl := controllers.NewRootController()
@@ -439,6 +443,7 @@ func TestRootControllerExecute(t *testing.T) {
 		})
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should set verbose log level when verbose flag is set", func(t *testing.T) {
 		// given
 		configContent := "languages:\n  golang:\n    extensions:\n      - 'go'\n"
@@ -456,6 +461,7 @@ func TestRootControllerExecute(t *testing.T) {
 		})
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should not panic when repo path does not exist", func(t *testing.T) {
 		// given
 		configContent := "languages:\n  golang:\n    extensions:\n      - 'go'\n"
@@ -472,6 +478,7 @@ func TestRootControllerExecute(t *testing.T) {
 		})
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should use provided language flag", func(t *testing.T) {
 		// given
 		repoPath, _ := createTestRepo(t)
@@ -494,6 +501,7 @@ func TestRootControllerExecute(t *testing.T) {
 		})
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should detect language when language flag is empty", func(t *testing.T) {
 		// given
 		repoPath, repo := createTestRepo(t)
@@ -527,6 +535,7 @@ func TestRootControllerExecute(t *testing.T) {
 		})
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should not panic when language detection fails", func(t *testing.T) {
 		// given -- empty repo with no language markers
 		repoPath, _ := createTestRepo(t)
@@ -547,6 +556,7 @@ func TestRootControllerExecute(t *testing.T) {
 		})
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should process repo with unreleased entries until push fails", func(t *testing.T) {
 		// given
 		repoPath, repo := createTestRepo(t)
@@ -578,6 +588,7 @@ func TestRootControllerExecute(t *testing.T) {
 		})
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should leave the repository untouched when its own .autobump.yaml requests a skip", func(t *testing.T) {
 		// given -- the same pending release as above, which a path run would otherwise cut,
 		// and a skip committed beside it. A path run names no project, so this also covers
@@ -705,6 +716,7 @@ func TestRunControllerExecute(t *testing.T) {
 		assertRunControllerSurvives(t, registry, cmd)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			// given

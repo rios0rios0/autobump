@@ -17,7 +17,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	logger "github.com/sirupsen/logrus"
-	"github.com/skeema/knownhosts"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
@@ -1418,29 +1417,6 @@ func detectSSHAgentSockets() []string {
 	}
 
 	return sockets
-}
-
-// hostKeyCallback returns an ssh.HostKeyCallback that validates against the user's
-// known_hosts file. Returns nil if no known_hosts is available, letting go-git
-// fall back to its own default knownhosts verification.
-func hostKeyCallback() ssh.HostKeyCallback {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		logger.Warn("Cannot determine home directory, deferring to go-git default host key verification")
-		return nil
-	}
-
-	knownHostsPath := filepath.Join(home, ".ssh", "known_hosts")
-	cb, err := knownhosts.New(knownHostsPath)
-	if err != nil {
-		logger.Warnf(
-			"Cannot load known_hosts from %s: %v, deferring to go-git default host key verification",
-			knownHostsPath, err,
-		)
-		return nil
-	}
-
-	return ssh.HostKeyCallback(cb)
 }
 
 // getForgeProvider creates a gitforge ForgeProvider with the given token.
