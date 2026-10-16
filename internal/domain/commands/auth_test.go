@@ -83,7 +83,10 @@ func TestDetectSSHAgentSocketsExtended(t *testing.T) {
 }
 
 // TestCollectAuthMethods is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestCollectAuthMethods(t *testing.T) {
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should return nil when service type is unknown", func(t *testing.T) {
 		// given
 		registry := repositories.NewProviderRegistry()
@@ -98,6 +101,7 @@ func TestCollectAuthMethods(t *testing.T) {
 		assert.Nil(t, methods)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should return nil when providerRegistry is nil", func(t *testing.T) {
 		// given
 		commands.SetProviderRegistry(nil)
@@ -113,6 +117,7 @@ func TestCollectAuthMethods(t *testing.T) {
 		assert.Nil(t, methods)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should return auth methods for valid GitHub config", func(t *testing.T) {
 		// given
 		container := dig.New()
@@ -200,6 +205,7 @@ func TestDetectSSHAgentSocketsWithEnv(t *testing.T) {
 
 // TestCollectSSHAuthMethodsWithSocket is deliberately not parallel: it calls t.Setenv, which the runtime forbids in a parallel test.
 func TestCollectSSHAuthMethodsWithSocket(t *testing.T) {
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should return methods from explicit SSH auth sock", func(t *testing.T) {
 		// given
 		socketPath := filepath.Join(t.TempDir(), "test-agent.sock")
@@ -237,7 +243,10 @@ func TestCollectSSHAuthMethodsWithSocket(t *testing.T) {
 }
 
 // TestDiscoverAndProcess is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestDiscoverAndProcess(t *testing.T) {
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should complete without error when no providers are configured", func(t *testing.T) {
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
@@ -252,6 +261,7 @@ func TestDiscoverAndProcess(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should log error and continue when provider type is invalid", func(t *testing.T) {
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()
@@ -267,6 +277,7 @@ func TestDiscoverAndProcess(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should handle multiple providers with mixed valid and invalid types", func(t *testing.T) {
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig()

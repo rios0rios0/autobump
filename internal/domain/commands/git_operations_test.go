@@ -354,9 +354,12 @@ func TestUpdateChangelogAndVersionFiles(t *testing.T) {
 // These cannot join TestUpdateChangelogAndVersionFiles above: it calls t.Parallel(), and
 // t.Setenv -- which is how the stand-in package manager reaches PATH -- is refused
 // anywhere under a parallel ancestor.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestUpdateChangelogAndVersionFilesRefresh(t *testing.T) {
 	// This sub-test and the one below are deliberately not parallel: they use t.Setenv to
 	// put a stand-in package manager on PATH, which the runtime forbids in a parallel test.
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should stage the refreshed file when the refresh regenerates it", func(t *testing.T) {
 		// given
 		// Copying the rewritten version out of package.json is what proves the refresh ran
@@ -383,6 +386,7 @@ func TestUpdateChangelogAndVersionFilesRefresh(t *testing.T) {
 		assert.Contains(t, status, "CHANGELOG.md")
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should fail the release when the refresh fails", func(t *testing.T) {
 		// given -- continuing past a failed refresh would open exactly the pull request the
 		// refresh exists to prevent: green locally, rejected by the first CI install
@@ -655,6 +659,7 @@ func TestCloneRepoIfNeeded(t *testing.T) {
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should return empty string for local path", func(t *testing.T) {
 		// given
 		ctx := &commands.RepoContext{
@@ -704,6 +709,7 @@ func TestCloneRepoIfNeeded(t *testing.T) {
 		assert.DirExists(t, workspace)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should attempt clone for git@ path", func(t *testing.T) {
 		// given
 		globalGitConfig := &config.Config{}
@@ -731,6 +737,8 @@ func TestCloneRepoIfNeeded(t *testing.T) {
 }
 
 // TestPushChanges is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestPushChanges(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
@@ -760,11 +768,14 @@ func TestPushChanges(t *testing.T) {
 }
 
 // TestCreatePullRequest is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestCreatePullRequest(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should return nil when no token is found", func(t *testing.T) {
 		// given
 		_, repo := createTestRepo(t)
@@ -783,6 +794,7 @@ func TestCreatePullRequest(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should return nil when service type is unsupported", func(t *testing.T) {
 		// given
 		_, repo := createTestRepo(t)
@@ -803,6 +815,8 @@ func TestCreatePullRequest(t *testing.T) {
 }
 
 // TestCreateAndCheckoutPullRequest is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestCreateAndCheckoutPullRequest(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
@@ -832,6 +846,8 @@ func TestCreateAndCheckoutPullRequest(t *testing.T) {
 }
 
 // TestHandleExistingBranchWithoutPR is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestHandleExistingBranchWithoutPR(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
@@ -861,6 +877,8 @@ func TestHandleExistingBranchWithoutPR(t *testing.T) {
 }
 
 // TestCheckPullRequestExists is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestCheckPullRequestExists(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
@@ -912,6 +930,8 @@ func TestGeneratePRDescriptionExtended(t *testing.T) {
 }
 
 // TestCommitAndPushChanges is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestCommitAndPushChanges(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
@@ -988,11 +1008,14 @@ func createTestRepoWithRemote(t *testing.T) (*git.Repository, string) {
 }
 
 // TestPushChangesWithRemote is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestPushChangesWithRemote(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should return error for unsupported remote URL scheme", func(t *testing.T) {
 		// given a remote whose URL uses a scheme no transport knows how to reach
 		repo, _ := createTestRepoWithRemote(t)
@@ -1018,6 +1041,7 @@ func TestPushChangesWithRemote(t *testing.T) {
 		assert.Contains(t, err.Error(), "unsupported")
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should push to a remote living on the local filesystem", func(t *testing.T) {
 		// given a bare remote reachable by path, which needs no transport authentication
 		repo, bareDir := createTestRepoWithRemote(t)
@@ -1058,6 +1082,8 @@ func newTestGlobalGitConfig() *config.Config {
 }
 
 // TestCreatePullRequestWithRemote is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestCreatePullRequestWithRemote(t *testing.T) {
 	container := dig.New()
 	require.NoError(t, repositories.RegisterProviders(container))
@@ -1092,6 +1118,8 @@ func TestCreatePullRequestWithRemote(t *testing.T) {
 }
 
 // TestCheckPullRequestExistsWithToken is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestCheckPullRequestExistsWithToken(t *testing.T) {
 	container := dig.New()
 	require.NoError(t, repositories.RegisterProviders(container))
@@ -1235,6 +1263,8 @@ func TestAddFilesToWorktreeExtended(t *testing.T) {
 }
 
 // TestCheckPullRequestExistsWithRemote is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestCheckPullRequestExistsWithRemote(t *testing.T) {
 	container := dig.New()
 	require.NoError(t, repositories.RegisterProviders(container))
@@ -1264,6 +1294,8 @@ func TestCheckPullRequestExistsWithRemote(t *testing.T) {
 }
 
 // TestHandleExistingBranchWithRemote is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
 func TestHandleExistingBranchWithRemote(t *testing.T) {
 	container := dig.New()
 	require.NoError(t, repositories.RegisterProviders(container))
@@ -1341,6 +1373,7 @@ func TestIterateProjectsExtended(t *testing.T) {
 	commands.SetProviderRegistry(registry)
 	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should process local repo and skip when unreleased is empty", func(t *testing.T) {
 		// given
 		repoPath, _ := createTestRepo(t)
@@ -1362,6 +1395,7 @@ func TestIterateProjectsExtended(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should handle mix of local and remote paths", func(t *testing.T) {
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
