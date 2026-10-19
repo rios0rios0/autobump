@@ -1154,6 +1154,60 @@ func TestPushChangesWithRemote(t *testing.T) {
 	})
 }
 
+// TestSetupChangelogWithRemote is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
+func TestSetupChangelogWithRemote(t *testing.T) {
+	registry := repositories.NewProviderRegistry()
+	commands.SetProviderRegistry(registry)
+	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
+
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
+	t.Run("should push the new changelog on its own branch and leave the default branch alone", func(t *testing.T) {
+		// given a repository whose default branch lives on a remote reachable by path
+		repo, bareDir := createTestRepoWithRemote(t)
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+		head, err := repo.Head()
+		require.NoError(t, err)
+		dir := wt.Filesystem.Root()
+
+		ctx := &commands.RepoContext{
+			Repo:            repo,
+			Worktree:        wt,
+			Head:            head,
+			GlobalGitConfig: newTestGlobalGitConfig(),
+			GlobalConfig:    entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
+			ProjectConfig:   entitybuilders.NewProjectConfigBuilder().WithPath(dir).BuildProjectConfig(),
+		}
+
+		// when
+		existed, err := commands.SetupChangelog(ctx, filepath.Join(dir, "CHANGELOG.md"))
+
+		// then the proposal reached the remote and the default branch received no direct push
+		require.NoError(t, err)
+		assert.False(t, existed)
+		bare, err := git.PlainOpen(bareDir)
+		require.NoError(t, err)
+		remoteDefault, err := bare.Reference(head.Name(), false)
+		require.NoError(t, err)
+		assert.Equal(t, head.Hash(), remoteDefault.Hash(), "the default branch must not receive the changelog directly")
+		assertBranchHasFile(t, bare, commands.InitialChangelogBranch, "CHANGELOG.md")
+	})
+}
+
+// assertBranchHasFile asserts that the tip of branch carries file.
+func assertBranchHasFile(t *testing.T, repo *git.Repository, branch, file string) {
+	t.Helper()
+
+	ref, err := repo.Reference(plumbing.NewBranchReferenceName(branch), true)
+	require.NoError(t, err, "the branch %s should exist", branch)
+	commit, err := repo.CommitObject(ref.Hash())
+	require.NoError(t, err)
+	_, err = commit.File(file)
+	assert.NoError(t, err, "the branch %s should carry %s", branch, file)
+}
+
 // newTestGlobalGitConfig builds the minimal global git config the push helpers read.
 func newTestGlobalGitConfig() *config.Config {
 	globalGitConfig := &config.Config{}

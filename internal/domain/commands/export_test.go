@@ -186,8 +186,11 @@ var CollectAuthMethods = collectAuthMethods //nolint:gochecknoglobals // test ex
 // SSHAgentAuthFromSocket exports sshAgentAuthFromSocket for testing.
 var SSHAgentAuthFromSocket = sshAgentAuthFromSocket //nolint:gochecknoglobals // test export
 
-// CommitAndPushInitialChangelog exports commitAndPushInitialChangelog for testing.
-var CommitAndPushInitialChangelog = commitAndPushInitialChangelog //nolint:gochecknoglobals // test export
+// CommitInitialChangelog exports commitInitialChangelog for testing.
+var CommitInitialChangelog = commitInitialChangelog //nolint:gochecknoglobals // test export
+
+// InitialChangelogBranch exports initialChangelogBranch for testing.
+const InitialChangelogBranch = initialChangelogBranch
 
 // DetectBySpecialPatterns exports detectBySpecialPatterns for testing.
 var DetectBySpecialPatterns = detectBySpecialPatterns //nolint:gochecknoglobals // test export

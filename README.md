@@ -701,15 +701,16 @@ through the gopkg.in redirector, so it is left alone.
 
 1. **Repository Discovery** *(run mode with providers)*: Queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations
 2. **Opt-out Check**: Leaves a repository exactly as it was found when its own `.autobump.yaml` sets [`skip: true`](#skipping-a-repository)
-3. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
-4. **Version Detection**: Reads the current version from CHANGELOG.md
-5. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
-6. **Refresh**: Regenerates the lockfile when [`refresh`](#refresh) is on, so it travels in the same commit
-7. **Go Module Path**: Moves a Go library's module path, imports and install instructions to the released major version when they name an older one (see [Go Module Major Versions](#go-module-major-versions))
-8. **CHANGELOG Update**: Folds in any pending [chlog](#fragment-based-changelogs-chlog) fragments, applies the [changelog rules](#changelog-rules), and moves the result to the new version section with the current date
-9. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
-10. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
-11. **Cleanup**: Deletes the repository's working directory, with the clone and the refresh's caches, whatever the outcome (see [Disk Footprint](#disk-footprint))
+3. **Missing Changelog**: A repository without a changelog gets one proposed through a pull request from the `chore/add-changelog` branch — never pushed to the default branch, which a protected branch refuses — and is released from the next run on, once that pull request is merged and changes are recorded under `[Unreleased]`
+4. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
+5. **Version Detection**: Reads the current version from CHANGELOG.md
+6. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
+7. **Refresh**: Regenerates the lockfile when [`refresh`](#refresh) is on, so it travels in the same commit
+8. **Go Module Path**: Moves a Go library's module path, imports and install instructions to the released major version when they name an older one (see [Go Module Major Versions](#go-module-major-versions))
+9. **CHANGELOG Update**: Folds in any pending [chlog](#fragment-based-changelogs-chlog) fragments, applies the [changelog rules](#changelog-rules), and moves the result to the new version section with the current date
+10. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
+11. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
+12. **Cleanup**: Deletes the repository's working directory, with the clone and the refresh's caches, whatever the outcome (see [Disk Footprint](#disk-footprint))
 
 ## Contributing
 

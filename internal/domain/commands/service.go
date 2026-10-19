@@ -281,6 +281,22 @@ func createPullRequest(
 	branchName string,
 	serviceType entities.ServiceType,
 ) error {
+	return openPullRequest(
+		ctx, repo, branchName, serviceType,
+		"chore(bump): bumped version to "+ctx.ProjectConfig.NewVersion, generatePRDescription(ctx),
+	)
+}
+
+// openPullRequest opens a pull request from branchName to the repository's default branch.
+// A missing token or an unsupported forge is only logged, because a run without a token
+// never meant to open one.
+func openPullRequest(
+	ctx *RepoContext,
+	repo *git.Repository,
+	branchName string,
+	serviceType entities.ServiceType,
+	title, description string,
+) error {
 	token := resolveToken(serviceType, ctx.GlobalConfig, ctx.ProjectConfig)
 	if token == "" {
 		logger.Warnf("No token found for service type '%v', cannot create pull request", serviceType)
@@ -303,8 +319,8 @@ func createPullRequest(
 	input := globalEntities.PullRequestInput{
 		SourceBranch: branchName,
 		TargetBranch: targetBranch,
-		Title:        "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion,
-		Description:  generatePRDescription(ctx),
+		Title:        title,
+		Description:  description,
 	}
 
 	pr, err := provider.CreatePullRequest(context.Background(), gitforgeRepo, input)
@@ -363,34 +379,145 @@ func cloneRepoIfNeeded(ctx *RepoContext) (string, error) {
 	return "", nil
 }
 
-// setupChangelog ensures the CHANGELOG file exists, creating and committing it when missing.
-// It returns true when the changelog already existed, or false when it was freshly created.
+// initialChangelogBranch is the branch a newly created changelog is proposed from. It sits
+// outside the bump prefix, so stale-branch cleanup never takes it for a release.
+const initialChangelogBranch = "chore/add-changelog"
+
+// setupChangelog ensures the CHANGELOG file exists. It returns true when the changelog
+// already existed. A missing one is created and proposed through a pull request, and false
+// is returned: until that pull request is merged the project has no changelog to release.
 func setupChangelog(ctx *RepoContext, changelogPath string) (bool, error) {
-	exists, err := createChangelogIfNotExists(changelogPath)
-	if err != nil {
-		return false, err
+	if _, err := os.Stat(changelogPath); !os.IsNotExist(err) {
+		return true, nil
 	}
-	if !exists {
-		if err = addCurrentVersion(ctx, changelogPath); err != nil {
-			return false, err
-		}
-		if err = commitAndPushInitialChangelog(ctx, changelogPath); err != nil {
-			logger.Warnf("Failed to commit and push newly created changelog: %v", err)
-		}
-		return false, nil
-	}
-	return true, nil
+	return false, proposeInitialChangelog(ctx, changelogPath)
 }
 
-// commitAndPushInitialChangelog stages, commits, and pushes the freshly created changelog file
-// on the current branch (typically main/master) so that it is persisted before the bump flow runs.
-func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error {
-	changelogRelPath, err := filepath.Rel(ctx.ProjectConfig.Path, changelogPath)
+// proposeInitialChangelog creates the missing changelog on initialChangelogBranch and opens a
+// pull request for it, instead of committing it to the branch the run started on.
+//
+// That branch is the default branch, and a default branch that accepts changes only through
+// pull requests -- the usual state of a protected branch on every forge -- refused the direct
+// push. The changelog was never persisted, so every run created the same file and lost it
+// again. A branch an earlier run left behind means the changelog is already proposed: it gets
+// a pull request when it has none open, and is otherwise left alone.
+//
+// Only creating the file can fail the release. Proposing it is best-effort, as the direct push
+// it replaces was: a failure is logged and the run moves on. The branch is created before the
+// file is written because CreateAndSwitchBranch forces its checkout, which is only safe on a
+// clean worktree; the run then returns to the branch it started on, whatever happened.
+func proposeInitialChangelog(ctx *RepoContext, changelogPath string) error {
+	proposed, err := gitInfra.CheckBranchExists(ctx.Repo, initialChangelogBranch)
 	if err != nil {
-		return fmt.Errorf("failed to get relative changelog path: %w", err)
+		return err
+	}
+	if proposed {
+		logger.Infof("The branch '%s' already proposes a changelog", initialChangelogBranch)
+		ensureInitialChangelogPullRequest(ctx, changelogPath)
+		return nil
 	}
 
-	if _, err = ctx.Worktree.Add(changelogRelPath); err != nil {
+	if err = gitInfra.CreateAndSwitchBranch(
+		ctx.Repo, ctx.Worktree, initialChangelogBranch, ctx.Head.Hash(),
+	); err != nil {
+		return err
+	}
+	defer returnToStartingBranch(ctx)
+
+	if _, err = createChangelogIfNotExists(changelogPath); err != nil {
+		return err
+	}
+	if err = addCurrentVersion(ctx, changelogPath); err != nil {
+		return err
+	}
+
+	if err = commitInitialChangelog(ctx, changelogPath); err != nil {
+		logger.Warnf("Failed to commit the new changelog: %v", err)
+		return nil
+	}
+	if err = pushChanges(ctx, initialChangelogBranch); err != nil {
+		logger.Warnf("Failed to push the branch '%s' proposing the new changelog: %v", initialChangelogBranch, err)
+		return nil
+	}
+
+	ensureInitialChangelogPullRequest(ctx, changelogPath)
+	return nil
+}
+
+// ensureInitialChangelogPullRequest opens the pull request proposing the new changelog, unless
+// one is already open. Every failure is logged rather than returned, as for the proposal itself.
+func ensureInitialChangelogPullRequest(ctx *RepoContext, changelogPath string) {
+	open, err := checkPullRequestExists(ctx, initialChangelogBranch)
+	if err != nil {
+		logger.Warnf("Could not check for a pull request proposing the new changelog: %v", err)
+		return
+	}
+	if open {
+		logger.Infof("A pull request proposing the new changelog is already open")
+		return
+	}
+
+	serviceType, err := gitOps.GetRemoteServiceType(ctx.Repo)
+	if err != nil {
+		logger.Warnf("Could not open the pull request proposing the new changelog: %v", err)
+		return
+	}
+
+	changelogFile := changelogRelativePath(ctx, changelogPath)
+	if err = openPullRequest(
+		ctx, ctx.Repo, initialChangelogBranch, serviceType,
+		initialChangelogCommitMessage(changelogFile), generateInitialChangelogPRDescription(changelogFile),
+	); err != nil {
+		logger.Warnf("Could not open the pull request proposing the new changelog: %v", err)
+	}
+}
+
+// returnToStartingBranch checks out the branch the run started on again -- the default branch,
+// for a clone. A failure is only logged: nothing after it depends on the checkout.
+func returnToStartingBranch(ctx *RepoContext) {
+	var err error
+	if ctx.Head.Name().IsBranch() {
+		err = gitInfra.CheckoutBranch(ctx.Worktree, ctx.Head.Name().Short())
+	} else {
+		err = ctx.Worktree.Checkout(&git.CheckoutOptions{Hash: ctx.Head.Hash()})
+	}
+	if err != nil {
+		logger.Warnf("Could not return to '%s': %v", ctx.Head.Name().Short(), err)
+	}
+}
+
+// changelogRelativePath returns the changelog's path relative to the project root, falling
+// back to its base name when the two cannot be related.
+func changelogRelativePath(ctx *RepoContext, changelogPath string) string {
+	relative, err := filepath.Rel(ctx.ProjectConfig.Path, changelogPath)
+	if err != nil {
+		return filepath.Base(changelogPath)
+	}
+	return relative
+}
+
+// initialChangelogCommitMessage is the subject of the commit adding the new changelog, and the
+// title of the pull request proposing it.
+func initialChangelogCommitMessage(changelogFile string) string {
+	return "chore: added " + changelogFile
+}
+
+func generateInitialChangelogPRDescription(changelogFile string) string {
+	var sb strings.Builder
+	sb.WriteString("## Summary\n\n")
+	fmt.Fprintf(&sb, "This PR adds `%s`, which AutoBump reads to decide when and how this project is released.\n\n",
+		changelogFile)
+	sb.WriteString("Once it is merged, record each change under `[Unreleased]`, and the next run releases them.\n")
+	sb.WriteString("\n---\n")
+	sb.WriteString("*This PR was automatically created by [AutoBump](https://github.com/rios0rios0/autobump)*\n")
+	return sb.String()
+}
+
+// commitInitialChangelog stages and commits the freshly created changelog file, signed the way
+// every other AutoBump commit is.
+func commitInitialChangelog(ctx *RepoContext, changelogPath string) error {
+	changelogFile := changelogRelativePath(ctx, changelogPath)
+	if _, err := ctx.Worktree.Add(changelogFile); err != nil {
 		return fmt.Errorf("failed to stage changelog: %w", err)
 	}
 
@@ -416,27 +543,10 @@ func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error
 	}
 
 	if _, err = gitInfra.CommitChanges(
-		ctx.Repo, ctx.Worktree, "chore: added "+changelogRelPath, signer, name, email,
+		ctx.Repo, ctx.Worktree, initialChangelogCommitMessage(changelogFile), signer, name, email,
 	); err != nil {
 		return fmt.Errorf("failed to commit changelog: %w", err)
 	}
-
-	branchName := ctx.Head.Name().Short()
-	refSpec := gitconfig.RefSpec("refs/heads/" + branchName + ":refs/heads/" + branchName)
-
-	serviceType, err := gitOps.GetRemoteServiceType(ctx.Repo)
-	if err != nil {
-		return err
-	}
-
-	username := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
-	authMethods := collectAuthMethods(serviceType, username, ctx.GlobalConfig, ctx.ProjectConfig)
-
-	err = gitInfra.PushWithTransportDetection(ctx.Repo, refSpec, authMethods)
-	if err != nil {
-		return explainSSHPushFailure(ctx, err)
-	}
-
 	return nil
 }
 

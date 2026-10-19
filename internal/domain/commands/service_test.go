@@ -12,6 +12,7 @@ import (
 
 	git "github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1145,26 +1146,53 @@ func TestSetupChangelog(t *testing.T) {
 		assert.True(t, existed, "should report that changelog already existed")
 	})
 
-	t.Run("should return false and create CHANGELOG when it does not exist", func(t *testing.T) {
+	t.Run("should commit a new CHANGELOG on its own branch when it does not exist", func(t *testing.T) {
 		t.Parallel()
 
-		// given — we need a real git repo so that go-git operations in
-		// commitAndPushInitialChangelog do not panic, even though the push will fail.
+		// given a repository without a remote, so proposing the changelog stops at the push,
+		// which is only logged
 		repo, dir := initTestRepo(t)
 		ctx := buildTestRepoContext(t, repo, dir)
 
 		changelogPath := filepath.Join(dir, "CHANGELOG.md")
 
-		// when — the function downloads a template (or fails gracefully), then tries to
-		// commit+push (which will fail without a remote, but the error is only logged).
-		// Either way it must return false, nil.
+		// when
 		existed, err := commands.SetupChangelog(ctx, changelogPath)
 
-		// then
+		// then the changelog is committed on the proposal branch, not on the branch the run
+		// started on, which is checked out again
 		require.NoError(t, err)
 		assert.False(t, existed, "should report that changelog was freshly created")
+		assertBranchHasFile(t, repo, commands.InitialChangelogBranch, "CHANGELOG.md")
+		head, err := repo.Head()
+		require.NoError(t, err)
+		assert.Equal(t, ctx.Head.Name(), head.Name(), "the run should return to the branch it started on")
 		_, statErr := os.Stat(changelogPath)
-		assert.NoError(t, statErr, "CHANGELOG.md should have been created on disk")
+		assert.True(t, os.IsNotExist(statErr), "the starting branch should not carry the new changelog")
+	})
+
+	t.Run("should leave a changelog an earlier run already proposed alone", func(t *testing.T) {
+		t.Parallel()
+
+		// given the proposal branch an earlier run left behind
+		repo, dir := initTestRepo(t)
+		ctx := buildTestRepoContext(t, repo, dir)
+		proposal := plumbing.NewBranchReferenceName(commands.InitialChangelogBranch)
+		require.NoError(t, repo.Storer.SetReference(plumbing.NewHashReference(proposal, ctx.Head.Hash())))
+
+		changelogPath := filepath.Join(dir, "CHANGELOG.md")
+
+		// when
+		existed, err := commands.SetupChangelog(ctx, changelogPath)
+
+		// then nothing new was written or committed
+		require.NoError(t, err)
+		assert.False(t, existed)
+		ref, err := repo.Reference(proposal, false)
+		require.NoError(t, err)
+		assert.Equal(t, ctx.Head.Hash(), ref.Hash(), "the proposal branch should not move")
+		_, statErr := os.Stat(changelogPath)
+		assert.True(t, os.IsNotExist(statErr), "no second changelog should be written")
 	})
 }
 
