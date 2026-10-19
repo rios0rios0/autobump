@@ -279,15 +279,45 @@ func TestBuildGitforgeRepo(t *testing.T) {
 			t.Parallel()
 
 			// when
-			repo := commands.BuildGitforgeRepo(testCase.url, "main")
+			repo := commands.BuildGitforgeRepo(testCase.url, "main", "")
 
 			// then
 			assert.Equal(t, testCase.organization, repo.Organization)
 			assert.Equal(t, testCase.project, repo.Project)
 			assert.Equal(t, testCase.repository, repo.Name)
 			assert.Equal(t, testCase.url, repo.RemoteURL)
+			assert.Empty(t, repo.ID, "a repository that was not discovered has no ID to address")
 		})
 	}
+
+	t.Run("should carry the repository ID discovery reported", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		const repositoryID = "6f1c1e8a-3d4b-4c4f-9a59-2f0c6d8b7e10"
+
+		// when
+		repo := commands.BuildGitforgeRepo(
+			"https://dev.azure.com/myorg/myproject/_git/myrepo", "main", repositoryID,
+		)
+
+		// then
+		assert.Equal(t, repositoryID, repo.ID)
+		assert.Equal(t, "myrepo", repo.Name)
+	})
+
+	t.Run("should carry the repository ID even when the remote URL does not parse", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		const repositoryID = "6f1c1e8a-3d4b-4c4f-9a59-2f0c6d8b7e10"
+
+		// when
+		repo := commands.BuildGitforgeRepo("not a remote URL", "main", repositoryID)
+
+		// then
+		assert.Equal(t, repositoryID, repo.ID)
+	})
 }
 
 func TestServiceTypeToProviderName(t *testing.T) {
@@ -618,6 +648,7 @@ func TestRepoToProjectConfig(t *testing.T) {
 
 		// given
 		repo := entitybuilders.NewRepositoryBuilder().
+			WithID("repo-id-42").
 			WithName("my-repo").
 			WithOrganization("my-org").
 			WithRemoteURL("https://github.com/my-org/my-repo.git").
@@ -634,6 +665,7 @@ func TestRepoToProjectConfig(t *testing.T) {
 		assert.Equal(t, "https://github.com/my-org/my-repo.git", result.Path)
 		assert.Equal(t, "my-repo", result.Name)
 		assert.Equal(t, "test-token", result.ProjectAccessToken)
+		assert.Equal(t, "repo-id-42", result.RepositoryID, "the discovered ID must reach the forge API calls")
 	})
 }
 

@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed every forge API call of an `autobump run` with `providers` warning that the repository ID was empty and falling back to the repository name: the ID discovery reports is now carried to the calls that open, find and close pull requests'
+time: '2026-10-19T18:36:25.013807967Z'

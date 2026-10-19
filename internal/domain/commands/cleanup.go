@@ -205,7 +205,7 @@ func resolveCleanupProvider(
 		return nil, globalEntities.Repository{}
 	}
 
-	return provider, buildGitforgeRepo(remoteURL, defaultBranch)
+	return provider, buildGitforgeRepo(remoteURL, defaultBranch, ctx.ProjectConfig.RepositoryID)
 }
 
 // closeStalePullRequest closes the pull request opened from the given branch, if one is

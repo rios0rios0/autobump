@@ -297,7 +297,7 @@ func createPullRequest(
 	}
 
 	targetBranch := resolveDefaultBranch(repo)
-	gitforgeRepo := buildGitforgeRepo(remoteURL, targetBranch)
+	gitforgeRepo := buildGitforgeRepo(remoteURL, targetBranch, ctx.ProjectConfig.RepositoryID)
 	input := globalEntities.PullRequestInput{
 		SourceBranch: branchName,
 		TargetBranch: targetBranch,
@@ -1106,7 +1106,7 @@ func checkPullRequestExists(ctx *RepoContext, branchName string) (bool, error) {
 	}
 
 	targetBranch := resolveDefaultBranch(ctx.Repo)
-	gitforgeRepo := buildGitforgeRepo(remoteURL, targetBranch)
+	gitforgeRepo := buildGitforgeRepo(remoteURL, targetBranch, ctx.ProjectConfig.RepositoryID)
 	return provider.PullRequestExists(context.Background(), gitforgeRepo, branchName)
 }
 
@@ -1221,6 +1221,7 @@ func repoToProjectConfig(
 		Path:               repo.RemoteURL,
 		Name:               repo.Name,
 		ProjectAccessToken: provCfg.Token,
+		RepositoryID:       repo.ID,
 	}
 }
 
@@ -1445,18 +1446,22 @@ func resolveDefaultBranch(repo *git.Repository) string {
 	return branch
 }
 
-// buildGitforgeRepo constructs a gitforge Repository entity from a remote URL.
-func buildGitforgeRepo(remoteURL string, defaultBranch string) globalEntities.Repository {
+// buildGitforgeRepo constructs a gitforge Repository entity from a remote URL. The
+// repository ID is the one discovery reported, or empty when the repository was not
+// discovered through the provider API, in which case the API is addressed by name.
+func buildGitforgeRepo(remoteURL, defaultBranch, repositoryID string) globalEntities.Repository {
 	parsed, err := gitInfra.ParseRemoteURL(remoteURL)
 	if err != nil {
 		logger.WithField("remoteURL", remoteURL).Warn("could not parse organization or repository name from remote URL")
 		return globalEntities.Repository{
+			ID:            repositoryID,
 			DefaultBranch: "refs/heads/" + defaultBranch,
 			RemoteURL:     remoteURL,
 		}
 	}
 
 	return globalEntities.Repository{
+		ID:            repositoryID,
 		Name:          parsed.RepoName,
 		Organization:  parsed.Organization,
 		Project:       parsed.Project,
