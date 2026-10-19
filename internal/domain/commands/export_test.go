@@ -124,6 +124,9 @@ var AddFilesToWorktree = addFilesToWorktree //nolint:gochecknoglobals // test ex
 // CheckoutToMainBranch exports checkoutToMainBranch for testing.
 var CheckoutToMainBranch = checkoutToMainBranch //nolint:gochecknoglobals // test export
 
+// RecordRemoteDefaultBranch exports recordRemoteDefaultBranch for testing.
+var RecordRemoteDefaultBranch = recordRemoteDefaultBranch //nolint:gochecknoglobals // test export
+
 // ResolveDefaultBranch exports resolveDefaultBranch for testing.
 var ResolveDefaultBranch = resolveDefaultBranch //nolint:gochecknoglobals // test export
 

@@ -235,6 +235,31 @@ func TestCheckoutToMainBranch(t *testing.T) {
 		// then
 		require.NoError(t, err)
 	})
+
+	t.Run("should return to a default branch that is neither main nor master", func(t *testing.T) {
+		t.Parallel()
+
+		// given a fork-style clone working on `custom`, left on a bump branch
+		repo := cloneRemoteWithDefaultBranch(t, "custom")
+		commands.RecordRemoteDefaultBranch(repo)
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+		require.NoError(t, wt.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName("chore/bump-1.0.0"),
+			Create: true,
+		}))
+
+		ctx := &commands.RepoContext{Repo: repo, Worktree: wt}
+
+		// when
+		err = commands.CheckoutToMainBranch(ctx)
+
+		// then
+		require.NoError(t, err)
+		head, err := repo.Head()
+		require.NoError(t, err)
+		assert.Equal(t, plumbing.NewBranchReferenceName("custom"), head.Name())
+	})
 }
 
 func TestResolveDefaultBranch(t *testing.T) {
@@ -252,6 +277,63 @@ func TestResolveDefaultBranch(t *testing.T) {
 		// then
 		assert.Equal(t, "main", branch)
 	})
+
+	t.Run("should return the default branch of a cloned remote once it is recorded", func(t *testing.T) {
+		t.Parallel()
+
+		// given a go-git clone of a remote whose default branch is neither main nor master
+		repo := cloneRemoteWithDefaultBranch(t, "custom")
+
+		// when
+		commands.RecordRemoteDefaultBranch(repo)
+		branch := commands.ResolveDefaultBranch(repo)
+
+		// then
+		assert.Equal(t, "custom", branch)
+	})
+
+	t.Run("should leave a detached clone to the fallback", func(t *testing.T) {
+		t.Parallel()
+
+		// given a clone whose HEAD is not on any branch
+		repo := cloneRemoteWithDefaultBranch(t, "custom")
+		head, err := repo.Head()
+		require.NoError(t, err)
+		require.NoError(t, repo.Storer.SetReference(plumbing.NewHashReference(plumbing.HEAD, head.Hash())))
+
+		// when
+		commands.RecordRemoteDefaultBranch(repo)
+		branch := commands.ResolveDefaultBranch(repo)
+
+		// then
+		assert.Equal(t, "main", branch)
+	})
+}
+
+// cloneRemoteWithDefaultBranch clones, with go-git as the run does, a bare remote whose
+// HEAD points at defaultBranch, and returns the clone.
+func cloneRemoteWithDefaultBranch(t *testing.T, defaultBranch string) *git.Repository {
+	t.Helper()
+
+	source, bareDir := createTestRepoWithRemote(t)
+	head, err := source.Head()
+	require.NoError(t, err)
+	require.NoError(t, source.Push(&git.PushOptions{
+		RemoteName: "origin",
+		RefSpecs: []config.RefSpec{
+			config.RefSpec(head.Name().String() + ":refs/heads/" + defaultBranch),
+		},
+	}))
+
+	bare, err := git.PlainOpen(bareDir)
+	require.NoError(t, err)
+	require.NoError(t, bare.Storer.SetReference(plumbing.NewSymbolicReference(
+		plumbing.HEAD, plumbing.NewBranchReferenceName(defaultBranch),
+	)))
+
+	clone, err := git.PlainClone(t.TempDir(), false, &git.CloneOptions{URL: bareDir})
+	require.NoError(t, err)
+	return clone
 }
 
 func TestAddFilesToWorktree(t *testing.T) {

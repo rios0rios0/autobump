@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -266,6 +267,7 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 	if err != nil {
 		return root, err
 	}
+	recordRemoteDefaultBranch(repo)
 
 	ctx.Repo = repo
 	ctx.ProjectConfig.Path = repoDir
@@ -827,12 +829,25 @@ func createAndCheckoutPullRequest(ctx *RepoContext, branchName string) error {
 	return checkoutToMainBranch(ctx)
 }
 
+// checkoutToMainBranch switches back to the repository's default branch once the pull
+// request is open. The branch resolveDefaultBranch reports is tried before the
+// conventional `main` and `master`, so a repository whose default branch is neither -- a
+// fork working on `custom`, say -- is not reported as failing after its release opened.
 func checkoutToMainBranch(ctx *RepoContext) error {
-	err := gitInfra.CheckoutBranch(ctx.Worktree, "main")
-	if err != nil {
-		return gitInfra.CheckoutBranch(ctx.Worktree, "master")
+	branches := []string{fallbackDefaultBranch, "master"}
+	if ctx.Repo != nil {
+		defaultBranch := resolveDefaultBranch(ctx.Repo)
+		branches = slices.DeleteFunc(branches, func(branch string) bool { return branch == defaultBranch })
+		branches = append([]string{defaultBranch}, branches...)
 	}
-	return nil
+
+	var err error
+	for _, branch := range branches {
+		if err = gitInfra.CheckoutBranch(ctx.Worktree, branch); err == nil {
+			return nil
+		}
+	}
+	return err
 }
 
 // addCurrentVersion adds the current version to the CHANGELOG file.
@@ -1432,16 +1447,42 @@ func getForgeProvider(
 	return providerRegistry.Get(name, token)
 }
 
+// recordRemoteDefaultBranch points refs/remotes/origin/HEAD at the branch the clone checked
+// out, which is the remote's default branch. `git clone` writes that reference and go-git
+// does not, so resolveDefaultBranch found nothing on a clone and fell back to "main": a
+// repository whose default branch is anything else -- a fork working on `custom`, say --
+// had its release pull request opened against the wrong branch. A HEAD that is not on a
+// branch has no default to record, and a failure to record one is only logged, which
+// leaves resolveDefaultBranch's fallback where it was.
+func recordRemoteDefaultBranch(repo *git.Repository) {
+	head, err := repo.Storer.Reference(plumbing.HEAD)
+	if err != nil || head.Type() != plumbing.SymbolicReference || !head.Target().IsBranch() {
+		return
+	}
+
+	remoteHead := plumbing.NewSymbolicReference(
+		plumbing.NewRemoteHEADReferenceName("origin"),
+		plumbing.NewRemoteReferenceName("origin", head.Target().Short()),
+	)
+	if err = repo.Storer.SetReference(remoteHead); err != nil {
+		logger.Warnf("Could not record the default branch of the remote: %v", err)
+	}
+}
+
+// fallbackDefaultBranch is the branch assumed when the remote does not say which is its
+// default.
+const fallbackDefaultBranch = "main"
+
 // resolveDefaultBranch determines the default branch from the remote origin/HEAD reference.
 func resolveDefaultBranch(repo *git.Repository) string {
 	ref, err := repo.Reference(plumbing.ReferenceName("refs/remotes/origin/HEAD"), true)
 	if err != nil {
-		return "main"
+		return fallbackDefaultBranch
 	}
 	branch := ref.Name().Short()
 	branch = strings.TrimPrefix(branch, "origin/")
 	if branch == "" {
-		return "main"
+		return fallbackDefaultBranch
 	}
 	return branch
 }
