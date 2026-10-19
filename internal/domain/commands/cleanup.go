@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -16,25 +17,37 @@ import (
 // closePullRequestTimeout caps a single close call against the forge API.
 const closePullRequestTimeout = 30 * time.Second
 
-// filterStaleBumpBranches returns the branches AutoBump owns and may safely remove:
-// every branch carrying the bump prefix, except the repository's default branch.
+// bumpBranchVersionRegex matches every version createBumpBranch appends to the prefix:
+// X.Y.Z, the only shape getNextVersion produces (every bump goes through IncMajor,
+// IncMinor or IncPatch, which drop prerelease and build metadata), and the fork forms
+// X.Y.Z.N and X.Y.Z-N.
+var bumpBranchVersionRegex = regexp.MustCompile(`^\d+\.\d+\.\d+(?:[.\-]\d+)?$`)
+
+// filterStaleBumpBranches returns the branches AutoBump owns and may safely remove: the
+// bump prefix followed by a version the bumper names a branch after, except the
+// repository's default branch.
+//
+// Ownership is decided by the whole name, not by the prefix. createBumpBranch only ever
+// appends a version to the prefix, so a branch with anything else after it -- nothing at
+// all, `chore/bump-runner-images`, `chore/bump-network-module-1.15.0` -- was named by
+// somebody else, and people do name their own branches that way. A prefix match alone
+// deleted those branches and closed their pull requests.
 //
 // Merge status is deliberately ignored. A bump branch is disposable by construction —
 // the bumper recreates whichever one it needs on the next run — so an unmerged bump
 // branch is a leftover from a release nobody completed, not work worth preserving.
 // The result is sorted so cleanup order (and its log output) is deterministic.
 //
-// A branch that *is* the prefix, with nothing after it, is left alone. HasPrefix matches
-// it, but the bumper always appends a version, so such a branch was named by somebody
-// else. entities.ValidateBumpBranchPrefix rejects the prefixes that would make this reach
-// far — this is the second lock on the same door, at the point where the deleting happens.
+// entities.ValidateBumpBranchPrefix rejects the prefixes that would make this reach far —
+// this is the second lock on the same door, at the point where the deleting happens.
 func filterStaleBumpBranches(branches []string, prefix, defaultBranch string) []string {
 	stale := make([]string, 0, len(branches))
 	for _, branch := range branches {
 		if branch == defaultBranch {
 			continue
 		}
-		if !strings.HasPrefix(branch, prefix) || len(branch) == len(prefix) {
+		version, found := strings.CutPrefix(branch, prefix)
+		if !found || !bumpBranchVersionRegex.MatchString(version) {
 			continue
 		}
 		stale = append(stale, branch)

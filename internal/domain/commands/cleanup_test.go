@@ -119,6 +119,41 @@ func TestFilterStaleBumpBranches(t *testing.T) {
 		assert.Equal(t, []string{"release/prepare-9.9.9"}, stale)
 	})
 
+	t.Run("should not delete a branch that carries the prefix but no version", func(t *testing.T) {
+		t.Parallel()
+
+		// given branches people named inside the prefix's namespace: the bumper only ever
+		// appends a version, so none of these is one of its own
+		branches := []string{
+			"chore/bump-runner-images",
+			"chore/bump-network-module-1.15.0",
+			"chore/bump-1.2.3-extra-words",
+			"chore/bump-1.2.3-rc.1",
+			"chore/bump-v1.2.3",
+			"chore/bump-1.2",
+			"chore/bump-1.2.3",
+		}
+
+		// when
+		stale := commands.FilterStaleBumpBranches(branches, entities.DefaultBumpBranchPrefix, "main")
+
+		// then
+		assert.Equal(t, []string{"chore/bump-1.2.3"}, stale)
+	})
+
+	t.Run("should select the branches the fork versioning modes create", func(t *testing.T) {
+		t.Parallel()
+
+		// given one branch per fork separator, the names createBumpBranch gives them
+		branches := []string{"main", "chore/bump-3.3.0.17", "chore/bump-1.21.0-13"}
+
+		// when
+		stale := commands.FilterStaleBumpBranches(branches, entities.DefaultBumpBranchPrefix, "main")
+
+		// then
+		assert.Equal(t, []string{"chore/bump-1.21.0-13", "chore/bump-3.3.0.17"}, stale)
+	})
+
 	t.Run("should return an empty result when there are no branches", func(t *testing.T) {
 		t.Parallel()
 

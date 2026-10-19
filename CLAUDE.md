@@ -158,13 +158,16 @@ layers are not (`main` may be newer than the binary, and a project file is parti
 design).
 
 `bump_branch_prefix` is operator-only *and* validated by `ValidateBumpBranchPrefix`, because
-it is the argument to a destructive operation: `cleanupStaleBumpBranches` deletes every
-remote branch starting with it and closes each attached PR. It must name a branch git would
+it is the argument to a destructive operation: `cleanupStaleBumpBranches` deletes the remote
+branches it names and closes each attached PR. It must name a branch git would
 accept, must contain a `/`, and must not *stop* at one — `chore/` would match
 `chore/autoupdate-*`, so a bare namespace makes one tool delete another's branches. An
 operator's typo is as capable of that as a hostile repository, which is why the check runs
-over their own file too. `filterStaleBumpBranches` carries the second lock: it never deletes
-a branch equal to the prefix, or the default branch.
+over their own file too. `filterStaleBumpBranches` carries the second lock: it selects only
+the prefix followed by a version `createBumpBranch` produces (`bumpBranchVersionRegex`:
+`X.Y.Z`, `X.Y.Z.N` or `X.Y.Z-N`), and never the default branch. A prefix match alone is not
+ownership — people name their own branches `chore/bump-runner-images` too, and the cleanup
+used to delete them.
 
 Token values support inline strings, `${ENV_VAR}` expansion, and file paths, resolved once
 by `FinalizeGlobalConfig` over the *folded* configuration — running it per layer would read
@@ -295,7 +298,7 @@ A Go import is rewritten at the exact offsets of its literal, so nothing else in
 
 Per-repository workspace: `cloneRepo` clones a remote repository into a workspace (`internal/domain/commands/workspace.go`) -- `autobump-<digits>` under `os.TempDir()`, with the clone in `repo/` and the refresh's caches and temporary files in `tooling/`. `ProcessRepo` defers `removeWorkspace` *before* checking the clone's error, because a clone that fails halfway leaves its directory behind as surely as one that succeeds (go-git empties a pre-existing target on failure but keeps it); `cloneRepo` therefore returns the root together with its error, and every way out -- release, nothing to release, skip, failure -- removes it. `RepoContext.ToolingDir` carries `tooling/` to `runRefreshCommands`, and `refreshEnv` points the package managers at it: `TMPDIR`, `XDG_CACHE_HOME`, `npm_config_cache`, `PNPM_HOME`, `YARN_GLOBAL_FOLDER` and `COREPACK_HOME` (`refreshCacheVariables`). Caches only -- HOME and XDG_CONFIG_HOME stay, so `.npmrc` and `.yarnrc.yml` are read -- and two omissions are deliberate: `YARN_CACHE_FOLDER` would pull a zero-install project's committed `.yarn/cache` out of the repository, and `npm_config_store_dir` makes npm warn on every command. A local project has no workspace and an empty `ToolingDir`, which leaves the refresh on the process environment. `CleanupStaleWorkspaces`, called once by `RunController`, sweeps workspaces older than 30 minutes that a killed run left behind. It lists the temporary directory rather than globbing it and removes only directories `isWorkspaceName` accepts -- the prefix followed by digits and nothing else, exactly what `os.MkdirTemp` produces -- because it deletes whatever it selects: a glob such as `autobump-[0-9]*` constrains only the first character, and would take an operator's own `autobump-3.3.0`. A new refresh recipe for another ecosystem adds its cache variables to `refreshCacheVariables`.
 
-Stale branch cleanup: before creating the bump branch, `cleanupStaleBumpBranches` (`internal/domain/commands/cleanup.go`) deletes every remote branch matching the bump prefix and closes the PR/MR attached to each (Azure DevOps abandons). It runs only when a bump is needed, so a PR is never closed without a replacement. It is opt-out — `entities.CleanupEnabled` treats an unset `cleanup_stale_branches` as enabled, and the persistent `--skip-cleanup` flag (applied by `applySkipCleanupFlag` in `controllers/config_helpers.go`) overrides the config per run. `entities.ResolveBumpBranchPrefix` (`bump_branch_prefix`, default `chore/bump-`) drives both branch creation and cleanup so the two cannot diverge. Cleanup is best-effort: every failure is logged and skipped rather than aborting the release.
+Stale branch cleanup: before creating the bump branch, `cleanupStaleBumpBranches` (`internal/domain/commands/cleanup.go`) deletes every remote branch named the way `createBumpBranch` names one — the bump prefix and a version — and closes the PR/MR attached to each (Azure DevOps abandons). It runs only when a bump is needed, so a PR is never closed without a replacement. It is opt-out — `entities.CleanupEnabled` treats an unset `cleanup_stale_branches` as enabled, and the persistent `--skip-cleanup` flag (applied by `applySkipCleanupFlag` in `controllers/config_helpers.go`) overrides the config per run. `entities.ResolveBumpBranchPrefix` (`bump_branch_prefix`, default `chore/bump-`) drives both branch creation and cleanup so the two cannot diverge. Cleanup is best-effort: every failure is logged and skipped rather than aborting the release.
 
 <!-- chlog:start -->
 ## Changelog (chlog) — MANDATORY

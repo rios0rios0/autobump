@@ -211,7 +211,7 @@ So when your SSH life happens on the Windows side (`ssh.exe`, Git for Windows, a
 
 ### Stale Branch Cleanup
 
-Before creating the branch for a release, AutoBump deletes every remote branch carrying the bump prefix (`chore/bump-*`) and closes the pull request attached to each one — on Azure DevOps the pull request is abandoned. Without this, running AutoBump repeatedly on a repository nobody reviews leaves a trail of abandoned release branches and open pull requests.
+Before creating the branch for a release, AutoBump deletes every remote branch it named for a release — the bump prefix followed by a version, such as `chore/bump-1.4.0`, or a fork version such as `chore/bump-3.3.0.17` or `chore/bump-1.21.0-13` — and closes the pull request attached to each one — on Azure DevOps the pull request is abandoned. Without this, running AutoBump repeatedly on a repository nobody reviews leaves a trail of abandoned release branches and open pull requests. A branch with anything else after the prefix, such as `chore/bump-runner-images`, was named by a person and is never touched.
 
 Merged and unmerged branches are treated alike: a bump branch is disposable, because the branch needed for the current release is recreated immediately afterwards. Cleanup only runs once a bump is actually needed, so a pull request is never closed without a replacement being opened for it.
 
