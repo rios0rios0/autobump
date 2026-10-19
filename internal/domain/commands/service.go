@@ -1990,7 +1990,14 @@ func getVersionFiles(
 			projectName = strings.ReplaceAll(languageProjectName, "-", "_")
 		}
 	} else {
-		logger.Infof("Language '%s' does not have a language interface", projectConfig.Language)
+		// Only Python reads its project name from its own manifest. Every other language --
+		// Go, Helm, TypeScript, Terraform alike -- uses the repository's name, which is the
+		// normal case and not worth an info line on every version-file lookup: it read as if
+		// the language were unsupported while its version files were being bumped.
+		logger.Debugf(
+			"Language '%s' has no project name reader, using '%s' for '{project_name}'",
+			projectConfig.Language, projectName,
+		)
 	}
 
 	languageConfig, exists := globalConfig.LanguagesConfig[projectConfig.Language]
