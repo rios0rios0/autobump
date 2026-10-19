@@ -1,6 +1,7 @@
 package commands_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -165,5 +166,103 @@ func TestFilterStaleBumpBranches(t *testing.T) {
 
 		// then
 		assert.Empty(t, stale)
+	})
+}
+
+// staleBranchRecorder records the side effects RemoveStaleBumpBranch runs, in order, and
+// fails the ones it was told to.
+type staleBranchRecorder struct {
+	calls        []string
+	deleteErr    error
+	closeErr     error
+	closedResult bool
+}
+
+func (r *staleBranchRecorder) deleteRemote(branch string) error {
+	r.calls = append(r.calls, "delete-remote "+branch)
+	return r.deleteErr
+}
+
+func (r *staleBranchRecorder) deleteLocal(branch string) error {
+	r.calls = append(r.calls, "delete-local "+branch)
+	return nil
+}
+
+func (r *staleBranchRecorder) closePullRequest(branch string) (bool, error) {
+	r.calls = append(r.calls, "close-pull-request "+branch)
+	return r.closedResult, r.closeErr
+}
+
+func TestRemoveStaleBumpBranch(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should leave the pull request open when the branch cannot be deleted", func(t *testing.T) {
+		t.Parallel()
+
+		// given a remote that refuses the deletion, as a forge does for a branch this
+		// identity did not create
+		recorder := &staleBranchRecorder{deleteErr: errors.New("permission denied")}
+
+		// when
+		commands.RemoveStaleBumpBranch(
+			"chore/bump-1.0.0", recorder.deleteRemote, recorder.deleteLocal, recorder.closePullRequest,
+		)
+
+		// then nothing past the refused deletion ran, so the pull request is still open
+		assert.Equal(t, []string{"delete-remote chore/bump-1.0.0"}, recorder.calls)
+	})
+
+	t.Run("should close the pull request only after the branch is deleted", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		recorder := &staleBranchRecorder{closedResult: true}
+
+		// when
+		commands.RemoveStaleBumpBranch(
+			"chore/bump-1.0.0", recorder.deleteRemote, recorder.deleteLocal, recorder.closePullRequest,
+		)
+
+		// then
+		assert.Equal(t, []string{
+			"delete-remote chore/bump-1.0.0",
+			"delete-local chore/bump-1.0.0",
+			"close-pull-request chore/bump-1.0.0",
+		}, recorder.calls)
+	})
+
+	t.Run("should delete the branch when there is no provider to close pull requests with", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		recorder := &staleBranchRecorder{}
+
+		// when
+		commands.RemoveStaleBumpBranch("chore/bump-1.0.0", recorder.deleteRemote, recorder.deleteLocal, nil)
+
+		// then
+		assert.Equal(t, []string{
+			"delete-remote chore/bump-1.0.0",
+			"delete-local chore/bump-1.0.0",
+		}, recorder.calls)
+	})
+
+	t.Run("should keep the deletion when the pull request then fails to close", func(t *testing.T) {
+		t.Parallel()
+
+		// given a forge that cannot close the pull request after the branch is gone
+		recorder := &staleBranchRecorder{closeErr: errors.New("service unavailable")}
+
+		// when
+		commands.RemoveStaleBumpBranch(
+			"chore/bump-1.0.0", recorder.deleteRemote, recorder.deleteLocal, recorder.closePullRequest,
+		)
+
+		// then every step was attempted once and the failure did not stop the cleanup
+		assert.Equal(t, []string{
+			"delete-remote chore/bump-1.0.0",
+			"delete-local chore/bump-1.0.0",
+			"close-pull-request chore/bump-1.0.0",
+		}, recorder.calls)
 	})
 }

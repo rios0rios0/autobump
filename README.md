@@ -215,6 +215,8 @@ Before creating the branch for a release, AutoBump deletes every remote branch i
 
 Merged and unmerged branches are treated alike: a bump branch is disposable, because the branch needed for the current release is recreated immediately afterwards. Cleanup only runs once a bump is actually needed, so a pull request is never closed without a replacement being opened for it.
 
+Each branch is deleted first, and its pull request is closed only once the branch is gone. A forge may refuse the deletion — Azure DevOps lets an identity delete only the branches it created unless it holds the **Force push** permission, so bump branches pushed by someone else are refused — and the branch and its pull request are then both left in place for their reviewers, with a warning naming the branch. Delete such a branch by hand, or grant AutoBump's identity that permission, to let the next run replace it.
+
 Cleanup is **enabled by default**. Turn it off permanently in the config:
 
 ```yaml

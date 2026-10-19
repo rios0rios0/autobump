@@ -14,6 +14,20 @@ func FilterRepositories(
 	return filterRepositories(repos, globalConfig)
 }
 
+// RemoveStaleBumpBranch exports removeStaleBumpBranch for testing, taking its side effects
+// as plain functions; a nil closePullRequest stands for a run without a provider.
+func RemoveStaleBumpBranch(
+	branch string,
+	deleteRemote, deleteLocal func(branch string) error,
+	closePullRequest func(branch string) (bool, error),
+) {
+	removeStaleBumpBranch(branch, staleBranchActions{
+		deleteRemote:     deleteRemote,
+		deleteLocal:      deleteLocal,
+		closePullRequest: closePullRequest,
+	})
+}
+
 // CommitChanges exports the commitChanges function for testing.
 var CommitChanges = commitChanges //nolint:gochecknoglobals // test export
 
