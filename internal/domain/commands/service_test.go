@@ -12,6 +12,7 @@ import (
 
 	git "github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -279,15 +280,45 @@ func TestBuildGitforgeRepo(t *testing.T) {
 			t.Parallel()
 
 			// when
-			repo := commands.BuildGitforgeRepo(testCase.url, "main")
+			repo := commands.BuildGitforgeRepo(testCase.url, "main", "")
 
 			// then
 			assert.Equal(t, testCase.organization, repo.Organization)
 			assert.Equal(t, testCase.project, repo.Project)
 			assert.Equal(t, testCase.repository, repo.Name)
 			assert.Equal(t, testCase.url, repo.RemoteURL)
+			assert.Empty(t, repo.ID, "a repository that was not discovered has no ID to address")
 		})
 	}
+
+	t.Run("should carry the repository ID discovery reported", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		const repositoryID = "6f1c1e8a-3d4b-4c4f-9a59-2f0c6d8b7e10"
+
+		// when
+		repo := commands.BuildGitforgeRepo(
+			"https://dev.azure.com/myorg/myproject/_git/myrepo", "main", repositoryID,
+		)
+
+		// then
+		assert.Equal(t, repositoryID, repo.ID)
+		assert.Equal(t, "myrepo", repo.Name)
+	})
+
+	t.Run("should carry the repository ID even when the remote URL does not parse", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		const repositoryID = "6f1c1e8a-3d4b-4c4f-9a59-2f0c6d8b7e10"
+
+		// when
+		repo := commands.BuildGitforgeRepo("not a remote URL", "main", repositoryID)
+
+		// then
+		assert.Equal(t, repositoryID, repo.ID)
+	})
 }
 
 func TestServiceTypeToProviderName(t *testing.T) {
@@ -618,6 +649,7 @@ func TestRepoToProjectConfig(t *testing.T) {
 
 		// given
 		repo := entitybuilders.NewRepositoryBuilder().
+			WithID("repo-id-42").
 			WithName("my-repo").
 			WithOrganization("my-org").
 			WithRemoteURL("https://github.com/my-org/my-repo.git").
@@ -634,6 +666,7 @@ func TestRepoToProjectConfig(t *testing.T) {
 		assert.Equal(t, "https://github.com/my-org/my-repo.git", result.Path)
 		assert.Equal(t, "my-repo", result.Name)
 		assert.Equal(t, "test-token", result.ProjectAccessToken)
+		assert.Equal(t, "repo-id-42", result.RepositoryID, "the discovered ID must reach the forge API calls")
 	})
 }
 
@@ -1113,26 +1146,83 @@ func TestSetupChangelog(t *testing.T) {
 		assert.True(t, existed, "should report that changelog already existed")
 	})
 
-	t.Run("should return false and create CHANGELOG when it does not exist", func(t *testing.T) {
+	t.Run("should commit a new CHANGELOG to the branch the operator is on", func(t *testing.T) {
 		t.Parallel()
 
-		// given — we need a real git repo so that go-git operations in
-		// commitAndPushInitialChangelog do not panic, even though the push will fail.
+		// given the operator's own checkout, without a remote, so the push is only logged
 		repo, dir := initTestRepo(t)
 		ctx := buildTestRepoContext(t, repo, dir)
 
 		changelogPath := filepath.Join(dir, "CHANGELOG.md")
 
-		// when — the function downloads a template (or fails gracefully), then tries to
-		// commit+push (which will fail without a remote, but the error is only logged).
-		// Either way it must return false, nil.
+		// when
 		existed, err := commands.SetupChangelog(ctx, changelogPath)
+
+		// then the changelog is committed where the operator stands, and no branch is switched to
+		require.NoError(t, err)
+		assert.False(t, existed, "should report that changelog was freshly created")
+		assert.FileExists(t, changelogPath)
+		head, err := repo.Head()
+		require.NoError(t, err)
+		assert.Equal(t, ctx.Head.Name(), head.Name(), "the operator's branch should stay checked out")
+		assertBranchHasFile(t, repo, head.Name().Short(), "CHANGELOG.md")
+		_, err = repo.Reference(plumbing.NewBranchReferenceName(commands.InitialChangelogBranch), false)
+		assert.ErrorIs(t, err, plumbing.ErrReferenceNotFound, "the operator's checkout gets no proposal branch")
+	})
+
+	t.Run("should leave the operator's untracked and ignored files alone", func(t *testing.T) {
+		t.Parallel()
+
+		// given the operator's checkout holding work no commit knows about: a file git
+		// ignores, which a forced checkout would delete as surely as an untracked one
+		repo, dir := initTestRepo(t)
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("local.env\n"), 0o644))
+		_, err = wt.Add(".gitignore")
+		require.NoError(t, err)
+		_, err = wt.Commit("ignored the local environment", &git.CommitOptions{
+			Author: &object.Signature{Name: "Test User", Email: "test@example.com", When: time.Now()},
+		})
+		require.NoError(t, err)
+		ctx := buildTestRepoContext(t, repo, dir)
+		untracked := filepath.Join(dir, "notes.txt")
+		ignored := filepath.Join(dir, "local.env")
+		require.NoError(t, os.WriteFile(untracked, []byte("work in progress\n"), 0o644))
+		require.NoError(t, os.WriteFile(ignored, []byte("SETTING=fixture-value-placeholder\n"), 0o600))
+
+		// when
+		_, err = commands.SetupChangelog(ctx, filepath.Join(dir, "CHANGELOG.md"))
 
 		// then
 		require.NoError(t, err)
-		assert.False(t, existed, "should report that changelog was freshly created")
+		assert.FileExists(t, untracked)
+		assert.FileExists(t, ignored)
+	})
+
+	t.Run("should leave a changelog an earlier run already proposed alone", func(t *testing.T) {
+		t.Parallel()
+
+		// given AutoBump's own clone, holding the proposal branch an earlier run pushed
+		repo, dir := initTestRepo(t)
+		ctx := buildTestRepoContext(t, repo, dir)
+		ctx.Cloned = true
+		proposal := plumbing.NewBranchReferenceName(commands.InitialChangelogBranch)
+		require.NoError(t, repo.Storer.SetReference(plumbing.NewHashReference(proposal, ctx.Head.Hash())))
+
+		changelogPath := filepath.Join(dir, "CHANGELOG.md")
+
+		// when
+		existed, err := commands.SetupChangelog(ctx, changelogPath)
+
+		// then nothing new was written or committed
+		require.NoError(t, err)
+		assert.False(t, existed)
+		ref, err := repo.Reference(proposal, false)
+		require.NoError(t, err)
+		assert.Equal(t, ctx.Head.Hash(), ref.Hash(), "the proposal branch should not move")
 		_, statErr := os.Stat(changelogPath)
-		assert.NoError(t, statErr, "CHANGELOG.md should have been created on disk")
+		assert.True(t, os.IsNotExist(statErr), "no second changelog should be written")
 	})
 }
 

@@ -235,6 +235,31 @@ func TestCheckoutToMainBranch(t *testing.T) {
 		// then
 		require.NoError(t, err)
 	})
+
+	t.Run("should return to a default branch that is neither main nor master", func(t *testing.T) {
+		t.Parallel()
+
+		// given a fork-style clone working on `custom`, left on a bump branch
+		repo := cloneRemoteWithDefaultBranch(t, "custom")
+		commands.RecordRemoteDefaultBranch(repo)
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+		require.NoError(t, wt.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName("chore/bump-1.0.0"),
+			Create: true,
+		}))
+
+		ctx := &commands.RepoContext{Repo: repo, Worktree: wt}
+
+		// when
+		err = commands.CheckoutToMainBranch(ctx)
+
+		// then
+		require.NoError(t, err)
+		head, err := repo.Head()
+		require.NoError(t, err)
+		assert.Equal(t, plumbing.NewBranchReferenceName("custom"), head.Name())
+	})
 }
 
 func TestResolveDefaultBranch(t *testing.T) {
@@ -252,6 +277,63 @@ func TestResolveDefaultBranch(t *testing.T) {
 		// then
 		assert.Equal(t, "main", branch)
 	})
+
+	t.Run("should return the default branch of a cloned remote once it is recorded", func(t *testing.T) {
+		t.Parallel()
+
+		// given a go-git clone of a remote whose default branch is neither main nor master
+		repo := cloneRemoteWithDefaultBranch(t, "custom")
+
+		// when
+		commands.RecordRemoteDefaultBranch(repo)
+		branch := commands.ResolveDefaultBranch(repo)
+
+		// then
+		assert.Equal(t, "custom", branch)
+	})
+
+	t.Run("should leave a detached clone to the fallback", func(t *testing.T) {
+		t.Parallel()
+
+		// given a clone whose HEAD is not on any branch
+		repo := cloneRemoteWithDefaultBranch(t, "custom")
+		head, err := repo.Head()
+		require.NoError(t, err)
+		require.NoError(t, repo.Storer.SetReference(plumbing.NewHashReference(plumbing.HEAD, head.Hash())))
+
+		// when
+		commands.RecordRemoteDefaultBranch(repo)
+		branch := commands.ResolveDefaultBranch(repo)
+
+		// then
+		assert.Equal(t, "main", branch)
+	})
+}
+
+// cloneRemoteWithDefaultBranch clones, with go-git as the run does, a bare remote whose
+// HEAD points at defaultBranch, and returns the clone.
+func cloneRemoteWithDefaultBranch(t *testing.T, defaultBranch string) *git.Repository {
+	t.Helper()
+
+	source, bareDir := createTestRepoWithRemote(t)
+	head, err := source.Head()
+	require.NoError(t, err)
+	require.NoError(t, source.Push(&git.PushOptions{
+		RemoteName: "origin",
+		RefSpecs: []config.RefSpec{
+			config.RefSpec(head.Name().String() + ":refs/heads/" + defaultBranch),
+		},
+	}))
+
+	bare, err := git.PlainOpen(bareDir)
+	require.NoError(t, err)
+	require.NoError(t, bare.Storer.SetReference(plumbing.NewSymbolicReference(
+		plumbing.HEAD, plumbing.NewBranchReferenceName(defaultBranch),
+	)))
+
+	clone, err := git.PlainClone(t.TempDir(), false, &git.CloneOptions{URL: bareDir})
+	require.NoError(t, err)
+	return clone
 }
 
 func TestAddFilesToWorktree(t *testing.T) {
@@ -603,6 +685,38 @@ func TestAddCurrentVersionWithTag(t *testing.T) {
 		content, readErr := os.ReadFile(changelogPath)
 		require.NoError(t, readErr)
 		assert.Contains(t, string(content), "[1.0.0]")
+	})
+
+	t.Run("should leave the changelog unchanged when the latest tag is not a semantic version", func(t *testing.T) {
+		t.Parallel()
+
+		// given a fork that carries its upstream's four-part tags
+		repoPath, repo := createTestRepo(t)
+		head, err := repo.Head()
+		require.NoError(t, err)
+		require.NoError(t, repo.Storer.SetReference(
+			plumbing.NewHashReference(plumbing.NewTagReferenceName("3.1.0.0"), head.Hash()),
+		))
+
+		const original = "# Changelog\n\n## [Unreleased]\n"
+		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelogPath, []byte(original), 0o644))
+
+		ctx := &commands.RepoContext{
+			Repo: repo,
+			ProjectConfig: entitybuilders.NewProjectConfigBuilder().
+				WithPath(repoPath).
+				BuildProjectConfig(),
+		}
+
+		// when
+		err = commands.AddCurrentVersion(ctx, changelogPath)
+
+		// then no version header was written, so in particular no unparseable `[<nil>]` one
+		require.NoError(t, err)
+		content, readErr := os.ReadFile(changelogPath)
+		require.NoError(t, readErr)
+		assert.Equal(t, original, string(content))
 	})
 }
 
@@ -1070,6 +1184,62 @@ func TestPushChangesWithRemote(t *testing.T) {
 		_, err = bare.Reference(plumbing.ReferenceName("refs/heads/"+branchName), false)
 		assert.NoError(t, err, "the pushed branch should exist on the remote")
 	})
+}
+
+// TestSetupChangelogWithRemote is deliberately not parallel: it mutates package-level globals that other tests read.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
+func TestSetupChangelogWithRemote(t *testing.T) {
+	registry := repositories.NewProviderRegistry()
+	commands.SetProviderRegistry(registry)
+	commands.SetGitOperations(gitInfra.NewGitOperations(registry))
+
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
+	t.Run("should push the new changelog on its own branch and leave the default branch alone", func(t *testing.T) {
+		// given AutoBump's own clone of a repository whose default branch lives on a remote
+		// reachable by path
+		repo, bareDir := createTestRepoWithRemote(t)
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+		head, err := repo.Head()
+		require.NoError(t, err)
+		dir := wt.Filesystem.Root()
+
+		ctx := &commands.RepoContext{
+			Repo:            repo,
+			Worktree:        wt,
+			Head:            head,
+			GlobalGitConfig: newTestGlobalGitConfig(),
+			GlobalConfig:    entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
+			ProjectConfig:   entitybuilders.NewProjectConfigBuilder().WithPath(dir).BuildProjectConfig(),
+			Cloned:          true,
+		}
+
+		// when
+		existed, err := commands.SetupChangelog(ctx, filepath.Join(dir, "CHANGELOG.md"))
+
+		// then the proposal reached the remote and the default branch received no direct push
+		require.NoError(t, err)
+		assert.False(t, existed)
+		bare, err := git.PlainOpen(bareDir)
+		require.NoError(t, err)
+		remoteDefault, err := bare.Reference(head.Name(), false)
+		require.NoError(t, err)
+		assert.Equal(t, head.Hash(), remoteDefault.Hash(), "the default branch must not receive the changelog directly")
+		assertBranchHasFile(t, bare, commands.InitialChangelogBranch, "CHANGELOG.md")
+	})
+}
+
+// assertBranchHasFile asserts that the tip of branch carries file.
+func assertBranchHasFile(t *testing.T, repo *git.Repository, branch, file string) {
+	t.Helper()
+
+	ref, err := repo.Reference(plumbing.NewBranchReferenceName(branch), true)
+	require.NoError(t, err, "the branch %s should exist", branch)
+	commit, err := repo.CommitObject(ref.Hash())
+	require.NoError(t, err)
+	_, err = commit.File(file)
+	assert.NoError(t, err, "the branch %s should carry %s", branch, file)
 }
 
 // newTestGlobalGitConfig builds the minimal global git config the push helpers read.

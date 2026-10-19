@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -124,6 +125,12 @@ type RepoContext struct {
 	// is removed with the clone. It is empty for a local project, whose refresh runs in
 	// the operator's own checkout with the operator's own caches.
 	ToolingDir string
+
+	// Cloned reports that the checkout is AutoBump's own clone, removed after the run,
+	// rather than the operator's working tree. Only a clone may be switched to another
+	// branch with files written on it: go-git's forced checkout, which
+	// CreateAndSwitchBranch uses, deletes untracked and ignored files as well.
+	Cloned bool
 }
 
 // langIDJava is the user-facing config key alias shared by all Java langforge variants
@@ -266,10 +273,12 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 	if err != nil {
 		return root, err
 	}
+	recordRemoteDefaultBranch(repo)
 
 	ctx.Repo = repo
 	ctx.ProjectConfig.Path = repoDir
 	ctx.ToolingDir = workspaceToolingPath(root)
+	ctx.Cloned = true
 	return root, nil
 }
 
@@ -278,6 +287,22 @@ func createPullRequest(
 	repo *git.Repository,
 	branchName string,
 	serviceType entities.ServiceType,
+) error {
+	return openPullRequest(
+		ctx, repo, branchName, serviceType,
+		"chore(bump): bumped version to "+ctx.ProjectConfig.NewVersion, generatePRDescription(ctx),
+	)
+}
+
+// openPullRequest opens a pull request from branchName to the repository's default branch.
+// A missing token or an unsupported forge is only logged, because a run without a token
+// never meant to open one.
+func openPullRequest(
+	ctx *RepoContext,
+	repo *git.Repository,
+	branchName string,
+	serviceType entities.ServiceType,
+	title, description string,
 ) error {
 	token := resolveToken(serviceType, ctx.GlobalConfig, ctx.ProjectConfig)
 	if token == "" {
@@ -297,12 +322,12 @@ func createPullRequest(
 	}
 
 	targetBranch := resolveDefaultBranch(repo)
-	gitforgeRepo := buildGitforgeRepo(remoteURL, targetBranch)
+	gitforgeRepo := buildGitforgeRepo(remoteURL, targetBranch, ctx.ProjectConfig.RepositoryID)
 	input := globalEntities.PullRequestInput{
 		SourceBranch: branchName,
 		TargetBranch: targetBranch,
-		Title:        "chore(bump): bumped version to " + ctx.ProjectConfig.NewVersion,
-		Description:  generatePRDescription(ctx),
+		Title:        title,
+		Description:  description,
 	}
 
 	pr, err := provider.CreatePullRequest(context.Background(), gitforgeRepo, input)
@@ -361,34 +386,176 @@ func cloneRepoIfNeeded(ctx *RepoContext) (string, error) {
 	return "", nil
 }
 
-// setupChangelog ensures the CHANGELOG file exists, creating and committing it when missing.
-// It returns true when the changelog already existed, or false when it was freshly created.
+// initialChangelogBranch is the branch a newly created changelog is proposed from. It sits
+// outside the bump prefix, so stale-branch cleanup never takes it for a release.
+const initialChangelogBranch = "chore/add-changelog"
+
+// setupChangelog ensures the CHANGELOG file exists. It returns true when the changelog
+// already existed, and false when it had to be created: until it is merged, the project has
+// no changelog to release from.
+//
+// AutoBump's own clone proposes the new changelog through a pull request. The operator's
+// checkout gets it committed to the branch they are on instead, because proposing it means
+// switching branches, and the forced checkout that does it deletes the untracked and ignored
+// files of the working tree -- a `.env`, a build directory -- that only the operator owns.
 func setupChangelog(ctx *RepoContext, changelogPath string) (bool, error) {
-	exists, err := createChangelogIfNotExists(changelogPath)
-	if err != nil {
-		return false, err
+	if _, err := os.Stat(changelogPath); !os.IsNotExist(err) {
+		return true, nil
 	}
-	if !exists {
-		if err = addCurrentVersion(ctx, changelogPath); err != nil {
-			return false, err
-		}
-		if err = commitAndPushInitialChangelog(ctx, changelogPath); err != nil {
-			logger.Warnf("Failed to commit and push newly created changelog: %v", err)
-		}
-		return false, nil
+	if ctx.Cloned {
+		return false, proposeInitialChangelog(ctx, changelogPath)
 	}
-	return true, nil
+	return false, commitInitialChangelogInPlace(ctx, changelogPath)
 }
 
-// commitAndPushInitialChangelog stages, commits, and pushes the freshly created changelog file
-// on the current branch (typically main/master) so that it is persisted before the bump flow runs.
-func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error {
-	changelogRelPath, err := filepath.Rel(ctx.ProjectConfig.Path, changelogPath)
-	if err != nil {
-		return fmt.Errorf("failed to get relative changelog path: %w", err)
+// commitInitialChangelogInPlace creates the missing changelog in the operator's own checkout,
+// commits it to the branch they are on and pushes that branch, without switching branches.
+// The commit and the push are best-effort: a branch that refuses a direct push is the
+// operator's to handle, and a failure is logged.
+func commitInitialChangelogInPlace(ctx *RepoContext, changelogPath string) error {
+	if _, err := createChangelogIfNotExists(changelogPath); err != nil {
+		return err
+	}
+	if err := addCurrentVersion(ctx, changelogPath); err != nil {
+		return err
 	}
 
-	if _, err = ctx.Worktree.Add(changelogRelPath); err != nil {
+	if err := commitInitialChangelog(ctx, changelogPath); err != nil {
+		logger.Warnf("Failed to commit the new changelog: %v", err)
+		return nil
+	}
+	if err := pushChanges(ctx, ctx.Head.Name().Short()); err != nil {
+		logger.Warnf("Failed to push the new changelog: %v", err)
+	}
+	return nil
+}
+
+// proposeInitialChangelog creates the missing changelog on initialChangelogBranch and opens a
+// pull request for it, instead of committing it to the branch the clone started on.
+//
+// That branch is the default branch, and a default branch that accepts changes only through
+// pull requests -- the usual state of a protected branch on every forge -- refused the direct
+// push. The changelog was never persisted, so every run created the same file and lost it
+// again. A branch an earlier run left behind means the changelog is already proposed: it gets
+// a pull request when it has none open, and is otherwise left alone. The clone is fresh on
+// every run, so such a branch is one the remote holds, never one an earlier push failed on.
+//
+// Only creating the file can fail the release. Proposing it is best-effort, as the direct push
+// it replaces was: a failure is logged and the run moves on. The branch is created before the
+// file is written because CreateAndSwitchBranch forces its checkout, which is only safe on a
+// clean worktree; the run then returns to the branch it started on, whatever happened.
+func proposeInitialChangelog(ctx *RepoContext, changelogPath string) error {
+	proposed, err := gitInfra.CheckBranchExists(ctx.Repo, initialChangelogBranch)
+	if err != nil {
+		return err
+	}
+	if proposed {
+		logger.Infof("The branch '%s' already proposes a changelog", initialChangelogBranch)
+		ensureInitialChangelogPullRequest(ctx, changelogPath)
+		return nil
+	}
+
+	if err = gitInfra.CreateAndSwitchBranch(
+		ctx.Repo, ctx.Worktree, initialChangelogBranch, ctx.Head.Hash(),
+	); err != nil {
+		return err
+	}
+	defer returnToStartingBranch(ctx)
+
+	if _, err = createChangelogIfNotExists(changelogPath); err != nil {
+		return err
+	}
+	if err = addCurrentVersion(ctx, changelogPath); err != nil {
+		return err
+	}
+
+	if err = commitInitialChangelog(ctx, changelogPath); err != nil {
+		logger.Warnf("Failed to commit the new changelog: %v", err)
+		return nil
+	}
+	if err = pushChanges(ctx, initialChangelogBranch); err != nil {
+		logger.Warnf("Failed to push the branch '%s' proposing the new changelog: %v", initialChangelogBranch, err)
+		return nil
+	}
+
+	ensureInitialChangelogPullRequest(ctx, changelogPath)
+	return nil
+}
+
+// ensureInitialChangelogPullRequest opens the pull request proposing the new changelog, unless
+// one is already open. Every failure is logged rather than returned, as for the proposal itself.
+func ensureInitialChangelogPullRequest(ctx *RepoContext, changelogPath string) {
+	open, err := checkPullRequestExists(ctx, initialChangelogBranch)
+	if err != nil {
+		logger.Warnf("Could not check for a pull request proposing the new changelog: %v", err)
+		return
+	}
+	if open {
+		logger.Infof("A pull request proposing the new changelog is already open")
+		return
+	}
+
+	serviceType, err := gitOps.GetRemoteServiceType(ctx.Repo)
+	if err != nil {
+		logger.Warnf("Could not open the pull request proposing the new changelog: %v", err)
+		return
+	}
+
+	changelogFile := changelogRelativePath(ctx, changelogPath)
+	if err = openPullRequest(
+		ctx, ctx.Repo, initialChangelogBranch, serviceType,
+		initialChangelogCommitMessage(changelogFile), generateInitialChangelogPRDescription(changelogFile),
+	); err != nil {
+		logger.Warnf("Could not open the pull request proposing the new changelog: %v", err)
+	}
+}
+
+// returnToStartingBranch checks out the branch the run started on again -- the default branch,
+// for a clone. A failure is only logged: nothing after it depends on the checkout.
+func returnToStartingBranch(ctx *RepoContext) {
+	var err error
+	if ctx.Head.Name().IsBranch() {
+		err = gitInfra.CheckoutBranch(ctx.Worktree, ctx.Head.Name().Short())
+	} else {
+		err = ctx.Worktree.Checkout(&git.CheckoutOptions{Hash: ctx.Head.Hash()})
+	}
+	if err != nil {
+		logger.Warnf("Could not return to '%s': %v", ctx.Head.Name().Short(), err)
+	}
+}
+
+// changelogRelativePath returns the changelog's path relative to the project root, falling
+// back to its base name when the two cannot be related.
+func changelogRelativePath(ctx *RepoContext, changelogPath string) string {
+	relative, err := filepath.Rel(ctx.ProjectConfig.Path, changelogPath)
+	if err != nil {
+		return filepath.Base(changelogPath)
+	}
+	return relative
+}
+
+// initialChangelogCommitMessage is the subject of the commit adding the new changelog, and the
+// title of the pull request proposing it.
+func initialChangelogCommitMessage(changelogFile string) string {
+	return "chore: added " + changelogFile
+}
+
+func generateInitialChangelogPRDescription(changelogFile string) string {
+	var sb strings.Builder
+	sb.WriteString("## Summary\n\n")
+	fmt.Fprintf(&sb, "This PR adds `%s`, which AutoBump reads to decide when and how this project is released.\n\n",
+		changelogFile)
+	sb.WriteString("Once it is merged, record each change under `[Unreleased]`, and the next run releases them.\n")
+	sb.WriteString("\n---\n")
+	sb.WriteString("*This PR was automatically created by [AutoBump](https://github.com/rios0rios0/autobump)*\n")
+	return sb.String()
+}
+
+// commitInitialChangelog stages and commits the freshly created changelog file, signed the way
+// every other AutoBump commit is.
+func commitInitialChangelog(ctx *RepoContext, changelogPath string) error {
+	changelogFile := changelogRelativePath(ctx, changelogPath)
+	if _, err := ctx.Worktree.Add(changelogFile); err != nil {
 		return fmt.Errorf("failed to stage changelog: %w", err)
 	}
 
@@ -414,27 +581,10 @@ func commitAndPushInitialChangelog(ctx *RepoContext, changelogPath string) error
 	}
 
 	if _, err = gitInfra.CommitChanges(
-		ctx.Repo, ctx.Worktree, "chore: added "+changelogRelPath, signer, name, email,
+		ctx.Repo, ctx.Worktree, initialChangelogCommitMessage(changelogFile), signer, name, email,
 	); err != nil {
 		return fmt.Errorf("failed to commit changelog: %w", err)
 	}
-
-	branchName := ctx.Head.Name().Short()
-	refSpec := gitconfig.RefSpec("refs/heads/" + branchName + ":refs/heads/" + branchName)
-
-	serviceType, err := gitOps.GetRemoteServiceType(ctx.Repo)
-	if err != nil {
-		return err
-	}
-
-	username := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
-	authMethods := collectAuthMethods(serviceType, username, ctx.GlobalConfig, ctx.ProjectConfig)
-
-	err = gitInfra.PushWithTransportDetection(ctx.Repo, refSpec, authMethods)
-	if err != nil {
-		return explainSSHPushFailure(ctx, err)
-	}
-
 	return nil
 }
 
@@ -827,12 +977,25 @@ func createAndCheckoutPullRequest(ctx *RepoContext, branchName string) error {
 	return checkoutToMainBranch(ctx)
 }
 
+// checkoutToMainBranch switches back to the repository's default branch once the pull
+// request is open. The branch resolveDefaultBranch reports is tried before the
+// conventional `main` and `master`, so a repository whose default branch is neither -- a
+// fork working on `custom`, say -- is not reported as failing after its release opened.
 func checkoutToMainBranch(ctx *RepoContext) error {
-	err := gitInfra.CheckoutBranch(ctx.Worktree, "main")
-	if err != nil {
-		return gitInfra.CheckoutBranch(ctx.Worktree, "master")
+	branches := []string{fallbackDefaultBranch, "master"}
+	if ctx.Repo != nil {
+		defaultBranch := resolveDefaultBranch(ctx.Repo)
+		branches = slices.DeleteFunc(branches, func(branch string) bool { return branch == defaultBranch })
+		branches = append([]string{defaultBranch}, branches...)
 	}
-	return nil
+
+	var err error
+	for _, branch := range branches {
+		if err = gitInfra.CheckoutBranch(ctx.Worktree, branch); err == nil {
+			return nil
+		}
+	}
+	return err
 }
 
 // addCurrentVersion adds the current version to the CHANGELOG file.
@@ -847,6 +1010,13 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 	latestTag, err := gitInfra.GetLatestTag(ctx.Repo)
 	if err != nil {
 		logger.Warnf("Could not determine latest tag, skipping historical version in CHANGELOG: %v", err)
+		return nil
+	}
+	// A tag that is not a semantic version comes back with a nil version rather than an error.
+	// Formatting it wrote a literal `[<nil>]` header that no later run could parse, which
+	// failed every release of the repository from then on.
+	if latestTag.Tag == nil {
+		logger.Warn("The latest tag is not a semantic version, skipping historical version in CHANGELOG")
 		return nil
 	}
 
@@ -1106,7 +1276,7 @@ func checkPullRequestExists(ctx *RepoContext, branchName string) (bool, error) {
 	}
 
 	targetBranch := resolveDefaultBranch(ctx.Repo)
-	gitforgeRepo := buildGitforgeRepo(remoteURL, targetBranch)
+	gitforgeRepo := buildGitforgeRepo(remoteURL, targetBranch, ctx.ProjectConfig.RepositoryID)
 	return provider.PullRequestExists(context.Background(), gitforgeRepo, branchName)
 }
 
@@ -1221,6 +1391,7 @@ func repoToProjectConfig(
 		Path:               repo.RemoteURL,
 		Name:               repo.Name,
 		ProjectAccessToken: provCfg.Token,
+		RepositoryID:       repo.ID,
 	}
 }
 
@@ -1431,32 +1602,62 @@ func getForgeProvider(
 	return providerRegistry.Get(name, token)
 }
 
+// recordRemoteDefaultBranch points refs/remotes/origin/HEAD at the branch the clone checked
+// out, which is the remote's default branch. `git clone` writes that reference and go-git
+// does not, so resolveDefaultBranch found nothing on a clone and fell back to "main": a
+// repository whose default branch is anything else -- a fork working on `custom`, say --
+// had its release pull request opened against the wrong branch. A HEAD that is not on a
+// branch has no default to record, and a failure to record one is only logged, which
+// leaves resolveDefaultBranch's fallback where it was.
+func recordRemoteDefaultBranch(repo *git.Repository) {
+	head, err := repo.Storer.Reference(plumbing.HEAD)
+	if err != nil || head.Type() != plumbing.SymbolicReference || !head.Target().IsBranch() {
+		return
+	}
+
+	remoteHead := plumbing.NewSymbolicReference(
+		plumbing.NewRemoteHEADReferenceName("origin"),
+		plumbing.NewRemoteReferenceName("origin", head.Target().Short()),
+	)
+	if err = repo.Storer.SetReference(remoteHead); err != nil {
+		logger.Warnf("Could not record the default branch of the remote: %v", err)
+	}
+}
+
+// fallbackDefaultBranch is the branch assumed when the remote does not say which is its
+// default.
+const fallbackDefaultBranch = "main"
+
 // resolveDefaultBranch determines the default branch from the remote origin/HEAD reference.
 func resolveDefaultBranch(repo *git.Repository) string {
 	ref, err := repo.Reference(plumbing.ReferenceName("refs/remotes/origin/HEAD"), true)
 	if err != nil {
-		return "main"
+		return fallbackDefaultBranch
 	}
 	branch := ref.Name().Short()
 	branch = strings.TrimPrefix(branch, "origin/")
 	if branch == "" {
-		return "main"
+		return fallbackDefaultBranch
 	}
 	return branch
 }
 
-// buildGitforgeRepo constructs a gitforge Repository entity from a remote URL.
-func buildGitforgeRepo(remoteURL string, defaultBranch string) globalEntities.Repository {
+// buildGitforgeRepo constructs a gitforge Repository entity from a remote URL. The
+// repository ID is the one discovery reported, or empty when the repository was not
+// discovered through the provider API, in which case the API is addressed by name.
+func buildGitforgeRepo(remoteURL, defaultBranch, repositoryID string) globalEntities.Repository {
 	parsed, err := gitInfra.ParseRemoteURL(remoteURL)
 	if err != nil {
 		logger.WithField("remoteURL", remoteURL).Warn("could not parse organization or repository name from remote URL")
 		return globalEntities.Repository{
+			ID:            repositoryID,
 			DefaultBranch: "refs/heads/" + defaultBranch,
 			RemoteURL:     remoteURL,
 		}
 	}
 
 	return globalEntities.Repository{
+		ID:            repositoryID,
 		Name:          parsed.RepoName,
 		Organization:  parsed.Organization,
 		Project:       parsed.Project,
@@ -1827,7 +2028,14 @@ func getVersionFiles(
 			projectName = strings.ReplaceAll(languageProjectName, "-", "_")
 		}
 	} else {
-		logger.Infof("Language '%s' does not have a language interface", projectConfig.Language)
+		// Only Python reads its project name from its own manifest. Every other language --
+		// Go, Helm, TypeScript, Terraform alike -- uses the repository's name, which is the
+		// normal case and not worth an info line on every version-file lookup: it read as if
+		// the language were unsupported while its version files were being bumped.
+		logger.Debugf(
+			"Language '%s' has no project name reader, using '%s' for '{project_name}'",
+			projectConfig.Language, projectName,
+		)
 	}
 
 	languageConfig, exists := globalConfig.LanguagesConfig[projectConfig.Language]

@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the line saying a language `does not have a language interface` into a debug line saying which name stands in for `{project_name}`: it was printed at info level for every language but Python, twice per repository, and read as if Helm, Go or TypeScript were unsupported while their version files were being bumped'
+time: '2026-10-19T18:42:45.38512495Z'

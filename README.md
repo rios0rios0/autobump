@@ -211,9 +211,11 @@ So when your SSH life happens on the Windows side (`ssh.exe`, Git for Windows, a
 
 ### Stale Branch Cleanup
 
-Before creating the branch for a release, AutoBump deletes every remote branch carrying the bump prefix (`chore/bump-*`) and closes the pull request attached to each one — on Azure DevOps the pull request is abandoned. Without this, running AutoBump repeatedly on a repository nobody reviews leaves a trail of abandoned release branches and open pull requests.
+Before creating the branch for a release, AutoBump deletes every remote branch it named for a release — the bump prefix followed by a version, such as `chore/bump-1.4.0`, or a fork version such as `chore/bump-3.3.0.17` or `chore/bump-1.21.0-13` — and closes the pull request attached to each one — on Azure DevOps the pull request is abandoned. Without this, running AutoBump repeatedly on a repository nobody reviews leaves a trail of abandoned release branches and open pull requests. A branch with anything else after the prefix, such as `chore/bump-runner-images`, was named by a person and is never touched.
 
 Merged and unmerged branches are treated alike: a bump branch is disposable, because the branch needed for the current release is recreated immediately afterwards. Cleanup only runs once a bump is actually needed, so a pull request is never closed without a replacement being opened for it.
+
+Each branch is deleted first, and its pull request is closed only once the branch is gone. A forge may refuse the deletion — Azure DevOps lets an identity delete only the branches it created unless it holds the **Force push** permission, so bump branches pushed by someone else are refused — and the branch and its pull request are then both left in place for their reviewers, with a warning naming the branch. Delete such a branch by hand, or grant AutoBump's identity that permission, to let the next run replace it.
 
 Cleanup is **enabled by default**. Turn it off permanently in the config:
 
@@ -699,15 +701,16 @@ through the gopkg.in redirector, so it is left alone.
 
 1. **Repository Discovery** *(run mode with providers)*: Queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations
 2. **Opt-out Check**: Leaves a repository exactly as it was found when its own `.autobump.yaml` sets [`skip: true`](#skipping-a-repository)
-3. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
-4. **Version Detection**: Reads the current version from CHANGELOG.md
-5. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
-6. **Refresh**: Regenerates the lockfile when [`refresh`](#refresh) is on, so it travels in the same commit
-7. **Go Module Path**: Moves a Go library's module path, imports and install instructions to the released major version when they name an older one (see [Go Module Major Versions](#go-module-major-versions))
-8. **CHANGELOG Update**: Folds in any pending [chlog](#fragment-based-changelogs-chlog) fragments, applies the [changelog rules](#changelog-rules), and moves the result to the new version section with the current date
-9. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
-10. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
-11. **Cleanup**: Deletes the repository's working directory, with the clone and the refresh's caches, whatever the outcome (see [Disk Footprint](#disk-footprint))
+3. **Missing Changelog**: A repository without a changelog gets one. `autobump run` proposes it through a pull request from the `chore/add-changelog` branch rather than pushing it to the default branch, which a protected branch refuses, and releases the repository once that pull request is merged and changes are recorded under `[Unreleased]`. `autobump .` commits it to the branch you are on, without switching branches
+4. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
+5. **Version Detection**: Reads the current version from CHANGELOG.md
+6. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files
+7. **Refresh**: Regenerates the lockfile when [`refresh`](#refresh) is on, so it travels in the same commit
+8. **Go Module Path**: Moves a Go library's module path, imports and install instructions to the released major version when they name an older one (see [Go Module Major Versions](#go-module-major-versions))
+9. **CHANGELOG Update**: Folds in any pending [chlog](#fragment-based-changelogs-chlog) fragments, applies the [changelog rules](#changelog-rules), and moves the result to the new version section with the current date
+10. **Git Operations**: Commits changes, creates a new branch, and pushes to remote
+11. **MR/PR Creation**: Creates a merge request (GitLab), pull request (GitHub), or pull request (Azure DevOps) for review
+12. **Cleanup**: Deletes the repository's working directory, with the clone and the refresh's caches, whatever the outcome (see [Disk Footprint](#disk-footprint))
 
 ## Contributing
 

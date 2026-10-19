@@ -14,6 +14,20 @@ func FilterRepositories(
 	return filterRepositories(repos, globalConfig)
 }
 
+// RemoveStaleBumpBranch exports removeStaleBumpBranch for testing, taking its side effects
+// as plain functions; a nil closePullRequest stands for a run without a provider.
+func RemoveStaleBumpBranch(
+	branch string,
+	deleteRemote, deleteLocal func(branch string) error,
+	closePullRequest func(branch string) (bool, error),
+) {
+	removeStaleBumpBranch(branch, staleBranchActions{
+		deleteRemote:     deleteRemote,
+		deleteLocal:      deleteLocal,
+		closePullRequest: closePullRequest,
+	})
+}
+
 // CommitChanges exports the commitChanges function for testing.
 var CommitChanges = commitChanges //nolint:gochecknoglobals // test export
 
@@ -110,6 +124,9 @@ var AddFilesToWorktree = addFilesToWorktree //nolint:gochecknoglobals // test ex
 // CheckoutToMainBranch exports checkoutToMainBranch for testing.
 var CheckoutToMainBranch = checkoutToMainBranch //nolint:gochecknoglobals // test export
 
+// RecordRemoteDefaultBranch exports recordRemoteDefaultBranch for testing.
+var RecordRemoteDefaultBranch = recordRemoteDefaultBranch //nolint:gochecknoglobals // test export
+
 // ResolveDefaultBranch exports resolveDefaultBranch for testing.
 var ResolveDefaultBranch = resolveDefaultBranch //nolint:gochecknoglobals // test export
 
@@ -169,8 +186,11 @@ var CollectAuthMethods = collectAuthMethods //nolint:gochecknoglobals // test ex
 // SSHAgentAuthFromSocket exports sshAgentAuthFromSocket for testing.
 var SSHAgentAuthFromSocket = sshAgentAuthFromSocket //nolint:gochecknoglobals // test export
 
-// CommitAndPushInitialChangelog exports commitAndPushInitialChangelog for testing.
-var CommitAndPushInitialChangelog = commitAndPushInitialChangelog //nolint:gochecknoglobals // test export
+// CommitInitialChangelog exports commitInitialChangelog for testing.
+var CommitInitialChangelog = commitInitialChangelog //nolint:gochecknoglobals // test export
+
+// InitialChangelogBranch exports initialChangelogBranch for testing.
+const InitialChangelogBranch = initialChangelogBranch
 
 // DetectBySpecialPatterns exports detectBySpecialPatterns for testing.
 var DetectBySpecialPatterns = detectBySpecialPatterns //nolint:gochecknoglobals // test export

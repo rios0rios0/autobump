@@ -104,6 +104,12 @@ type ProjectConfig struct {
 	DetectChlog        *bool  `yaml:"detect_chlog"`
 	Refresh            *bool  `yaml:"refresh"`
 
+	// RepositoryID is the forge's identifier for the repository, known only when the
+	// repository was discovered through the provider API. It addresses the repository in
+	// every API call; without it the calls fall back to the repository name, which Azure
+	// DevOps accepts but warns about on every call. No YAML document sets it.
+	RepositoryID string `yaml:"-"`
+
 	// skipReason and skip record that the repository's own .autobump.yaml asked to be
 	// left out of every release.
 	//

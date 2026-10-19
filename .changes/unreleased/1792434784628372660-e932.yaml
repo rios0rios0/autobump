@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the stale branch cleanup deleting branches AutoBump never created: it now selects only the bump prefix followed by a version the bumper produces (`X.Y.Z`, or the fork forms `X.Y.Z.N` and `X.Y.Z-N`), so a branch a person named under the prefix, such as `chore/bump-runner-images`, keeps its pull request open and is never deleted'
+time: '2026-10-19T18:33:04.628242063Z'
