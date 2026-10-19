@@ -686,6 +686,38 @@ func TestAddCurrentVersionWithTag(t *testing.T) {
 		require.NoError(t, readErr)
 		assert.Contains(t, string(content), "[1.0.0]")
 	})
+
+	t.Run("should leave the changelog unchanged when the latest tag is not a semantic version", func(t *testing.T) {
+		t.Parallel()
+
+		// given a fork that carries its upstream's four-part tags
+		repoPath, repo := createTestRepo(t)
+		head, err := repo.Head()
+		require.NoError(t, err)
+		require.NoError(t, repo.Storer.SetReference(
+			plumbing.NewHashReference(plumbing.NewTagReferenceName("3.1.0.0"), head.Hash()),
+		))
+
+		const original = "# Changelog\n\n## [Unreleased]\n"
+		changelogPath := filepath.Join(repoPath, "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelogPath, []byte(original), 0o644))
+
+		ctx := &commands.RepoContext{
+			Repo: repo,
+			ProjectConfig: entitybuilders.NewProjectConfigBuilder().
+				WithPath(repoPath).
+				BuildProjectConfig(),
+		}
+
+		// when
+		err = commands.AddCurrentVersion(ctx, changelogPath)
+
+		// then no version header was written, so in particular no unparseable `[<nil>]` one
+		require.NoError(t, err)
+		content, readErr := os.ReadFile(changelogPath)
+		require.NoError(t, readErr)
+		assert.Equal(t, original, string(content))
+	})
 }
 
 func TestIterateProjects(t *testing.T) {

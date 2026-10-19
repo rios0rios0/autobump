@@ -974,6 +974,13 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 		logger.Warnf("Could not determine latest tag, skipping historical version in CHANGELOG: %v", err)
 		return nil
 	}
+	// A tag that is not a semantic version comes back with a nil version rather than an error.
+	// Formatting it wrote a literal `[<nil>]` header that no later run could parse, which
+	// failed every release of the repository from then on.
+	if latestTag.Tag == nil {
+		logger.Warn("The latest tag is not a semantic version, skipping historical version in CHANGELOG")
+		return nil
+	}
 
 	// TODO: we should replace <LINK TO THE PLATFORM TO OPEN THE PULL REQUEST> with the actual link
 
