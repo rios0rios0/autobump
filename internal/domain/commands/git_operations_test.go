@@ -1196,7 +1196,8 @@ func TestSetupChangelogWithRemote(t *testing.T) {
 
 	//nolint:paralleltest // test mutates global state or uses t.Setenv
 	t.Run("should push the new changelog on its own branch and leave the default branch alone", func(t *testing.T) {
-		// given a repository whose default branch lives on a remote reachable by path
+		// given AutoBump's own clone of a repository whose default branch lives on a remote
+		// reachable by path
 		repo, bareDir := createTestRepoWithRemote(t)
 		wt, err := repo.Worktree()
 		require.NoError(t, err)
@@ -1211,6 +1212,7 @@ func TestSetupChangelogWithRemote(t *testing.T) {
 			GlobalGitConfig: newTestGlobalGitConfig(),
 			GlobalConfig:    entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
 			ProjectConfig:   entitybuilders.NewProjectConfigBuilder().WithPath(dir).BuildProjectConfig(),
+			Cloned:          true,
 		}
 
 		// when

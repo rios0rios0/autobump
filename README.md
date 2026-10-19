@@ -701,7 +701,7 @@ through the gopkg.in redirector, so it is left alone.
 
 1. **Repository Discovery** *(run mode with providers)*: Queries GitHub, GitLab, and Azure DevOps APIs to find all repositories in configured organizations
 2. **Opt-out Check**: Leaves a repository exactly as it was found when its own `.autobump.yaml` sets [`skip: true`](#skipping-a-repository)
-3. **Missing Changelog**: A repository without a changelog gets one proposed through a pull request from the `chore/add-changelog` branch — never pushed to the default branch, which a protected branch refuses — and is released from the next run on, once that pull request is merged and changes are recorded under `[Unreleased]`
+3. **Missing Changelog**: A repository without a changelog gets one. `autobump run` proposes it through a pull request from the `chore/add-changelog` branch rather than pushing it to the default branch, which a protected branch refuses, and releases the repository once that pull request is merged and changes are recorded under `[Unreleased]`. `autobump .` commits it to the branch you are on, without switching branches
 4. **Language Detection**: AutoBump automatically detects the project language by looking for specific files (e.g., `go.mod`, `package.json`, `pom.xml`)
 5. **Version Detection**: Reads the current version from CHANGELOG.md
 6. **Version Update**: Determines the next version based on Semantic Versioning and updates language-specific version files

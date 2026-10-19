@@ -125,6 +125,12 @@ type RepoContext struct {
 	// is removed with the clone. It is empty for a local project, whose refresh runs in
 	// the operator's own checkout with the operator's own caches.
 	ToolingDir string
+
+	// Cloned reports that the checkout is AutoBump's own clone, removed after the run,
+	// rather than the operator's working tree. Only a clone may be switched to another
+	// branch with files written on it: go-git's forced checkout, which
+	// CreateAndSwitchBranch uses, deletes untracked and ignored files as well.
+	Cloned bool
 }
 
 // langIDJava is the user-facing config key alias shared by all Java langforge variants
@@ -272,6 +278,7 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 	ctx.Repo = repo
 	ctx.ProjectConfig.Path = repoDir
 	ctx.ToolingDir = workspaceToolingPath(root)
+	ctx.Cloned = true
 	return root, nil
 }
 
@@ -384,23 +391,54 @@ func cloneRepoIfNeeded(ctx *RepoContext) (string, error) {
 const initialChangelogBranch = "chore/add-changelog"
 
 // setupChangelog ensures the CHANGELOG file exists. It returns true when the changelog
-// already existed. A missing one is created and proposed through a pull request, and false
-// is returned: until that pull request is merged the project has no changelog to release.
+// already existed, and false when it had to be created: until it is merged, the project has
+// no changelog to release from.
+//
+// AutoBump's own clone proposes the new changelog through a pull request. The operator's
+// checkout gets it committed to the branch they are on instead, because proposing it means
+// switching branches, and the forced checkout that does it deletes the untracked and ignored
+// files of the working tree -- a `.env`, a build directory -- that only the operator owns.
 func setupChangelog(ctx *RepoContext, changelogPath string) (bool, error) {
 	if _, err := os.Stat(changelogPath); !os.IsNotExist(err) {
 		return true, nil
 	}
-	return false, proposeInitialChangelog(ctx, changelogPath)
+	if ctx.Cloned {
+		return false, proposeInitialChangelog(ctx, changelogPath)
+	}
+	return false, commitInitialChangelogInPlace(ctx, changelogPath)
+}
+
+// commitInitialChangelogInPlace creates the missing changelog in the operator's own checkout,
+// commits it to the branch they are on and pushes that branch, without switching branches.
+// The commit and the push are best-effort: a branch that refuses a direct push is the
+// operator's to handle, and a failure is logged.
+func commitInitialChangelogInPlace(ctx *RepoContext, changelogPath string) error {
+	if _, err := createChangelogIfNotExists(changelogPath); err != nil {
+		return err
+	}
+	if err := addCurrentVersion(ctx, changelogPath); err != nil {
+		return err
+	}
+
+	if err := commitInitialChangelog(ctx, changelogPath); err != nil {
+		logger.Warnf("Failed to commit the new changelog: %v", err)
+		return nil
+	}
+	if err := pushChanges(ctx, ctx.Head.Name().Short()); err != nil {
+		logger.Warnf("Failed to push the new changelog: %v", err)
+	}
+	return nil
 }
 
 // proposeInitialChangelog creates the missing changelog on initialChangelogBranch and opens a
-// pull request for it, instead of committing it to the branch the run started on.
+// pull request for it, instead of committing it to the branch the clone started on.
 //
 // That branch is the default branch, and a default branch that accepts changes only through
 // pull requests -- the usual state of a protected branch on every forge -- refused the direct
 // push. The changelog was never persisted, so every run created the same file and lost it
 // again. A branch an earlier run left behind means the changelog is already proposed: it gets
-// a pull request when it has none open, and is otherwise left alone.
+// a pull request when it has none open, and is otherwise left alone. The clone is fresh on
+// every run, so such a branch is one the remote holds, never one an earlier push failed on.
 //
 // Only creating the file can fail the release. Proposing it is best-effort, as the direct push
 // it replaces was: a failure is logged and the run moves on. The branch is created before the

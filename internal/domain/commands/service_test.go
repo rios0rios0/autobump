@@ -1146,11 +1146,10 @@ func TestSetupChangelog(t *testing.T) {
 		assert.True(t, existed, "should report that changelog already existed")
 	})
 
-	t.Run("should commit a new CHANGELOG on its own branch when it does not exist", func(t *testing.T) {
+	t.Run("should commit a new CHANGELOG to the branch the operator is on", func(t *testing.T) {
 		t.Parallel()
 
-		// given a repository without a remote, so proposing the changelog stops at the push,
-		// which is only logged
+		// given the operator's own checkout, without a remote, so the push is only logged
 		repo, dir := initTestRepo(t)
 		ctx := buildTestRepoContext(t, repo, dir)
 
@@ -1159,24 +1158,55 @@ func TestSetupChangelog(t *testing.T) {
 		// when
 		existed, err := commands.SetupChangelog(ctx, changelogPath)
 
-		// then the changelog is committed on the proposal branch, not on the branch the run
-		// started on, which is checked out again
+		// then the changelog is committed where the operator stands, and no branch is switched to
 		require.NoError(t, err)
 		assert.False(t, existed, "should report that changelog was freshly created")
-		assertBranchHasFile(t, repo, commands.InitialChangelogBranch, "CHANGELOG.md")
+		assert.FileExists(t, changelogPath)
 		head, err := repo.Head()
 		require.NoError(t, err)
-		assert.Equal(t, ctx.Head.Name(), head.Name(), "the run should return to the branch it started on")
-		_, statErr := os.Stat(changelogPath)
-		assert.True(t, os.IsNotExist(statErr), "the starting branch should not carry the new changelog")
+		assert.Equal(t, ctx.Head.Name(), head.Name(), "the operator's branch should stay checked out")
+		assertBranchHasFile(t, repo, head.Name().Short(), "CHANGELOG.md")
+		_, err = repo.Reference(plumbing.NewBranchReferenceName(commands.InitialChangelogBranch), false)
+		assert.ErrorIs(t, err, plumbing.ErrReferenceNotFound, "the operator's checkout gets no proposal branch")
+	})
+
+	t.Run("should leave the operator's untracked and ignored files alone", func(t *testing.T) {
+		t.Parallel()
+
+		// given the operator's checkout holding work no commit knows about: a file git
+		// ignores, which a forced checkout would delete as surely as an untracked one
+		repo, dir := initTestRepo(t)
+		wt, err := repo.Worktree()
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("local.env\n"), 0o644))
+		_, err = wt.Add(".gitignore")
+		require.NoError(t, err)
+		_, err = wt.Commit("ignored the local environment", &git.CommitOptions{
+			Author: &object.Signature{Name: "Test User", Email: "test@example.com", When: time.Now()},
+		})
+		require.NoError(t, err)
+		ctx := buildTestRepoContext(t, repo, dir)
+		untracked := filepath.Join(dir, "notes.txt")
+		ignored := filepath.Join(dir, "local.env")
+		require.NoError(t, os.WriteFile(untracked, []byte("work in progress\n"), 0o644))
+		require.NoError(t, os.WriteFile(ignored, []byte("SETTING=fixture-value-placeholder\n"), 0o600))
+
+		// when
+		_, err = commands.SetupChangelog(ctx, filepath.Join(dir, "CHANGELOG.md"))
+
+		// then
+		require.NoError(t, err)
+		assert.FileExists(t, untracked)
+		assert.FileExists(t, ignored)
 	})
 
 	t.Run("should leave a changelog an earlier run already proposed alone", func(t *testing.T) {
 		t.Parallel()
 
-		// given the proposal branch an earlier run left behind
+		// given AutoBump's own clone, holding the proposal branch an earlier run pushed
 		repo, dir := initTestRepo(t)
 		ctx := buildTestRepoContext(t, repo, dir)
+		ctx.Cloned = true
 		proposal := plumbing.NewBranchReferenceName(commands.InitialChangelogBranch)
 		require.NoError(t, repo.Storer.SetReference(plumbing.NewHashReference(proposal, ctx.Head.Hash())))
 
