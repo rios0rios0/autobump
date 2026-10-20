@@ -577,6 +577,11 @@ When fragments are pending, AutoBump:
   and AutoBump reads the bump off the rendered lines. A body that already opens with a
   breaking-change marker — in any spelling, including a doubled one — is **not** given a
   second: the marker is announced exactly once
+- repairs a fragment whose single-quoted value carries an unescaped apostrophe
+  (`body: 'the sweep's notices'`), which YAML reads as the end of the string, by doubling
+  the apostrophes and parsing it again, with a warning naming the file. The repair is only
+  tried on a fragment that already failed to parse, so a valid one is read as written; a
+  fragment it cannot repair still fails the release
 - applies the [changelog rules](#changelog-rules) to the pending fragments as a set, which
   is where they matter most: every fragment is written alone, in its own file, so nothing
   else ever sees them side by side

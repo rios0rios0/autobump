@@ -374,9 +374,9 @@ func readChlogFragment(path string) (*ChlogFragment, error) {
 		return nil, fmt.Errorf("failed to read chlog fragment %s: %w", path, err)
 	}
 
-	var fragment ChlogFragment
-	if err = yaml.Unmarshal(data, &fragment); err != nil {
-		return nil, fmt.Errorf("failed to parse chlog fragment %s: %w", path, err)
+	fragment, err := parseChlogFragment(path, data)
+	if err != nil {
+		return nil, err
 	}
 
 	if strings.TrimSpace(fragment.Body) == "" {
@@ -386,6 +386,31 @@ func readChlogFragment(path string) (*ChlogFragment, error) {
 
 	fragment.Path = path
 	return &fragment, nil
+}
+
+// parseChlogFragment decodes one fragment. A document whose single-quoted values carry bare
+// apostrophes is repaired and decoded again, with a warning naming the file, rather than
+// failing the release (see repairChlogFragmentQuoting); any other malformed document is
+// still an error, reported as the original parse failure.
+func parseChlogFragment(path string, data []byte) (ChlogFragment, error) {
+	var fragment ChlogFragment
+	parseErr := yaml.Unmarshal(data, &fragment)
+	if parseErr == nil {
+		return fragment, nil
+	}
+
+	repaired, changed := repairChlogFragmentQuoting(string(data))
+	if changed {
+		fragment = ChlogFragment{}
+		if err := yaml.Unmarshal([]byte(repaired), &fragment); err == nil {
+			logger.Warnf(
+				"Repaired the quoting of chlog fragment %s: a single-quoted value had an unescaped apostrophe",
+				path,
+			)
+			return fragment, nil
+		}
+	}
+	return ChlogFragment{}, fmt.Errorf("failed to parse chlog fragment %s: %w", path, parseErr)
 }
 
 // ensureNoPendingChlogVersionFiles guards against releasing on top of a half-finished

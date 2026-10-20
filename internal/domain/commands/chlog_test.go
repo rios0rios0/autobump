@@ -361,6 +361,78 @@ func TestReadChlogFragments(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("should repair the body when a single-quoted value has unescaped apostrophes", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		writeFragment(t, tmpDir, "100-a1b2.yaml",
+			"kind: 'Added'\n"+
+				"body: 'added the sweep's trial warnings and the relay's suspension notices'\n"+
+				"time: '2026-09-15T00:40:00Z'\n")
+
+		// when
+		fragments, err := readFragments(t, tmpDir)
+
+		// then
+		require.NoError(t, err)
+		require.Len(t, fragments, 1)
+		assert.Equal(t, "Added", fragments[0].Kind)
+		assert.Equal(t, "added the sweep's trial warnings and the relay's suspension notices", fragments[0].Body)
+		assert.Equal(t, 2026, fragments[0].Time.Year())
+	})
+
+	t.Run("should repair the body when a multi-line value mixes escaped and bare apostrophes",
+		func(t *testing.T) {
+			t.Parallel()
+
+			// given
+			tmpDir := t.TempDir()
+			writeFragment(t, tmpDir, "100-a1b2.yaml",
+				"kind: 'Fixed'\n"+
+					"body: 'fixed the parser''s retry and the\n"+
+					"  client's timeout'\n")
+
+			// when
+			fragments, err := readFragments(t, tmpDir)
+
+			// then
+			require.NoError(t, err)
+			require.Len(t, fragments, 1)
+			assert.Equal(t, "fixed the parser's retry and the client's timeout", fragments[0].Body)
+		})
+
+	t.Run("should read a correctly escaped body unchanged when its apostrophes are doubled", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: 'Added'\nbody: 'added the sweep''s warnings'''\n")
+
+		// when
+		fragments, err := readFragments(t, tmpDir)
+
+		// then
+		require.NoError(t, err)
+		require.Len(t, fragments, 1)
+		assert.Equal(t, "added the sweep's warnings'", fragments[0].Body)
+	})
+
+	t.Run("should return an error when a single-quoted value is never closed", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		tmpDir := t.TempDir()
+		writeFragment(t, tmpDir, "100-a1b2.yaml", "kind: 'Added'\nbody: 'added the sweep's warnings\n")
+
+		// when
+		_, err := readFragments(t, tmpDir)
+
+		// then
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse chlog fragment")
+	})
+
 	t.Run("should return no fragments when the unreleased directory is empty", func(t *testing.T) {
 		t.Parallel()
 
