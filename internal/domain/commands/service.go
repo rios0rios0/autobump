@@ -127,9 +127,10 @@ type RepoContext struct {
 	ToolingDir string
 
 	// Cloned reports that the checkout is AutoBump's own clone, removed after the run,
-	// rather than the operator's working tree. Only a clone may be switched to another
-	// branch with files written on it: go-git's forced checkout, which
-	// CreateAndSwitchBranch uses, deletes untracked and ignored files as well.
+	// rather than the operator's working tree. Only a clone is moved to another branch
+	// with files written on it: the way back is a plain checkout, which go-git refuses
+	// over uncommitted edits after it has already moved HEAD, leaving the new file staged
+	// on the branch the run started on.
 	Cloned bool
 }
 
@@ -396,8 +397,9 @@ const initialChangelogBranch = "chore/add-changelog"
 //
 // AutoBump's own clone proposes the new changelog through a pull request. The operator's
 // checkout gets it committed to the branch they are on instead, because proposing it means
-// switching branches, and the forced checkout that does it deletes the untracked and ignored
-// files of the working tree -- a `.env`, a build directory -- that only the operator owns.
+// switching branches and back. The switch away keeps their files, but the way back is a plain
+// checkout that go-git refuses over their uncommitted edits, after it has already moved HEAD:
+// they would be left on their branch with the proposed changelog staged for their next commit.
 func setupChangelog(ctx *RepoContext, changelogPath string) (bool, error) {
 	if _, err := os.Stat(changelogPath); !os.IsNotExist(err) {
 		return true, nil
@@ -441,9 +443,9 @@ func commitInitialChangelogInPlace(ctx *RepoContext, changelogPath string) error
 // every run, so such a branch is one the remote holds, never one an earlier push failed on.
 //
 // Only creating the file can fail the release. Proposing it is best-effort, as the direct push
-// it replaces was: a failure is logged and the run moves on. The branch is created before the
-// file is written because CreateAndSwitchBranch forces its checkout, which is only safe on a
-// clean worktree; the run then returns to the branch it started on, whatever happened.
+// it replaces was: a failure is logged and the run moves on. The branch is created at the
+// commit the clone is on, so CreateAndSwitchBranch only points HEAD at it, and the run returns
+// to the branch it started on afterwards, whatever happened.
 func proposeInitialChangelog(ctx *RepoContext, changelogPath string) error {
 	proposed, err := gitInfra.CheckBranchExists(ctx.Repo, initialChangelogBranch)
 	if err != nil {
