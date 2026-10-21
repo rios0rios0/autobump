@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the CI test stage failing since the gitforge `4.3.1` update by expecting the changelog AutoBump creates for a repository without one to record the latest release when its tag is annotated, which gitforge now resolves instead of skipping'
-time: '2026-10-21T13:22:15.851300757Z'
