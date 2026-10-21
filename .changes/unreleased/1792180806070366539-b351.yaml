@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed SSH pushes and remote branch listings failing on WSL with "unable to find any valid known_hosts file" before any credential was tried: host key verification now also discovers the Windows user profiles'' known_hosts through the WSL automount root, honouring /etc/wsl.conf, and honours the SSH_KNOWN_HOSTS environment variable when set'
-time: '2026-10-16T20:00:06.070275539Z'

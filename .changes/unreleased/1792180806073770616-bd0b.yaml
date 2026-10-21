@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the Go module `github.com/rios0rios0/gitforge/v4` from `v4.2.11` to `v4.2.12-0.20261016194601-d75625fcc767` so gitforge''s default SSH agent fallback verifies host keys with AutoBump''s own known_hosts discovery instead of go-git''s default lookup'
-time: '2026-10-16T20:00:06.073675655Z'

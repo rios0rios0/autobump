@@ -22,6 +22,29 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.3.2] - 2026-10-21
+
+### Changed
+
+- changed the Go module `github.com/rios0rios0/gitforge/v4` from `v4.2.11` to `v4.2.12-0.20261016194601-d75625fcc767` so gitforge's default SSH agent fallback verifies host keys with AutoBump's own known_hosts discovery instead of go-git's default lookup
+- changed the Go modules `github.com/Microsoft/go-winio` from `v0.6.3` to `v0.6.4`, `github.com/rios0rios0/cliforge` from `v0.5.0` to `v0.5.1`, `github.com/rios0rios0/gitforge/v4` from `v4.2.10` to `v4.3.1`, `github.com/rios0rios0/langforge` from `v1.1.8` to `v1.1.9` and `github.com/rios0rios0/testkit` from `v0.3.5` to `v0.3.6`
+- changed the Go version from `1.27.2` to `1.27.3`
+- changed the line saying a language `does not have a language interface` into a debug line saying which name stands in for `{project_name}`: it was printed at info level for every language but Python, twice per repository, and read as if Helm, Go or TypeScript were unsupported while their version files were being bumped
+
+### Fixed
+
+- documented the known_hosts tests fixture directory modes (0o700 and 0o755) with nosemgrep annotations, the suite's convention for the file-permission rule, so a future semgrep rule change cannot flip the scan between passing and failing
+- fixed `autobump run` opening the release pull request of a cloned repository whose default branch is neither `main` nor `master`, such as a fork working on `custom`, against `main`, and then reporting the repository as failed because it could not switch back: the clone now records the remote's default branch, and the run returns to it after opening the pull request
+- fixed a newly created changelog getting a `## [<nil>]` version header when the latest tag of the repository is not a semantic version, such as the four-part tags of a fork's upstream, which made every later release of that repository fail to parse the changelog: such a tag is now skipped, as a repository without tags already was
+- fixed a repository without a changelog getting a new one created and lost on every `autobump run`: AutoBump pushed it straight to the default branch, which refuses a direct push once it requires pull requests, so the run now proposes the changelog through a pull request from the `chore/add-changelog` branch and leaves an open proposal alone on later runs, while `autobump .` still commits it to the branch the operator is on
+- fixed every forge API call of an `autobump run` with `providers` warning that the repository ID was empty and falling back to the repository name: the ID discovery reports is now carried to the calls that open, find and close pull requests
+- fixed SSH pushes and remote branch listings failing on WSL with "unable to find any valid known_hosts file" before any credential was tried: host key verification now also discovers the Windows user profiles' known_hosts through the WSL automount root, honouring /etc/wsl.conf, and honours the SSH_KNOWN_HOSTS environment variable when set
+- fixed the CI style check failing on golangci-lint paralleltest findings: the parallel-safe tests (GitOperations stub and version-file tests) now run with t.Parallel(), and the genuinely sequential ones — tests that mutate package-level globals or use t.Setenv — document that with nolint directives
+- fixed the CI test stage failing since the gitforge `4.3.1` update by expecting the changelog AutoBump creates for a repository without one to record the latest release when its tag is annotated, which gitforge now resolves instead of skipping
+- fixed the stale branch cleanup abandoning a pull request whose branch it was then refused permission to delete, which left a closed pull request and a duplicate opened from the same branch on every run: the branch is now deleted first, and its pull request is closed only once the branch is gone
+- fixed the stale branch cleanup deleting branches AutoBump never created: it now selects only the bump prefix followed by a version the bumper produces (`X.Y.Z`, or the fork forms `X.Y.Z.N` and `X.Y.Z-N`), so a branch a person named under the prefix, such as `chore/bump-runner-images`, keeps its pull request open and is never deleted
+- repaired chlog fragments whose single-quoted values carry unescaped apostrophes, which used to fail the whole release with "mapping values are not allowed", by doubling the apostrophes and parsing the fragment again with a warning naming the file
+
 ## [3.3.1] - 2026-10-14
 
 ### Changed

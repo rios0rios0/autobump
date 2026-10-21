@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed a repository without a changelog getting a new one created and lost on every `autobump run`: AutoBump pushed it straight to the default branch, which refuses a direct push once it requires pull requests, so the run now proposes the changelog through a pull request from the `chore/add-changelog` branch and leaves an open proposal alone on later runs, while `autobump .` still commits it to the branch the operator is on'
-time: '2026-10-19T18:41:46.026265397Z'

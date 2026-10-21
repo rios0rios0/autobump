@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'documented the known_hosts tests fixture directory modes (0o700 and 0o755) with nosemgrep annotations, the suite''s convention for the file-permission rule, so a future semgrep rule change cannot flip the scan between passing and failing'
-time: '2026-10-16T23:44:18.044729237Z'

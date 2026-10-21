@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the stale branch cleanup abandoning a pull request whose branch it was then refused permission to delete, which left a closed pull request and a duplicate opened from the same branch on every run: the branch is now deleted first, and its pull request is closed only once the branch is gone'
-time: '2026-10-19T18:35:16.761104579Z'

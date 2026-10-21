@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed `autobump run` opening the release pull request of a cloned repository whose default branch is neither `main` nor `master`, such as a fork working on `custom`, against `main`, and then reporting the repository as failed because it could not switch back: the clone now records the remote''s default branch, and the run returns to it after opening the pull request'
-time: '2026-10-19T18:37:50.820546118Z'
