@@ -999,8 +999,8 @@ func checkoutToMainBranch(ctx *RepoContext) error {
 }
 
 // addCurrentVersion adds the current version to the CHANGELOG file.
-// If the repository has no tags or the tag cannot be resolved (e.g. annotated tags),
-// the function logs a warning and returns nil so that the CHANGELOG creation still succeeds.
+// If the repository has no version tags or the tag cannot be resolved, the function logs a
+// warning and returns nil so that the CHANGELOG creation still succeeds.
 func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 	lines, err := support.ReadLines(changelogPath)
 	if err != nil {
@@ -1012,9 +1012,9 @@ func addCurrentVersion(ctx *RepoContext, changelogPath string) error {
 		logger.Warnf("Could not determine latest tag, skipping historical version in CHANGELOG: %v", err)
 		return nil
 	}
-	// A tag that is not a semantic version comes back with a nil version rather than an error.
-	// Formatting it wrote a literal `[<nil>]` header that no later run could parse, which
-	// failed every release of the repository from then on.
+	// gitforge before 4.3.0 returned a tag that is not a semantic version with a nil version
+	// rather than an error. Formatting it wrote a literal `[<nil>]` header that no later run
+	// could parse, which failed every release of the repository from then on.
 	if latestTag.Tag == nil {
 		logger.Warn("The latest tag is not a semantic version, skipping historical version in CHANGELOG")
 		return nil
