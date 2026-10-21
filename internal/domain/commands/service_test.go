@@ -1081,48 +1081,37 @@ func TestAddCurrentVersion(t *testing.T) {
 		assert.Contains(t, string(content), "## [0.1.0]", "changelog should contain the tag version")
 	})
 
-	t.Run(
-		"should return nil and leave changelog unchanged when annotated tag cannot be dereferenced",
-		func(t *testing.T) {
-			t.Parallel()
+	t.Run("should append current version section when annotated tag exists", func(t *testing.T) {
+		t.Parallel()
 
-			// given
-			repo, dir := initTestRepo(t)
-			ctx := buildTestRepoContext(t, repo, dir)
+		// given a release tag object rather than a reference to the commit
+		repo, dir := initTestRepo(t)
+		ctx := buildTestRepoContext(t, repo, dir)
 
-			head, err := repo.Head()
-			require.NoError(t, err)
-			_, err = repo.CreateTag("v0.1.0", head.Hash(), &git.CreateTagOptions{
-				Message: "Release v0.1.0",
-				Tagger: &object.Signature{
-					Name:  "Test User",
-					Email: "test@example.com",
-					When:  time.Now(),
-				},
-			})
-			require.NoError(t, err)
+		head, err := repo.Head()
+		require.NoError(t, err)
+		_, err = repo.CreateTag("v0.1.0", head.Hash(), &git.CreateTagOptions{
+			Message: "Release v0.1.0",
+			Tagger: &object.Signature{
+				Name:  "Test User",
+				Email: "test@example.com",
+				When:  time.Now(),
+			},
+		})
+		require.NoError(t, err)
 
-			changelogPath := filepath.Join(dir, "CHANGELOG.md")
-			originalContent := "## [Unreleased]\n\n### Added\n\n"
-			require.NoError(t, os.WriteFile(changelogPath, []byte(originalContent), 0o644))
+		changelogPath := filepath.Join(dir, "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelogPath, []byte("## [Unreleased]\n\n### Added\n\n"), 0o644))
 
-			// when
-			// Note: gitforge's GetLatestTag may fail to dereference annotated tags via go-git.
-			// After our fix, addCurrentVersion() returns nil and leaves the changelog unchanged.
-			err = commands.AddCurrentVersion(ctx, changelogPath)
+		// when
+		err = commands.AddCurrentVersion(ctx, changelogPath)
 
-			// then
-			require.NoError(t, err)
-			content, readErr := os.ReadFile(changelogPath)
-			require.NoError(t, readErr)
-			assert.Equal(
-				t,
-				originalContent,
-				string(content),
-				"changelog should be unchanged when annotated tag cannot be dereferenced",
-			)
-		},
-	)
+		// then the tag is peeled to its commit instead of being skipped
+		require.NoError(t, err)
+		content, readErr := os.ReadFile(changelogPath)
+		require.NoError(t, readErr)
+		assert.Contains(t, string(content), "## [0.1.0]", "changelog should contain the annotated tag version")
+	})
 }
 
 func TestSetupChangelog(t *testing.T) {
