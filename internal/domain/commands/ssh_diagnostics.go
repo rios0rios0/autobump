@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/go-git/go-git/v5"
-	gitconfig "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v6"
+	gitconfig "github.com/go-git/go-git/v6/config"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 )
