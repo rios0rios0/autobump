@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the `RepoContext.Cloned`, `setupChangelog` and `proposeInitialChangelog` comments and `CLAUDE.md` to give the reason the operator''s own checkout still commits a new changelog in place now that gitforge 4.3 no longer forces its branch switch: the way back is a plain checkout, which go-git refuses over uncommitted edits after it has already moved HEAD, leaving the proposed changelog staged on the operator''s branch'
-time: '2026-10-21T14:05:04.326270779Z'
