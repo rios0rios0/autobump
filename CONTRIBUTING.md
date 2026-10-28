@@ -7,7 +7,7 @@ development practices, refer to the **[Development Guide](https://github.com/rio
 
 ## Prerequisites
 
-- [Go](https://go.dev/dl/) 1.26+
+- [Go](https://go.dev/dl/) 1.27+
 - [Make](https://www.gnu.org/software/make/)
 - [chlog](https://github.com/luizjhonata/chlog) (`go install github.com/luizjhonata/chlog@latest`)
 
@@ -37,5 +37,5 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    Write the `--body` as one line, however long, rather than hand-wrapping it — every entry
    is rendered as a single physical line in `CHANGELOG.md`, and a wrapped one only invites the
    next release's sort or the dependency-bump automation's insert to tear it apart.
-8. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
+8. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Git-Flow)
 9. Open a pull request against `main`
