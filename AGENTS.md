@@ -1,12 +1,12 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Claude Code, Codex, Cursor, GitHub Copilot) when working with code in this repository.
 
 ## What This Project Does
 
-AutoBump is a Go CLI tool that automates the release process: it reads `CHANGELOG.md`, calculates the next semantic version, updates the language-specific version files configured in `configs/autobump.yaml` (TypeScript `package.json`; Java `build.gradle`, `lib/build.gradle`, `pom.xml`, `src/main/resources/application.yaml`; Python `{project_name}/__init__.py`; C# `*/*.csproj`, `*/*.vdproj`; Helm `Chart.yaml`; Dart/Flutter `pubspec.yaml`; Go relies on git tags but Swagger-documented APIs get the `@version` annotation in `main.go`/`cmd/main.go`/`cmd/*/main.go` and the generated `docs.go`/`swagger.json`/`swagger.yaml` — or `openapi.json`/`openapi.yaml`, the OpenAPI 3 names the `swag` output is commonly renamed to — bumped when present; Terraform carries no version file and relies on git tags), commits, pushes, and creates PRs/MRs on GitHub, GitLab, or Azure DevOps. The list above mirrors the default config — treat `configs/autobump.yaml` as the source of truth. Version files are content-filtered: a globbed file only counts when one of its regex patterns matches its content.
+AutoBump is a Go CLI tool that automates the release process: it reads `CHANGELOG.md`, calculates the next semantic version, updates the language's version files, commits, pushes, and creates PRs/MRs on GitHub, GitLab, or Azure DevOps. `configs/autobump.yaml` is the source of truth for which files each language bumps. Go and Terraform release through git tags; a Go API documented with Swagger/OpenAPI also gets its `@version` annotation and generated `docs.go`/`swagger.*`/`openapi.*` bumped when present. Version files are content-filtered: a globbed file only counts when one of its regex patterns matches its content.
 
-Two version files need more than plain substitution, and those exceptions live in `versionFileHooks` (`internal/domain/commands/version_file_hooks.go`), a table keyed by base name rather than branches inside the rewrite: `pom.xml` masks its `<parent>` block so the first `<version>` match is the project's own, and `pubspec.yaml` routes the value through `langforge`'s `dart.BumpBuildNumber` so a Flutter build number (`1.2.3+7` → `1.3.0+8`) survives the release — Google Play and App Store Connect reject an upload whose build number did not increase. A third exception is a map entry, not an edit to `applyVersionPatterns`.
+Version files that need more than regex substitution are entries in `versionFileHooks` (`internal/domain/commands/version_file_hooks.go`), keyed by base name: `pom.xml` masks its `<parent>` block so the first `<version>` match is the project's own, and `pubspec.yaml` goes through `langforge`'s `dart.BumpBuildNumber` so the Flutter build number increases (`1.2.3+7` → `1.3.0+8`). Add the next exception as a map entry, not as a branch in `applyVersionPatterns`.
 
 ## Build & Development Commands
 
@@ -25,12 +25,14 @@ Run a single test during development:
 go test -run "TestDetectProjectLanguage" ./internal/domain/commands/
 ```
 
-Unit tests carry **no build tag**. `//go:build unit` only hid them from plain `go test ./...`
-and from IDE runs while buying nothing, because an untagged file compiles under a `-tags`
-build too — the shared pipeline's phase 1 (`-tags test,unit`) still runs every one of them.
-Phase 2 (`-tags integration`) selects only packages where the tag makes a test file *appear*,
-so untagged tests are not run twice. Reserve `//go:build integration` for tests that need
-real infrastructure; this repository has none today.
+`lint`, `test` and `sast` come from the shared [rios0rios0/pipelines](https://github.com/rios0rios0/pipelines)
+makefiles, which `Makefile` includes from `$(SCRIPTS_DIR)` (default
+`~/Development/github.com/rios0rios0/pipelines`); without that checkout those targets do not exist.
+
+Unit tests carry **no build tag**, so plain `go test ./...` runs them; the shared pipeline's
+phase 1 (`-tags test,unit`) still runs every one, and phase 2 (`-tags integration`) selects
+only packages where the tag makes a test file appear. Do not add `//go:build unit`. Reserve
+`//go:build integration` for tests that need real infrastructure; this repository has none today.
 
 A test that cannot run in parallel says so in a comment above it — "is deliberately not
 parallel: it mutates package-level globals", or `t.Setenv`, which the runtime forbids in a
@@ -99,208 +101,136 @@ Three-stage fallback in `DetectProjectLanguage`:
 
 ## Configuration
 
-Configuration is **layered**: built-in defaults (`configs/autobump.yaml`, embedded via
-`go:embed` in `configs/embed.go`) -> published defaults (the same file fetched from `main`,
-best effort) -> the operator's file (`-c`, else `~/` or `~/.config/`) -> the repository's
-own `.autobump.yaml`. Each layer overrides only the keys its document declares.
+Configuration is **layered**; each layer overrides only the keys its document declares:
+built-in defaults (`configs/autobump.yaml`, embedded via `go:embed` in `configs/embed.go`) ->
+published defaults (the same file fetched from `main`, best effort) -> the operator's file
+(`-c`, else `~/` or `~/.config/`) -> the repository's own `.autobump.yaml`.
 `internal/domain/entities/config_layers.go` is the engine; `configLoader` in
 `internal/infrastructure/controllers/config_helpers.go` assembles the first three, and
-`loadProjectConfigOverrides` (`service.go`) applies the fourth after the clone.
+`loadProjectConfigOverrides` (`service.go`) applies the fourth after the clone. `yaml.v3`
+decodes into a non-zero struct, so absent-versus-`false` needs no pointer fields; maps decode
+into fresh elements, so `LanguagesConfig` is blanked before the decode and re-merged with
+`MergeLanguagesConfig`. Apply is atomic, and a comments-only document (`io.EOF`) is a layer
+with nothing to say. The embedded defaults and the operator's file decode strictly; the
+fetched and project layers do not.
 
-The mechanism is `yaml.v3` decoding into a *non-zero* struct: only the keys the document
-carries are assigned, so absent-versus-`false` needs no pointer fields. Maps are the
-exception — each value decodes into a fresh zero element — so `LanguagesConfig` is blanked
-before the decode and re-merged with `MergeLanguagesConfig` afterwards, which is what keeps
-the per-path version-file rules in force *across* layers rather than within one. Apply is
-atomic (decode into a scratch copy, commit on success), and a comments-only document
-returns `io.EOF`, which is a layer with nothing to say rather than a broken one.
+The trust rules below are security boundaries. The reasoning lives in the doc comments of the
+functions named; read it before changing one.
 
-Only the operator's layer is `ScopeOperator`; the other three decode through
-`RestrictedConfig`, which has **no field** for `providers`, `projects`, any credential, or
-`bump_branch_prefix`. Two fields it *does* have are filtered rather than taken as written.
+- Only the operator's layer is `ScopeOperator`. The others decode through `RestrictedConfig`,
+  which has **no field** for `providers`, `projects`, any credential, or `bump_branch_prefix`.
+  The schema is the enforcement; never add one. `operatorOnlyKeys` only reports what was ignored.
+- `cleanup_stale_branches` may be switched **off** by a restricted layer, never on
+  (`acceptSwitchOff`): an enable would arrive after `applySkipCleanupFlag` and override
+  `--skip-cleanup`.
+- `refresh` is judged by `acceptRefresh`: off is honoured from any layer; on only from the
+  repository's own file (`LayerProjectConfig`), never from `LayerPublishedDefaults`.
+- The operator's veto is **not** the layer order: the project layer folds after the
+  operator's, and `RefreshEnabled` reads `projectConfig.Refresh` first. `resolveRefreshVeto`
+  records an explicit operator `refresh: false` (from the document's keys, not the decoded
+  pointer) in the unexported `GlobalConfig.refreshVetoed`, and both `acceptRefresh` and
+  `applyToProject` refuse a project enable against it. An omitted key is not a veto
+  (documented in the README for discovery mode).
+- `bump_branch_prefix` is operator-only *and* validated by `ValidateBumpBranchPrefix` (a name
+  git accepts, containing a `/`, not ending at one), because cleanup deletes what it matches.
+  `filterStaleBumpBranches` selects only the prefix followed by a version `createBumpBranch`
+  produces (`bumpBranchVersionRegex`: `X.Y.Z`, `X.Y.Z.N` or `X.Y.Z-N`), never the default
+  branch; a prefix match alone is not ownership.
 
-`cleanup_stale_branches` may be switched **off** by a restricted layer and never on
-(`acceptSwitchOff`): off can only ever remove an action, and an enable would arrive after
-`applySkipCleanupFlag` has run and would therefore override `--skip-cleanup`.
-
-`refresh` is `acceptRefresh`'s, which splits the restricted layers rather than treating
-them as one population. Off is honoured from any of them. On is honoured from
-`LayerProjectConfig` — the repository's own committed, reviewed `.autobump.yaml`, which is
-the only party that reliably knows whether a version bump leaves its lockfile stale — and
-refused from `LayerPublishedDefaults`, which arrives over the network from a document
-nobody in the room wrote. Scope is what a layer may *say*; trust is a separate question,
-and `refresh` is where the two come apart. AutoBump still owns the argv, so this decides
-only *whether* a package manager runs, never *what* it runs.
-
-The operator's veto is **not** the layer order, and assuming it was is a bug this feature
-shipped with once. The project layer is folded *after* the operator's file
-(`loadProjectConfigOverrides` -> `ApplyProjectLayer`), and `RefreshEnabled` reads
-`projectConfig.Refresh` before either field on `GlobalConfig` — so an operator's
-`refresh: false` is both overwritten and then never consulted. `resolveRefreshVeto` records
-an explicit operator `false` in the unexported `GlobalConfig.refreshVetoed`, read from the
-document's own keys rather than the decoded pointer, because only the key's *presence*
-separates "the operator said no" from "an earlier layer did and this one is silent". Both
-`acceptRefresh` and `applyToProject` refuse a project enable against it; the second is the
-one that decides, for the `RefreshEnabled` ordering reason above.
-
-Silence is deliberately not a veto — an operator who never wrote the key has expressed no
-opinion, and the repository may enable its own refresh. That asymmetry is load-bearing in
-discovery mode: with `providers:` the operator names an org rather than each repository, so
-anyone who can land a config file in anything the API returns can turn the refresh on for
-them. Documented in the README rather than blocked, because the operator has a one-line
-answer (`refresh: false`, then enable per repository through `projects[]`).
-
-That is the whole enforcement — not a check that has to run at the
-right moment, but a struct with nowhere for those keys to land. `operatorOnlyKeys` exists
-only to say out loud that they were ignored. Strictness is per layer: the embedded defaults
-and the operator's file are strict (a typo is worth reporting), the fetched and project
-layers are not (`main` may be newer than the binary, and a project file is partial by
-design).
-
-`bump_branch_prefix` is operator-only *and* validated by `ValidateBumpBranchPrefix`, because
-it is the argument to a destructive operation: `cleanupStaleBumpBranches` deletes the remote
-branches it names and closes each attached PR. It must name a branch git would
-accept, must contain a `/`, and must not *stop* at one — `chore/` would match
-`chore/autoupdate-*`, so a bare namespace makes one tool delete another's branches. An
-operator's typo is as capable of that as a hostile repository, which is why the check runs
-over their own file too. `filterStaleBumpBranches` carries the second lock: it selects only
-the prefix followed by a version `createBumpBranch` produces (`bumpBranchVersionRegex`:
-`X.Y.Z`, `X.Y.Z.N` or `X.Y.Z-N`), and never the default branch. A prefix match alone is not
-ownership — people name their own branches `chore/bump-runner-images` too, and the cleanup
-used to delete them.
-
-Token values support inline strings, `${ENV_VAR}` expansion, and file paths, resolved once
-by `FinalizeGlobalConfig` over the *folded* configuration — running it per layer would read
-a token path off disk even when the next layer replaced it. SSH push auth is configured via
+Token values support inline strings, `${ENV_VAR}` expansion, and file paths, resolved once by
+`FinalizeGlobalConfig` over the *folded* configuration, never per layer. SSH push auth uses
 `ssh_key_path`, `ssh_key_passphrase` and `ssh_auth_sock`; common agent sockets are
 auto-detected when not set.
 
-The push runs on go-git's **pure-Go** SSH client, which is the whole of what
-`collectSSHAuthMethods` can feed: a private key file it reads itself, or a Unix-domain
-socket it can `net.Dial`. It never executes the `ssh` binary, so `core.sshCommand` and an
-`ssh` wrapper on `PATH` are invisible to it — while commit *signing* does shell out to
-`gpg.ssh.program`. That asymmetry is the entire bug report it generates: on WSL, signing
-through 1Password's `op-ssh-sign-wsl` works, every interactive `git push` works, and
-AutoBump alone cannot find a key, because the keys are behind a Windows named pipe that Go
-cannot dial. `internal/domain/commands/ssh_diagnostics.go` says so out loud —
-`explainSSHPushFailure` wraps a failed push in `ErrNoSSHCredential` plus the reason, but
-only when the remote is SSH *and* no SSH method was collected, so it never displaces a more
-specific failure or fires on a token-authenticated HTTPS push. `sshEnvironment` is plain
-data so the message is tested by constructing host facts rather than a host.
+Pushes run on go-git's **pure-Go** SSH client: `collectSSHAuthMethods` can only use a key file
+or a Unix socket it can dial, and `core.sshCommand` or an `ssh` wrapper on `PATH` is ignored
+(commit signing does shell out to `gpg.ssh.program`). `ssh_diagnostics.go` explains the
+failure (`explainSSHPushFailure` → `ErrNoSSHCredential`) only for an SSH remote with no
+collected method. Everything that reaches its renderers has already failed to dial, so a
+detected socket there is a dead one (`UnusableAgentSockets`); `TestDetectSSHEnvironment` covers
+that seam with a real socket. Known-hosts discovery (`ssh_known_hosts.go`: `SSH_KNOWN_HOSTS`,
+`~/.ssh`, `/etc/ssh`, and Windows profiles under WSL) is memoized per process, and `main.go`
+hands the same callback to gitforge's `SetDefaultSSHHostKeyCallback`.
 
-Host key verification is a file problem rather than an agent one, and gets its own
-discovery: `internal/domain/commands/ssh_known_hosts.go` builds the callback from
-`SSH_KNOWN_HOSTS` (which replaces discovery when set, as in go-git), `~/.ssh/known_hosts`,
-`/etc/ssh/ssh_known_hosts` and — under WSL, reusing `runningUnderWSL` — every Windows
-profile's `known_hosts` under the automount root, honouring `[automount] root`/`enabled`
-in `/etc/wsl.conf`. A WSL setup that delegates SSH to Windows keeps its host keys in
-`/mnt/c/Users/<name>/.ssh/` only, and without them go-git fails every SSH operation with
-"unable to find any valid known_hosts file" *before a credential is even attempted*. The
-callback is memoized per process — it used to be rebuilt, and its warnings repeated, per
-auth method — and `main.go` hands the same callback to gitforge's
-`SetDefaultSSHHostKeyCallback`, so gitforge's default SSH agent fallback (the push and
-remote listing it performs with no explicit auth method) verifies against the same
-discovery instead of go-git's own blind lookup.
-
-**Everything that reaches the renderers has already failed to dial**, and forgetting it
-produced the one bug this feature shipped with. `explainSSHPushFailure` runs only after
-`collectSSHAuthMethods` returned nothing, and that function's auto-detect loop dials every
-path `detectSSHAgentSockets` reports — so by the time the diagnosis is rendered, a detected
-socket is a *dead* one by construction. The field used to be `AuthSockUsable`, set from
-`len(detectSSHAgentSockets()) > 0`, which only stats for `ModeSocket`; it therefore meant
-the exact inverse of its name here, and the two guards resting on it fired only in the state
-they meant to exclude — a WSL host whose relay had died got no WSL paragraph and was told to
-export a variable it had already exported. It is now `UnusableAgentSockets`, which names
-what the call site can actually know, and the dead socket is reported by path. Renderer
-tests build the struct by hand and cannot catch that drift, so `TestDetectSSHEnvironment`
-covers the seam against a real socket left behind by a closed listener.
-
-Versioning modes: `semver` (default), `fork-dot`, `fork-dash`. Fork modes increment only the trailing fork digit (e.g. `3.3.0.16` → `3.3.0.17`) and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`.
+Versioning modes: `semver` (default), `fork-dot`, `fork-dash`. Fork modes increment only the trailing fork digit (e.g. `3.3.0.16` → `3.3.0.17`) and skip language-specific version-file rewrites and the refresh. See `internal/domain/commands/fork_version.go`.
 
 A repository's own `.autobump.yaml` may set `refresh`, `changelog_path`, `versioning`,
-`detect_chlog`, `cleanup_stale_branches`, `exclude_forks`, `exclude_archived`,
-`languages`, `skip` and `reason`. `ApplyProjectLayer` folds it onto the configuration *and* onto the project
-entry, and the entry pass reads what *that document* declared rather than the folded
-result — reading the folded value would let the operator's own global default overwrite the
-`projects[]` entry they wrote beside it, which is the opposite of the precedence everything
-else follows. The repository's file now wins over that entry, where before it only filled in
-what the entry left empty. `resolveChangelogPath` gained the global fallback to match, so
-`GlobalConfig.ChangelogPath` — decoded and never read before layering — finally means
-something.
+`detect_chlog`, `cleanup_stale_branches`, `exclude_forks`, `exclude_archived`, `languages`,
+`skip` and `reason`. `ApplyProjectLayer` folds it onto the configuration *and* onto the
+project entry, where it wins over the operator's `projects[]` entry; the entry pass reads what
+*that document* declared, not the folded result, so a global default never overwrites the
+entry written beside it. `resolveChangelogPath` falls back to `GlobalConfig.ChangelogPath`.
 
-`skip` (with an optional `reason`) is the repository taking itself out of every release, and
-it is the one key only the project layer may set. `RestrictedConfig` decodes it in all three
-restricted layers because the schema is shared, but `applyToProject` -- reached only from
-`ApplyProjectLayer`, so only with the repository's own file -- is its sole writer: it lands
-in the *unexported* `ProjectConfig.skip`/`skipReason` (the `refreshVetoed` pattern, so no
-YAML document can set it and the operator's strict `projects[]` decode rejects the key),
-read through `IsSkipped`/`SkipReason`. `applyTo` warns when the built-in or published
-defaults carry it, because a skip there would stop every release a run reaches. The reason
-has its whitespace collapsed on the way in, since it is logged verbatim. `ProcessRepo`
-checks it (`honourSkipRequest`) immediately after `loadProjectConfigOverrides` and before
-`resolveChangelogPath` -- ahead of `setupChangelog`, which creates a missing changelog and
-proposes it through a pull request, and of stale-branch cleanup, which deletes branches and closes pull requests -- so
-a skipped repository is left exactly as it was found. All three entry points (`IterateProjects`,
-`DiscoverAndProcess`, `RootController`) go through `ProcessRepo`, so the skip holds in every
-mode.
+`skip` (with an optional `reason`) is the one key only the project layer may set:
+`applyToProject` writes it to the unexported `ProjectConfig.skip`/`skipReason` (read via
+`IsSkipped`/`SkipReason`), and `applyTo` warns when the built-in or published defaults carry
+it. `ProcessRepo` calls `honourSkipRequest` right after `loadProjectConfigOverrides`, before
+`resolveChangelogPath`, `setupChangelog`, stale-branch cleanup, branch, commit, push or PR, so
+a skipped repository is left untouched. Every mode goes through `ProcessRepo`.
 
-The refresh (`refresh`, top-level or per-language, opt-in) regenerates what the version
-files derive. AutoBump rewrites version files with regexes and runs no package manager, so a
-lockfile keeps the pre-bump resolution descriptor and the first `yarn install --immutable`
-in CI rejects the release with YN0028. `internal/domain/commands/refresh_recipes.go` holds
-the recipes and `refresh_commands.go` runs them, handing what they wrote to
-`addFilesToWorktree` for staging.
+## Release Pipeline
 
-**AutoBump owns the argv.** That is the load-bearing change: `refresh_commands` used to read
-a command out of configuration, which made it an executable run with the release
-credentials, which meant a repository's own file could never be trusted with it — and that
-one exception is what stopped the project layer from simply overriding things like every
-other layer. With the recipes as compile-time constants there is nothing left to sanitize,
-which is why `SanitizeUntrustedLanguages` is gone.
-
-`refreshRecipes` maps a language to a detector; only `typescript`/`javascript`/`node` have
-one, because a lockfile only goes stale when the rewrite changes a string it keys on, and
-outside a JS workspace it never does. `nodeMarkers` is ordered on purpose: a repository
-migrating between package managers carries two lockfiles, and `packageManager` is the only
-signal saying which is current rather than left over. Yarn Classic is detected and skipped —
-it has no install mode that resolves without also linking and running install scripts.
-Every recipe is resolution-only, and the extra flags are load-bearing. npm runs the root
-`prepare`/`postinstall` under `--package-lock-only` since npm 7; pnpm defaults
-`frozen-lockfile` to true in CI, which is exactly where `run` mode lives. Two of them are
-not about lifecycle scripts at all: pnpm loads `.pnpmfile.cjs` and calls its hooks during
-resolution (`--ignore-pnpmfile`), and Yarn's launcher execs whatever `yarnPath` in the
-project's own `.yarnrc.yml` names (`YARN_IGNORE_PATH=1`). Both run repository-supplied
-JavaScript with AutoBump's environment, and no `--ignore-scripts` reaches either. Owning the
-argv closed one half of the old trust boundary; those flags close the other, which is what
-lets `acceptRefresh` take `refresh: true` from a repository without handing it a command. A missing binary
-aborts that repository's release rather than skipping, because skipping opens exactly the
-pull request the feature prevents and looks identical to having nothing to refresh. Fork
-versioning skips it along with the version-file rewrite it already skips.
-
-chlog support: projects using [chlog](https://github.com/luizjhonata/chlog) keep pending changes as YAML fragments in `.changes/unreleased/` and therefore have a permanently empty `[Unreleased]` section. `internal/domain/commands/chlog.go` detects the layout (a `.chlog.yaml` or the fragment directory), parses the fragments, and renders them as Keep a Changelog `### <Section>` entries; chlog is a command-only module, so its format is re-implemented rather than imported. The splice happens in `readChangelogLines` (`service.go`), the single boundary every changelog read goes through — so the emptiness check, SemVer calculation, and fork mode all keep operating on plain Keep a Changelog lines. Fragment entries are merged with anything already in `[Unreleased]`, and AutoBump's own SemVer rules decide the bump rather than chlog's `auto` mapping. `consumeChlogFragments` deletes the consumed fragments after the rewrite and `stageChlogConsumption` stages the removals. It also writes a `.gitkeep` into the fragment directory via `KeepChlogUnreleasedDirectory` and stages that: Git tracks files rather than directories, so the commit that removes the last fragment would otherwise remove `.changes/unreleased/` too — and with it the layout `DetectChlog` recognises, leaving the next run to read the permanently empty `[Unreleased]` section as "nothing to release". The placeholder is returned for staging even when it already exists, because one left by an aborted earlier run is still untracked. Detection is opt-out via `entities.ChlogEnabled` (`detect_chlog`). A pending `.changes/v*.md` left by `chlog batch` aborts the run with `ErrChlogPendingVersionFiles`. `ChlogFragment.Breaking` carries what `chlog new --breaking` writes: chlog stores the flag only to force a major bump when *it* picks the version and never renders it, but AutoBump reads the bump off the rendered lines, so `renderChlogBody` has to turn the flag into the marker the counter recognises — via `entities.NormalizeBreakingChangeMarker` rather than a prepend, because a writer who passes `--breaking` usually opens the body with "BREAKING CHANGE:" as well and prepending would announce it twice.
-
-Changelog rules: `entities.NormalizeUnreleasedSection` (`internal/domain/entities/changelog_normalize.go`) is where heading repair, breaking-marker canonicalisation, deduplication, verb-based reclassification and ordering live. It runs at the end of `readChangelogLines` — the same single boundary the fragments are spliced at — which is what extends the rules to the two paths that never had them: chlog fragments (each written alone, so nobody ever sees the pending set side by side) and fork versioning (`rewriteUnreleasedAsForkRelease` copies the section without consulting the SemVer pipeline the rules used to live inside). It is idempotent, because the changelog is read several times per run, and it only ever touches `[Unreleased]`.
-
-Two details are load-bearing. The rules operate on *entries* — a bullet plus its continuation lines — not on lines: `DeduplicateEntries` and `ReclassifyEntriesByVerb` are still gitforge's, called with the bullets alone and the results paired back by order (unambiguous, since bullets are unique inside a section once exact repeats are gone) and one entry at a time respectively. And heading repair is not cosmetic: the release renderer buckets by the exact string `### Added`, so `#### added` silently drops every entry underneath it.
-
-**AutoBump never writes a wrapped (multi-line) changelog entry, and never leaves one wrapped either.** `entities.UnwrapChangelogEntries` (`changelog_normalize.go`) joins a bullet with the continuation lines that immediately follow it into one physical line — a blank line closes the entry rather than being folded into it, so a trailing reference-link block is never swept into the entry above it. Unlike `NormalizeUnreleasedSection`, it runs over the *whole document*, released history included, which is where a wrapped entry actually does damage: `SortChangelogEntries` reorders every contiguous run of `- ` lines in the whole file on every run, and a continuation line breaks that contiguity, so sorting a wrapped entry can silently reorder its bullet away from its own continuation. gitforge's own `InsertChangelogEntry` (used by the dependency-bump automation) has the same blind spot from the other direction — it stops looking for a section's last bullet at the first line that is not itself a `- ` line, so it can insert a new bullet between an existing one and its continuation. Both are exactly how the `[2.34.0]` `### Changed` section in this project's own history got corrupted, and both are why `UnwrapChangelogEntries` runs twice: once at the `readChangelogLines` boundary (before `NormalizeUnreleasedSection`, so nothing downstream ever sees a multi-line entry — this is what also covers fork mode, which never calls the SemVer pipeline) and again immediately before `SortChangelogEntries` inside `ProcessChangelog`/`ProcessNewChangelog`, so the invariant holds locally at the call that needs it regardless of what ran in between. Only a wrapped sentence is a continuation: a nested list item opens an entry of its own, so its own wrap joins onto itself and never onto its parent (the promise `isChangelogBullet` makes, that an indented bullet belongs to the entry above it rather than being folded into it); a fenced code block's body is emitted verbatim; and a `#` closes the entry only at column 0, since an indented one is an issue reference such as `#123` rather than a heading — treating it as a heading stranded the rest of the entry on lines of its own, leaving behind exactly the wrapped entry this removes. Flattening structure would be permanent and retroactive here in a way it never was for the mechanism this replaced, which round-tripped through a separator and only ever ran over `[Unreleased]`. It is idempotent. **Never hand-wrap a `CHANGELOG.md` entry or a chlog fragment body across several lines** — write each entry as a single line and let the terminal or editor soft-wrap it for display. A wrapped entry that reaches disk anyway is joined back together on the next run, but only the wording that happens to still be adjacent to its bullet at that point — the fix is structural, not a substitute for writing it right the first time.
-
-Go module major versions: `internal/domain/commands/go_module_path.go` keeps a Go module's path in step with the major version a release publishes. Go rejects a v2+ tag whose `go.mod` lacks the `/vN` suffix, so a library tagged `v4.x` with an unsuffixed path cannot be fetched by version at all. Every consumer ends up on a pseudo-version and `go get -u` never moves it; gitforge sat in exactly that state from 2.0.0 to 4.2.9. `prepareGoModulePathChange` runs first in `updateChangelogAndVersionFiles` and prepares every edit in memory, so a module it cannot handle stops the release before anything on disk has moved. `apply` writes the edits after the version files, and `stageRewrittenFiles` stages them.
-
-Four decisions are load-bearing.
-
-- **Only modules Go resolves.** The trigger is a `vX.Y.Z` tag in the repository (`publishesGoModuleVersions`), because Go reads no other tag. The applications here release binaries under plain `X.Y.Z` tags (the pipelines' `go-binary` workflow), and renaming their module would rewrite every import for no reader. The libraries (`go-library`) tag both forms.
-- **The invariant, not the event.** The rule is "the path names the released major", not "a breaking release adds a suffix". It covers the breaking release (`/v4` to `/v5`, unsuffixed to `/v2`) and also repairs a path that fell behind earlier. The repair is filed under `Fixed`, which can never raise the bump the rest of `[Unreleased]` calls for. The release note is merged in `updateChangelogFile`, not at the `readChangelogLines` boundary, because that boundary also decides whether anything is pending, and an entry AutoBump wrote must never be the reason a release happens.
-- **Tracked files only.** The candidates come from the index (`trackedModuleFiles`), never from walking the directory. In local mode a walk would rewrite an ignored build output or a scratch file and then stage it into the release commit. Symlinks and submodules are skipped, because writing the rewrite through a committed symlink would escape the repository. Stage 0 is the unconflicted stage; go-git's `index.Merged` is 1, so it cannot be used for that check.
-- **References need context.** Outside Go source, the module path is also a repository URL, so a bare match would break every badge and link. `moduleReferenceContexts` lists what must come right before the path: a quote or backtick, `pkg.go.dev/`, a `go get|install|run|doc|list` command, a `-X` linker flag, or the word `module`. `followedByMajorSuffix` keeps `.../v5` from turning into `.../v4/v5`, and the changelog and chlog directory are excluded as history.
-
-A Go import is rewritten at the exact offsets of its literal, so nothing else in the file can move, and a gofmt-clean file is formatted again afterwards because a longer path can shift the alignment of a trailing comment. A file whose imports do not parse is warned about and left alone: it does not compile anyway, and it is most likely a template. A nested module keeps its own imports, and one that still requires the old path gets a warning rather than a migration nobody asked for.
-
-Per-repository workspace: `cloneRepo` clones a remote repository into a workspace (`internal/domain/commands/workspace.go`) -- `autobump-<digits>` under `os.TempDir()`, with the clone in `repo/` and the refresh's caches and temporary files in `tooling/`. Right after the clone, `recordRemoteDefaultBranch` writes `refs/remotes/origin/HEAD` the way `git clone` does and go-git does not: `resolveDefaultBranch` reads only that reference, so on a go-git clone it used to fall back to `main` and open the release pull request of a repository whose default branch is anything else (a fork on `custom`) against the wrong branch. `ProcessRepo` defers `removeWorkspace` *before* checking the clone's error, because a clone that fails halfway leaves its directory behind as surely as one that succeeds (go-git empties a pre-existing target on failure but keeps it); `cloneRepo` therefore returns the root together with its error, and every way out -- release, nothing to release, skip, failure -- removes it. `RepoContext.ToolingDir` carries `tooling/` to `runRefreshCommands`, and `refreshEnv` points the package managers at it: `TMPDIR`, `XDG_CACHE_HOME`, `npm_config_cache`, `PNPM_HOME`, `YARN_GLOBAL_FOLDER` and `COREPACK_HOME` (`refreshCacheVariables`). Caches only -- HOME and XDG_CONFIG_HOME stay, so `.npmrc` and `.yarnrc.yml` are read -- and two omissions are deliberate: `YARN_CACHE_FOLDER` would pull a zero-install project's committed `.yarn/cache` out of the repository, and `npm_config_store_dir` makes npm warn on every command. A local project has no workspace and an empty `ToolingDir`, which leaves the refresh on the process environment. `CleanupStaleWorkspaces`, called once by `RunController`, sweeps workspaces older than 30 minutes that a killed run left behind. It lists the temporary directory rather than globbing it and removes only directories `isWorkspaceName` accepts -- the prefix followed by digits and nothing else, exactly what `os.MkdirTemp` produces -- because it deletes whatever it selects: a glob such as `autobump-[0-9]*` constrains only the first character, and would take an operator's own `autobump-3.3.0`. A new refresh recipe for another ecosystem adds its cache variables to `refreshCacheVariables`.
-
-Missing changelog: in AutoBump's own clone (`RepoContext.Cloned`, set by `cloneRepo`), `setupChangelog` never commits to the branch the run started on. `proposeInitialChangelog` creates the file on `initialChangelogBranch` (`chore/add-changelog`, outside the bump prefix so cleanup never takes it for a release), commits and pushes it, opens a pull request, and returns to the starting branch. It used to push straight to the default branch, which every forge refuses once the branch requires pull requests, so the file was created and lost again on every run. The operator's own checkout (`autobump .`) never takes this path: `commitInitialChangelogInPlace` commits the new changelog to the branch they are on, as the direct push always did. Switching away is safe -- since gitforge 4.3, `CreateAndSwitchBranch` on HEAD's commit only points HEAD at the new branch, as `git switch -c` does, where it used to force a go-git checkout that reset the worktree and **deleted untracked and ignored files** -- but the way back is not: `returnToStartingBranch` is a plain checkout, which go-git refuses over uncommitted edits *after* it has already moved HEAD, so an operator with edits would be left on their branch with the proposed changelog staged for their next commit. In a clone, a proposal branch is one the remote holds -- the clone is fresh every run -- and is given a pull request when it has none open, or otherwise left alone. Only creating the file fails the release; proposing it is best-effort, as the direct push was.
-
-Stale branch cleanup: before creating the bump branch, `cleanupStaleBumpBranches` (`internal/domain/commands/cleanup.go`) deletes every remote branch named the way `createBumpBranch` names one — the bump prefix and a version — and closes the PR/MR attached to each (Azure DevOps abandons). It runs only when a bump is needed, so a PR is never closed without a replacement. It is opt-out — `entities.CleanupEnabled` treats an unset `cleanup_stale_branches` as enabled, and the persistent `--skip-cleanup` flag (applied by `applySkipCleanupFlag` in `controllers/config_helpers.go`) overrides the config per run. `entities.ResolveBumpBranchPrefix` (`bump_branch_prefix`, default `chore/bump-`) drives both branch creation and cleanup so the two cannot diverge. Cleanup is best-effort: every failure is logged and skipped rather than aborting the release. `removeStaleBumpBranch` deletes the branch *before* closing its pull request, and closes nothing when the deletion is refused: Azure DevOps refuses to delete a branch another identity created unless the caller holds Force push, and closing first turned every refusal into an abandoned pull request plus a duplicate opened from the same branch on each run. The order costs the close nothing — every provider finds the pull request by its source branch name, which outlives the branch, and GitHub closes it by itself when the head branch is deleted. Its side effects come in through `staleBranchActions`, which is what lets the order be tested without a forge.
+- **Refresh** (`refresh`, opt-in, top-level or per language) regenerates lockfiles after the
+  regex version rewrite: recipes in `refresh_recipes.go`, run by `refresh_commands.go`, output
+  staged via `addFilesToWorktree`. **AutoBump owns the argv**: recipes are compile-time
+  constants, and configuration only says *whether* to run. Only `typescript`/`javascript`/`node`
+  have recipes; `nodeMarkers` is ordered (`packageManager` before lockfiles); Yarn Classic is
+  skipped. Keep every resolution-only flag, including `--ignore-pnpmfile` and
+  `YARN_IGNORE_PATH=1`, which block repository-supplied JavaScript that `--ignore-scripts` does
+  not reach. A missing package manager aborts that repository's release
+  (`ErrRefreshManagerMissing`) instead of skipping.
+- **Changelog reads** all go through `readChangelogLines` (`service.go`), which splices chlog
+  fragments and then runs `entities.NormalizeUnreleasedSection` (`changelog_normalize.go`:
+  heading repair, breaking-marker canonicalisation, deduplication, verb reclassification,
+  ordering; `[Unreleased]` only, idempotent). Put new changelog rules there so chlog fragments
+  and fork mode get them. Rules move *entries* (a bullet plus its continuation lines), not
+  lines. Heading repair matters: the renderer buckets by the exact string `### Added`.
+- **chlog** (`chlog.go`, opt-out via `entities.ChlogEnabled` / `detect_chlog`): fragments in
+  `.changes/unreleased/` render as Keep a Changelog entries merged with `[Unreleased]`, and
+  AutoBump's own SemVer rules pick the bump. `consumeChlogFragments` deletes consumed
+  fragments and `stageChlogConsumption` stages the removals plus the `.gitkeep` from
+  `KeepChlogUnreleasedDirectory`, so the directory (and chlog detection) survives.
+  `ChlogFragment.Breaking` goes through `entities.NormalizeBreakingChangeMarker`, never a
+  prepend. A pending `.changes/v*.md` aborts with `ErrChlogPendingVersionFiles`. chlog's
+  format is re-implemented, not imported (command-only module).
+- **Entries are single lines.** `entities.UnwrapChangelogEntries` joins wrapped entries over
+  the *whole document*, at the `readChangelogLines` boundary and again right before
+  `SortChangelogEntries` in `ProcessChangelog`/`ProcessNewChangelog`, because a continuation
+  line breaks the sort's contiguity. Only wrapped prose joins: a nested list item is its own
+  entry, a fenced code block is verbatim, and `#` closes an entry only at column 0.
+  **Never hand-wrap a `CHANGELOG.md` entry or a chlog fragment body**; write each as one line.
+- **Go module major versions** (`go_module_path.go`): for repositories with a `vX.Y.Z` tag
+  (`publishesGoModuleVersions`), `prepareGoModulePathChange` runs first in
+  `updateChangelogAndVersionFiles` and moves the module path, imports and references to the
+  released major, preparing every edit in memory before anything is written. It touches
+  tracked files only (`trackedModuleFiles`; symlinks and submodules skipped), rewrites
+  references outside Go source only after a `moduleReferenceContexts` anchor
+  (`followedByMajorSuffix` prevents `/v4/v5`), and excludes the changelog and chlog directory.
+  A path that fell behind is repaired under `Fixed`; that note is merged in
+  `updateChangelogFile`, not at `readChangelogLines`, so an AutoBump-written entry never
+  triggers a release. Imports are rewritten at their literal's offsets and gofmt-clean files
+  re-formatted; files whose imports do not parse are left alone.
+- **Workspace** (`workspace.go`): `cloneRepo` clones into `autobump-<digits>` under
+  `os.TempDir()` (`repo/`, plus `tooling/` for refresh caches). `ProcessRepo` defers
+  `removeWorkspace` *before* checking the clone's error, so every outcome removes it.
+  `recordRemoteDefaultBranch` writes `refs/remotes/origin/HEAD` after the clone because
+  `resolveDefaultBranch` reads only that reference. `refreshCacheVariables` moves caches only
+  (never `YARN_CACHE_FOLDER` or `npm_config_store_dir`); a new recipe adds its cache variables
+  there. `CleanupStaleWorkspaces` deletes only names `isWorkspaceName` accepts; never widen it
+  to a glob.
+- **Missing changelog**: in AutoBump's own clone (`RepoContext.Cloned`),
+  `proposeInitialChangelog` creates it on `initialChangelogBranch` (`chore/add-changelog`,
+  outside the bump prefix), pushes, opens a PR, and returns to the starting branch; it never
+  commits to the starting branch. `autobump .` commits it in place
+  (`commitInitialChangelogInPlace`). Only creating the file fails the release; proposing it is
+  best-effort.
+- **Stale branch cleanup** (`cleanup.go`): `cleanupStaleBumpBranches` runs before
+  `createBumpBranch`, only when a bump is needed, and is best-effort and opt-out
+  (`entities.CleanupEnabled`, `--skip-cleanup` via `applySkipCleanupFlag`).
+  `entities.ResolveBumpBranchPrefix` (default `chore/bump-`) drives both creation and cleanup.
+  `removeStaleBumpBranch` deletes the branch *before* closing its PR/MR (Azure DevOps
+  abandons), and closes nothing when the deletion is refused; side effects come in through
+  `staleBranchActions` so the order is testable without a forge.
 
 <!-- chlog:start -->
 ## Changelog (chlog) — MANDATORY

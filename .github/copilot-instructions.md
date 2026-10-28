@@ -2,14 +2,12 @@
 
 AutoBump is a Go CLI tool that automatically updates CHANGELOG.md files according to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html) standards, commits changes, pushes commits, and creates merge/pull requests on GitHub, GitLab, and Azure DevOps. It supports multiple programming languages including Go, Java, Python, Dart/Flutter, TypeScript, and C#.
 
-Always reference these instructions first and fall back to search or bash commands only when you encounter unexpected information that does not match the info here.
-
 ## Working Effectively
 
 ### Bootstrap, Build, and Test
 
 - Install dependencies: `go mod download` -- takes <1 second (after first download)
-- Build the binary: `make build` -- takes ~35 seconds first time, <1 second after. NEVER CANCEL. Set timeout to 60+ minutes.
+- Build the binary: `make build` -- takes ~35 seconds first time, <1 second after.
 - Run tests: `make test` -- NEVER run `go test` directly.
 - Run linting: `make lint` -- NEVER run `golangci-lint` directly.
 - Run security analysis: `make sast` -- NEVER run `gitleaks`, `semgrep`, `trivy`, `hadolint`, or `codeql` directly.
@@ -29,12 +27,10 @@ Note: The CI/CD pipeline automatically uses these scripts via the reusable workf
 
 ### Running the Application
 
-- ALWAYS run the bootstrapping steps first.
 - Run via Makefile: `make run`
 - Run directly: `go run ./cmd/autobump`
 - Run built binary: `./bin/autobump`
 - Test help: `./bin/autobump --help`
-- Single-repository help: `./bin/autobump --help`
 - Run mode help: `./bin/autobump run --help`
 
 ### Installation
@@ -126,7 +122,7 @@ autobump/
 │   ├── embed.go                         # go:embed of the shipped defaults
 │   └── CHANGELOG.template.md           # Default CHANGELOG template
 ├── Makefile                             # Build: build, debug, build-musl, run, install
-├── go.mod                               # Module: github.com/rios0rios0/autobump (Go 1.27.1)
+├── go.mod                               # Module: github.com/rios0rios0/autobump
 └── .github/
     └── workflows/default.yaml           # CI/CD pipeline (go-binary reusable workflow)
 ```
@@ -185,6 +181,7 @@ autobump/
 
 - `--config/-c` -- config file path (persistent, available on all commands)
 - `--verbose/-v` -- enable verbose output (persistent, available on all commands)
+- `--skip-cleanup` -- keep stale bump branches and their PRs for this run (persistent, available on all commands)
 - `--language/-l` -- override detected language (root command only)
 
 ## Configuration
@@ -202,12 +199,12 @@ autobump/
 - Supports `projects` list and/or `providers` list (both processed by `run` command)
 - Token resolution: inline string, `${ENV_VAR}` expansion, or file path auto-detection
 - SSH push auth: `ssh_key_path`, `ssh_key_passphrase`, `ssh_auth_sock` fields; auto-detects common SSH agent sockets (1Password, standard `ssh-agent`) when not explicitly set
-- Per-project `.autobump.yaml` discovered via `entities.FindProjectConfigFile`; `loadProjectConfigOverrides` in `internal/domain/commands/service.go` applies it as the fourth layer through `entities.ApplyProjectLayer`. It may set `refresh`, `changelog_path`, `versioning`, `detect_chlog`, `cleanup_stale_branches`, `exclude_forks`, `exclude_archived`, `languages`, `skip` and `reason`, and it now **wins over the operator's `projects[]` entry** rather than only filling in what that entry left empty. The project-entry pass reads what *that document* declared, not the folded configuration — otherwise a global default would overwrite the entry written beside it
+- Per-project `.autobump.yaml` discovered via `entities.FindProjectConfigFile`; `loadProjectConfigOverrides` in `internal/domain/commands/service.go` applies it as the fourth layer through `entities.ApplyProjectLayer`. It may set `refresh`, `changelog_path`, `versioning`, `detect_chlog`, `cleanup_stale_branches`, `exclude_forks`, `exclude_archived`, `languages`, `skip` and `reason`, and it **wins over the operator's `projects[]` entry**. The project-entry pass reads what *that document* declared, not the folded configuration — otherwise a global default would overwrite the entry written beside it
 - `skip: true` (plus an optional `reason`) takes a repository out of every release. Only the repository's own `.autobump.yaml` can set it: `applyToProject` carries it onto the unexported `ProjectConfig.skip`/`skipReason` (read via `IsSkipped`/`SkipReason`), `applyTo` warns when the built-in or published defaults carry it, and the operator's strict `projects[]` decode has no key for it. `ProcessRepo` checks it through `honourSkipRequest` right after `loadProjectConfigOverrides`, before any changelog creation, stale-branch cleanup, branch, commit, push or pull request, so a skipped repository is left untouched in every mode
 - `versioning` mode (`semver`, `fork-dot`, `fork-dash`) drives `getNextVersionString` and `updateChangelogFileString`; fork modes preserve the upstream `X.Y.Z` and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`
 - `cleanup_stale_branches` (opt-out, default enabled) and the persistent `--skip-cleanup` flag control stale bump-branch cleanup: `cleanupStaleBumpBranches` in `internal/domain/commands/cleanup.go` runs before `createBumpBranch` (only when a bump is needed) to delete the remote branches named the bump prefix plus a version (`filterStaleBumpBranches`; any other branch under the prefix belongs to a person and is never touched) and close their PRs/MRs via the gitforge `ForgeProvider.ClosePullRequest`. `entities.CleanupEnabled` resolves the toggle; `applySkipCleanupFlag` in `internal/infrastructure/controllers/config_helpers.go` lets the flag override the config
 - `refresh` (boolean, top-level or per-language, opt-in, settable in any layer) regenerates what the version files derive — lockfiles above all. `entities.RefreshEnabled` resolves project → language → top level → false. `runRefreshCommands` in `internal/domain/commands/refresh_commands.go` runs the recipe after `updateVersion` and returns what it wrote, which `addFilesToWorktree` stages. A non-zero exit aborts the release with the command output attached, and fork versioning skips the whole step
-- **AutoBump owns the argv.** `internal/domain/commands/refresh_recipes.go` holds the recipes as compile-time constants; a configuration says *whether* to refresh, never *what to run*. That is what removed the old trust boundary — `refresh_commands` was an executable read from config, so a repository's own file could never be trusted with it, and that single exception is what stopped the project layer overriding things like every other layer. `SanitizeUntrustedLanguages` is gone with it
+- **AutoBump owns the argv.** `internal/domain/commands/refresh_recipes.go` holds the recipes as compile-time constants; a configuration says *whether* to refresh, never *what to run*. Do not reintroduce a configurable command: owning the argv is what lets a repository's own file enable the refresh at all
 - The recipes suppress more than lifecycle scripts: `--ignore-pnpmfile` (pnpm calls `.pnpmfile.cjs` hooks during resolution) and `YARN_IGNORE_PATH=1` (Yarn's launcher execs the file `yarnPath` in the project's own `.yarnrc.yml` names). Neither is reached by `--ignore-scripts`, and both run repository-supplied JavaScript with AutoBump's environment
 - `refreshRecipes` covers `typescript`/`javascript`/`node` only: a lockfile goes stale only when the rewrite changes a string it keys on, which outside a JavaScript workspace it never does. `nodeMarkers` is ordered — `packageManager` before any lockfile, because a repository mid-migration carries two and only that field says which is current. Yarn Classic is detected (`# yarn lockfile v1` vs Berry's `__metadata:`) and skipped: it has no install mode that resolves without linking. A missing binary returns `ErrRefreshManagerMissing` and aborts that repository rather than skipping
 - Each refresh command is bounded twice: a 10-minute context, and `cmd.WaitDelay` (10s) so a descendant holding the output pipe cannot extend the call. `configureProcessGroup` (`refresh_commands_unix.go` / `_windows.go`) puts the command in its own process group and kills the group on cancellation, so a shell's children die with it
@@ -217,7 +214,7 @@ autobump/
 - `ChlogFragment.Breaking` mirrors `chlog new --breaking`. chlog keeps the flag only to force a major bump when *it* picks the version and never renders a marker, while AutoBump reads the bump off the rendered lines — so `renderChlogBody` writes the entry through `entities.NormalizeBreakingChangeMarker` instead of prepending, because a writer who passes `--breaking` usually opens the body with a breaking-change marker too and prepending would announce it twice
 - `entities.NormalizeUnreleasedSection` (`internal/domain/entities/changelog_normalize.go`) holds the changelog rules — heading repair, breaking-marker canonicalisation, deduplication, verb-based reclassification, ordering — and runs at the end of `readChangelogLines`. Putting it at that boundary is what extends the rules to chlog fragments (each written alone, so nothing else sees the pending set together) and to fork versioning (`rewriteUnreleasedAsForkRelease` never consulted the SemVer pipeline the rules used to live inside). It is idempotent and touches `[Unreleased]` only; released sections come back verbatim
 - The rules move an entry as a unit: a bullet plus its continuation lines. gitforge's `DeduplicateEntries` and `ReclassifyEntriesByVerb` are still the deciders (called with the bullets alone, paired back by order; and one entry at a time)
-- **AutoBump never writes a wrapped changelog entry and never leaves one wrapped either.** `entities.UnwrapChangelogEntries` joins a bullet with the continuation lines immediately following it into one physical line (a blank line closes the entry, so a trailing reference-link block is never absorbed). Unlike `NormalizeUnreleasedSection` it runs over the *whole document* — released history included — because `SortChangelogEntries` reorders every contiguous `- ` run in the whole file on every run, and a continuation line breaks that contiguity, letting a sort silently separate a bullet from its own continuation. gitforge's `InsertChangelogEntry` (dependency-bump automation) has the same blind spot from the insertion side: it stops looking for a section's last bullet at the first non-`- ` line. Both are exactly how the `[2.34.0]` `### Changed` section in this project's own history got corrupted. It runs at the `readChangelogLines` boundary (covering fork mode too) and again immediately before `SortChangelogEntries` inside `ProcessChangelog`/`ProcessNewChangelog`. Only a wrapped sentence counts as a continuation: a nested list item opens an entry of its own (so its wrap joins onto itself, never onto its parent), a fenced code block's body is emitted verbatim, and a `#` closes the entry only at column 0 — an indented one is an issue reference such as `#123`, not a heading. It is idempotent
+- **AutoBump never writes a wrapped changelog entry and never leaves one wrapped either.** `entities.UnwrapChangelogEntries` joins a bullet with the continuation lines immediately following it into one physical line (a blank line closes the entry, so a trailing reference-link block is never absorbed). Unlike `NormalizeUnreleasedSection` it runs over the *whole document* — released history included — because `SortChangelogEntries` reorders every contiguous `- ` run in the whole file on every run, and a continuation line breaks that contiguity, letting a sort silently separate a bullet from its own continuation. gitforge's `InsertChangelogEntry` (dependency-bump automation) has the same blind spot from the insertion side: it stops looking for a section's last bullet at the first non-`- ` line. It runs at the `readChangelogLines` boundary (covering fork mode too) and again immediately before `SortChangelogEntries` inside `ProcessChangelog`/`ProcessNewChangelog`. Only a wrapped sentence counts as a continuation: a nested list item opens an entry of its own (so its wrap joins onto itself, never onto its parent), a fenced code block's body is emitted verbatim, and a `#` closes the entry only at column 0 — an indented one is an issue reference such as `#123`, not a heading. It is idempotent
 
 ### Provider Configuration (run mode with providers)
 
@@ -236,11 +233,13 @@ The tool auto-detects and supports:
 - **Dart/Flutter**: Detects via `pubspec.yaml`, updates its `version` field, carrying a Flutter build number across the bump and incrementing it
 - **Go**: Detects via `go.mod`; versions managed through git tags; APIs documented with Swagger (`swaggo`) also get the `@version` annotation in the entrypoint (`main.go`, `cmd/main.go`, or `cmd/*/main.go`) and the generated `docs.go`/`swagger.json`/`swagger.yaml` — or `openapi.json`/`openapi.yaml`, the OpenAPI 3 names the `swag` output is commonly renamed to — (under `docs/`, `cmd/docs/`, or `cmd/*/docs/`) updated; a library released at v2 or later (one carrying `vX.Y.Z` tags) also has its module path moved to the new major
 - **Helm**: Detects via `Chart.yaml`, updates the `version` field in `Chart.yaml`
-- **Java**: Detects via `build.gradle`, `pom.xml`, updates `build.gradle` and `application.yaml`
-- **Python**: Detects via `pyproject.toml`, `setup.py`, updates `__init__.py`
+- **Java**: Detects via `build.gradle`, `pom.xml`; updates `build.gradle`, `lib/build.gradle`, `pom.xml` (project version only, not `<parent>`) and `src/main/resources/application.yaml`
+- **Python**: Detects via `pyproject.toml`, `setup.cfg`, `setup.py`; updates `{project_name}/__init__.py`
 - **Terraform**: Detects via `*.tf`, `versions.tf`; versions managed through git tags (no version file)
 - **TypeScript**: Detects via `package.json`, `tsconfig.json`, updates `package.json`
 - **C#**: Detects via `*.sln`, `*.csproj`, updates project files
+
+`configs/autobump.yaml` is the source of truth for these lists.
 
 ## Testing
 
@@ -284,11 +283,11 @@ go test ./internal/...  # Quick internal-only check during development (acceptab
 
 ## Build and Test Timing Expectations
 
-- **Build**: ~35 seconds first time, <1 second subsequent. NEVER CANCEL. Set timeout to 60+ minutes.
-- **Tests**: <1 second cached, ~7 seconds clean. NEVER CANCEL. Set timeout to 30+ minutes.
-- **Lint**: ~5-15 seconds. Set timeout to 60+ minutes.
-- **SAST**: ~1-3 minutes. Set timeout to 60+ minutes.
-- **Go mod operations**: <1 second after first download. Set timeout to 15+ minutes.
+- **Build**: ~35 seconds first time, <1 second subsequent.
+- **Tests**: <1 second cached, ~7 seconds clean.
+- **Lint**: ~5-15 seconds.
+- **SAST**: ~1-3 minutes; allow at least 5 minutes before treating it as hung.
+- **Go mod operations**: <1 second after first download.
 
 ## Common Development Commands
 
