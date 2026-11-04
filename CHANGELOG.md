@@ -22,6 +22,16 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.3.3] - 2026-11-04
+
+### Changed
+
+- changed the `RepoContext.Cloned`, `setupChangelog` and `proposeInitialChangelog` comments and `CLAUDE.md` to give the reason the operator's own checkout still commits a new changelog in place now that gitforge 4.3 no longer forces its branch switch: the way back is a plain checkout, which go-git refuses over uncommitted edits after it has already moved HEAD, leaving the proposed changelog staged on the operator's branch
+- changed the Go module `go.yaml.in/yaml/v3` from `v3.0.5` to `v3.0.6`
+- changed the Go module `golang.org/x/net` from `v0.61.0` to `v0.62.0`
+- changed the Go modules `github.com/rios0rios0/cliforge` from `v0.5.1` to `v0.5.2`, `github.com/rios0rios0/langforge` from `v1.1.9` to `v1.1.10` and `github.com/rios0rios0/testkit` from `v0.3.6` to `v0.3.7`
+- moved the agent instructions from `CLAUDE.md` to `AGENTS.md`, keeping a `CLAUDE.md` that imports it, and refreshed `AGENTS.md`, `.github/copilot-instructions.md`, the code-review skill and `CONTRIBUTING.md` to fix stale references and condense the agent guidance
+
 ## [3.3.2] - 2026-10-21
 
 ### Changed
