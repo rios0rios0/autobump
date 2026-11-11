@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the Go module `gitlab.com/gitlab-org/api/client-go/v3` from `v3.43.0` to `v3.46.1`'
-time: '2026-11-07T09:05:47.421075544Z'

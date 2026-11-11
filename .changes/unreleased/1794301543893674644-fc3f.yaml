@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the Go modules `golang.org/x/mod` from `v0.42.0` to `v0.43.0`, `golang.org/x/oauth2` from `v0.37.0` to `v0.38.0`, `golang.org/x/sys` from `v0.49.0` to `v0.50.0` and `golang.org/x/term` from `v0.47.0` to `v0.48.0`'
-time: '2026-11-10T09:05:43.893674644Z'
