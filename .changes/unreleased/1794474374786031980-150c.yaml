@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the Go module `golang.org/x/crypto` from `v0.58.0` to `v0.59.0`'
+time: '2026-11-12T09:06:14.78603198Z'
