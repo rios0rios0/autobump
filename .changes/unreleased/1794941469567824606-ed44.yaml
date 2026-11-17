@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the SSH client configuration (host aliases, key selection, host key negotiation and agent signing) to come from `gitforge`''s `InstallSSHTransport`, which autoupdate now shares; AutoBump behaves as before, except that the warning for an `IdentitiesOnly` alias with no usable key no longer suggests `ssh_key_path`'
+time: '2026-11-17T18:51:09.567736677Z'

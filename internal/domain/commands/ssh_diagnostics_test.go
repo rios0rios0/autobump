@@ -329,49 +329,6 @@ func TestOriginRemoteURL(t *testing.T) {
 	})
 }
 
-func TestKernelIsWSL(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should recognise a WSL2 kernel when the release names microsoft", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		version := "Linux version 6.18.33.2-microsoft-standard-WSL2 (root@f1bbfb02316b)"
-
-		// when
-		result := commands.KernelIsWSL(version)
-
-		// then
-		assert.True(t, result)
-	})
-
-	t.Run("should recognise the vendor string regardless of case", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		version := "Linux version 5.15.0-Microsoft-standard"
-
-		// when
-		result := commands.KernelIsWSL(version)
-
-		// then
-		assert.True(t, result)
-	})
-
-	t.Run("should not recognise a bare-metal kernel", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		version := "Linux version 6.11.0-generic (buildd@lcy02)"
-
-		// when
-		result := commands.KernelIsWSL(version)
-
-		// then
-		assert.False(t, result)
-	})
-}
-
 func TestExplainSSHPushFailure(t *testing.T) {
 	t.Parallel()
 
@@ -448,53 +405,27 @@ func TestExplainSSHPushFailure(t *testing.T) {
 func TestDescribeUnresolvedSSHHost(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should name the Windows profile's file when it is read", func(t *testing.T) {
+	t.Run("should name the host and the ssh_config files gitforge reads", func(t *testing.T) {
 		t.Parallel()
 
-		// given / when
-		message := commands.DescribeUnresolvedSSHHost("github.com-mine", true, true)
+		// given -- the description gitforge's SSHConfigSearchDescription gives
+		searched := "~/.ssh/config, /etc/ssh/ssh_config and the Windows profile's .ssh/config"
+
+		// when
+		message := commands.DescribeUnresolvedSSHHost("github.com-mine", searched)
 
 		// then
 		assert.Contains(t, message, `"github.com-mine"`)
-		assert.Contains(t, message, "~/.ssh/config")
-		assert.Contains(t, message, "the Windows profile's .ssh/config")
-		assert.NotContains(t, message, "read only when")
-	})
-
-	t.Run(
-		"should say when the Windows profile's file is read on a WSL machine that does not read it",
-		func(t *testing.T) {
-			t.Parallel()
-
-			// given -- an alias defined only for ssh.exe, on a machine whose git runs the Linux ssh
-
-			// when
-			message := commands.DescribeUnresolvedSSHHost("github.com-mine", true, false)
-
-			// then
-			assert.Contains(t, message, "/etc/ssh/ssh_config")
-			assert.Contains(t, message, "read only when git runs Windows' ssh.exe")
-			assert.Contains(t, message, "core.sshCommand")
-		},
-	)
-
-	t.Run("should name only the Linux files elsewhere", func(t *testing.T) {
-		t.Parallel()
-
-		// given / when
-		message := commands.DescribeUnresolvedSSHHost("github.com-mine", false, false)
-
-		// then
-		assert.Contains(t, message, "/etc/ssh/ssh_config")
-		assert.NotContains(t, message, "Windows")
+		assert.Contains(t, message, searched)
+		assert.Contains(t, message, "HostName")
 	})
 }
 
 // TestDetectSSHEnvironment is deliberately not parallel: it mutates SSH_AUTH_SOCK with
 // t.Setenv, which the runtime forbids in a parallel test.
 //
-// It covers the seam an earlier revision got wrong. detectSSHAgentSockets only stats for
-// ModeSocket, so a socket file that answers nothing still appears here -- and because this
+// It covers the seam an earlier revision got wrong. gitforge's DetectSSHAgentSockets only stats
+// for ModeSocket, so a socket file that answers nothing still appears here -- and because this
 // runs only after collectSSHAuthMethods failed to dial every one of those paths, that is the
 // only thing it can mean. Asserting it against a real socket is what keeps the field's name
 // honest; the renderer tests build the struct by hand and would not notice it drifting.

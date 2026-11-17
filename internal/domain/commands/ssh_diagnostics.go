@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
+	gitInfra "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure"
 )
 
 var (
@@ -23,14 +23,6 @@ var (
 	ErrSSHHostUnresolved = errors.New("cannot resolve the SSH host")
 )
 
-const (
-	// wslKernelMarker is the substring Microsoft's WSL kernels carry in their release string.
-	wslKernelMarker = "microsoft"
-
-	// procVersionPath names the kernel version file consulted to recognise WSL.
-	procVersionPath = "/proc/version"
-)
-
 // sshEnvironment captures the host facts that decide whether AutoBump can authenticate an
 // SSH push. It is plain data so the diagnosis can be rendered — and tested — without
 // touching the host it describes.
@@ -39,7 +31,7 @@ type sshEnvironment struct {
 	//
 	// The list is not "sockets that might work": this is built only after
 	// collectSSHAuthMethods returned nothing, and its auto-detect loop has by then dialed
-	// every path detectSSHAgentSockets reports. So a non-empty list means a dead agent — a
+	// every path gitforge's DetectSSHAgentSockets reports. So a non-empty list means a dead agent — a
 	// relay that exited leaving its socket behind, or an ssh-agent that is gone — which is
 	// the opposite of what the existence of the file suggests.
 	UnusableAgentSockets []string
@@ -65,7 +57,7 @@ func explainSSHPushFailure(ctx *RepoContext, pushErr error) error {
 		return fmt.Errorf(
 			"%w: %w\n\n%s",
 			ErrSSHHostUnresolved, pushErr,
-			describeUnresolvedSSHHost(host, runningUnderWSL(), sshConfig().readsWindowsProfiles()),
+			describeUnresolvedSSHHost(host, gitInfra.SSHConfigSearchDescription()),
 		)
 	}
 
@@ -94,17 +86,18 @@ func unresolvedSSHHost(pushErr error) (string, bool) {
 }
 
 // describeUnresolvedSSHHost renders the operator-facing explanation for an SSH host that has
-// no address. The SSH transport resolves host aliases itself, from the ssh_config files it
-// reads, so a host that still reaches DNS unresolved is an alias defined somewhere else, or a
-// name that does not exist at all. Without this, an alias that works for every git command
-// reads as a network failure.
-func describeUnresolvedSSHHost(host string, isWSL, windowsProfiles bool) string {
+// no address; searched names the ssh_config files read on this host, as gitforge's
+// SSHConfigSearchDescription gives them. gitforge's SSH transport resolves host aliases
+// itself, from those files, so a host that still reaches DNS unresolved is an alias defined
+// somewhere else, or a name that does not exist at all. Without this, an alias that works for
+// every git command reads as a network failure.
+func describeUnresolvedSSHHost(host, searched string) string {
 	return fmt.Sprintf(
 		"AutoBump could not resolve the SSH host %q. AutoBump never executes the \"ssh\" binary, so a "+
 			"host alias applies to the push only when it is defined in an ssh_config file AutoBump reads: "+
 			"%s. Define the alias there with at least a HostName; AutoBump applies its HostName, Port, "+
 			"IdentityFile and IdentitiesOnly.\n",
-		host, describeSSHConfigSearch(isWSL, windowsProfiles),
+		host, searched,
 	)
 }
 
@@ -149,32 +142,10 @@ func gitSSHCommand(config *gitconfig.Config) string {
 // git's core.sshCommand, which the caller already holds.
 func detectSSHEnvironment(sshCommand string) sshEnvironment {
 	return sshEnvironment{
-		UnusableAgentSockets: detectSSHAgentSockets(),
-		IsWSL:                runningUnderWSL(),
+		UnusableAgentSockets: gitInfra.DetectSSHAgentSockets(),
+		IsWSL:                gitInfra.RunningUnderWSL(),
 		SSHCommand:           sshCommand,
 	}
-}
-
-// runningUnderWSL reports whether the current kernel is a WSL one. The environment
-// variables WSL sets are checked first because they cost nothing; the kernel release is
-// the fallback for a shell that did not inherit them.
-func runningUnderWSL() bool {
-	if os.Getenv("WSL_DISTRO_NAME") != "" || os.Getenv("WSL_INTEROP") != "" {
-		return true
-	}
-
-	version, err := os.ReadFile(procVersionPath)
-	if err != nil {
-		return false
-	}
-
-	return kernelIsWSL(string(version))
-}
-
-// kernelIsWSL reports whether a kernel version string names a WSL kernel. Split out from the
-// file read so the recognition itself is testable on a host that is not WSL.
-func kernelIsWSL(version string) bool {
-	return strings.Contains(strings.ToLower(version), wslKernelMarker)
 }
 
 // describeMissingSSHCredential renders the operator-facing explanation for an SSH push that

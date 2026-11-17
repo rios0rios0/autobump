@@ -69,19 +69,6 @@ func TestCollectSSHAuthMethodsExtended(t *testing.T) {
 	})
 }
 
-func TestDetectSSHAgentSocketsExtended(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should not panic when detecting sockets", func(t *testing.T) {
-		t.Parallel()
-
-		// given / when / then
-		assert.NotPanics(t, func() {
-			_ = commands.DetectSSHAgentSockets()
-		})
-	})
-}
-
 // TestCollectAuthMethods is deliberately not parallel: it mutates package-level globals that other tests read.
 //
 //nolint:paralleltest // test mutates global state or uses t.Setenv
@@ -138,68 +125,6 @@ func TestCollectAuthMethods(t *testing.T) {
 
 		// then
 		assert.NotEmpty(t, methods)
-	})
-}
-
-func TestSSHAgentAuthFromSocket(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should return nil when socket does not exist", func(t *testing.T) {
-		t.Parallel()
-
-		// given
-		socketPath := filepath.Join(t.TempDir(), "nonexistent.sock")
-
-		// when
-		method := commands.SSHAgentAuthFromSocket(socketPath)
-
-		// then
-		assert.Nil(t, method)
-	})
-
-	t.Run("should return PublicKeysCallback when socket is valid", func(t *testing.T) {
-		t.Parallel()
-
-		// given -- create a real Unix socket listener
-		socketPath := filepath.Join(t.TempDir(), "test-agent.sock")
-		listener, err := net.Listen("unix", socketPath)
-		require.NoError(t, err)
-		defer listener.Close()
-
-		// when
-		method := commands.SSHAgentAuthFromSocket(socketPath)
-
-		// then
-		assert.NotNil(t, method)
-	})
-}
-
-// TestDetectSSHAgentSocketsWithEnv is deliberately not parallel: it calls t.Setenv, which the runtime forbids in a parallel test.
-func TestDetectSSHAgentSocketsWithEnv(t *testing.T) {
-	t.Run("should detect SSH_AUTH_SOCK when it points to a valid socket", func(t *testing.T) {
-		// given
-		socketPath := filepath.Join(t.TempDir(), "test.sock")
-		listener, err := net.Listen("unix", socketPath)
-		require.NoError(t, err)
-		defer listener.Close()
-		t.Setenv("SSH_AUTH_SOCK", socketPath)
-
-		// when
-		sockets := commands.DetectSSHAgentSockets()
-
-		// then
-		assert.Contains(t, sockets, socketPath)
-	})
-
-	t.Run("should not include SSH_AUTH_SOCK when it points to nonexistent path", func(t *testing.T) {
-		// given
-		t.Setenv("SSH_AUTH_SOCK", "/nonexistent/sock")
-
-		// when
-		sockets := commands.DetectSSHAgentSockets()
-
-		// then
-		assert.NotContains(t, sockets, "/nonexistent/sock")
 	})
 }
 

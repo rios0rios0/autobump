@@ -143,48 +143,26 @@ Token values support inline strings, `${ENV_VAR}` expansion, and file paths, res
 auto-detected when not set.
 
 Pushes run on go-git's **pure-Go** SSH client: `collectSSHAuthMethods` can only use a key file
-or a Unix socket it can dial, and `core.sshCommand` or an `ssh` wrapper on `PATH` is ignored
+or a Unix socket it can dial, and `core.sshCommand` or an `ssh` wrapper on `PATH` is never run
 (commit signing does shell out to `gpg.ssh.program`). `ssh_diagnostics.go` explains the
 failure (`explainSSHPushFailure` → `ErrNoSSHCredential`) only for an SSH remote with no
-collected method, and an unresolvable host (`ErrSSHHostUnresolved`, from a `*net.DNSError`)
-before that. Everything that reaches its renderers has already failed to dial, so a
-detected socket there is a dead one (`UnusableAgentSockets`); `TestDetectSSHEnvironment` covers
-that seam with a real socket. Known-hosts discovery (`ssh_known_hosts.go`: `SSH_KNOWN_HOSTS`,
-`~/.ssh`, `/etc/ssh`, and Windows profiles under WSL) is memoized per process as a skeema
-`HostKeyDB` (`knownHostsDB`), and `main.go` hands the same callback to gitforge's
-`SetDefaultSSHHostKeyCallback`.
+collected method, and an unresolvable host (`ErrSSHHostUnresolved`, from a `*net.DNSError`,
+naming the files from gitforge's `SSHConfigSearchDescription`) before that. Everything that
+reaches its renderers has already failed to dial, so a detected socket there is a dead one
+(`UnusableAgentSockets`); `TestDetectSSHEnvironment` covers that seam with a real socket.
 
-Every SSH connection go-git opens goes through `sshTransport` (`ssh_transport.go`), which
-`main.go` installs for the `ssh` scheme with `client.InstallProtocol`, setting
-`gitssh.DefaultSSHConfig = nil` so an alias is resolved once. Sitting under go-git covers
-gitforge's own fallback too, so nothing there needs a gitforge change. Per connection it:
-resolves the host alias through ssh_config (`ssh_config.go`: `~/.ssh/config`,
-`/etc/ssh/ssh_config`, read as one OpenSSH configuration with first-wins keywords and
-accumulating `IdentityFile`) into the endpoint go-git dials; narrows an agent auth method
-(`*gitssh.PublicKeysCallback`) to the keys `IdentityFile` names (`ssh_identities.go`,
-OpenSSH's `pubkey_prepare` order: named agent keys, the agent's others unless
-`IdentitiesOnly`, then unencrypted key files the agent lacks); and
-sets `HostKeyCallbackHelper.HostKeyAlgorithms` to the types `knownHostsDB` records for the
-resolved `host:port`, because x/crypto asks for ECDSA before Ed25519 and known_hosts usually
-holds only the type OpenSSH settled on (`knownhosts: key mismatch`). It pins types only on a
-method whose callback was given to it: go-git fills an empty one from its own known_hosts.
-Agent signers (`ssh_agent.go`) dial a connection per listing and per signature: x/crypto
-signs after the `PublicKeysCallback` returns, so a signer bound to the listing's connection
-cannot be closed with it. A listing whose connection drops before the agent answers is
-retried; a signature is never retried. `sshAgentConn` tells a drop from a refusal by
-recording a failed write as well as a failed read: a relay that closes before the
-request is written fails the write with a broken pipe, which can reach the caller before
-x/crypto's reader goroutine has seen the connection end. The loopback server in
-`ssh_fixtures_test.go` exercises the whole chain without a network.
-
-A Windows profile's `.ssh/config` joins the list only under WSL **when git runs Windows'
-`ssh.exe`** (`ssh_wsl.go`: `gitSSHCommandInEffect` applies git's own precedence,
-`GIT_SSH_COMMAND` → `core.sshCommand` → `GIT_SSH` → `ssh` on PATH, and `runsWindowsSSH`
-follows symlinks and wrapper scripts), and then only the profile the Windows `PATH` entries
-sit under (`windowsProfilesOnPath`), every profile when there are none. A WSL machine whose git
-runs the Linux `ssh` must resolve hosts exactly as git does, so never read a Windows file
-there. A file that fails to parse is skipped with a warning, except `/etc/ssh/ssh_config`
-(`sshConfigSource.System`), which a distribution ships and which is reported at debug level.
+The SSH client configuration lives in **gitforge** (`pkg/git/infrastructure`, `ssh_*.go`), shared
+with autoupdate; `main.go` calls `gitInfra.InstallSSHTransport()` once. That installs gitforge's
+transport under every go-git SSH connection (push, clone, stale-branch listing and gitforge's own
+fallback), which resolves host aliases through ssh_config (`HostName`, `Port`, `IdentityFile`,
+`IdentitiesOnly`; under WSL, the Windows profile's file only when git runs `ssh.exe`), offers
+keys in OpenSSH's order, and negotiates only the host key types known_hosts records, and it
+installs gitforge's known_hosts discovery (Windows profiles under WSL included) for the
+fallback. `collectSSHAuthMethods` builds its methods from gitforge's `NewSSHAgentAuthFromSocket`
+(signs over a connection per signature; retries a listing a relay dropped),
+`DetectSSHAgentSockets` and `KnownHostsCallback` — give every SSH auth method
+`KnownHostsCallback`, because the transport reads the host key types it pins from the same
+files. Change that behaviour in gitforge, not here.
 
 Versioning modes: `semver` (default), `fork-dot`, `fork-dash`. Fork modes increment only the trailing fork digit (e.g. `3.3.0.16` → `3.3.0.17`) and skip language-specific version-file rewrites and the refresh. See `internal/domain/commands/fork_version.go`.
 

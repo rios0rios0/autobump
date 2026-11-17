@@ -742,31 +742,6 @@ func TestIterateProjects(t *testing.T) {
 	})
 }
 
-func TestHostKeyCallback(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should not panic when called", func(t *testing.T) {
-		t.Parallel()
-
-		// given / when / then
-		assert.NotPanics(t, func() {
-			_ = commands.HostKeyCallback()
-		})
-	})
-
-	t.Run("should return nil when home has no known_hosts", func(t *testing.T) {
-		t.Parallel()
-
-		// given -- the test runs with HOME pointing to a dir without .ssh/known_hosts
-		// (most CI environments don't have known_hosts)
-		// when
-		cb := commands.HostKeyCallback()
-
-		// then -- either nil or a valid callback, depending on the environment
-		_ = cb // just verify no panic
-	})
-}
-
 // TestCloneRepoIfNeeded is deliberately not parallel: it mutates package-level globals that other tests read.
 func TestCloneRepoIfNeeded(t *testing.T) {
 	registry := repositories.NewProviderRegistry()
