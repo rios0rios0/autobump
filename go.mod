@@ -6,10 +6,10 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/go-git/go-git/v5 v5.19.3
-	github.com/rios0rios0/cliforge v0.5.2
-	github.com/rios0rios0/gitforge/v4 v4.3.2
-	github.com/rios0rios0/langforge v1.1.11
-	github.com/rios0rios0/testkit v0.3.8
+	github.com/rios0rios0/cliforge v0.5.3
+	github.com/rios0rios0/gitforge/v4 v4.4.0
+	github.com/rios0rios0/langforge v1.1.12
+	github.com/rios0rios0/testkit v0.3.9
 	github.com/sirupsen/logrus v1.10.2
 	github.com/skeema/knownhosts v1.3.3
 	github.com/spf13/cobra v1.10.2
@@ -38,10 +38,10 @@ require (
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/pjbgf/sha1cd v0.7.0 // indirect
-	github.com/sergi/go-diff v1.4.0 // indirect
+	github.com/sergi/go-diff v1.4.5 // indirect
 	github.com/spf13/pflag v1.1.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
-	gitlab.com/gitlab-org/api/client-go/v3 v3.51.0 // indirect
+	gitlab.com/gitlab-org/api/client-go/v3 v3.52.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/oauth2 v0.38.0 // indirect
