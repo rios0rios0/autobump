@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,7 +17,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	logger "github.com/sirupsen/logrus"
-	"golang.org/x/crypto/ssh"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	infraRepos "github.com/rios0rios0/autobump/internal/infrastructure/repositories"
@@ -1498,6 +1496,9 @@ func collectAuthMethods(
 
 // collectSSHAuthMethods builds SSH transport.AuthMethod instances from config.
 // It tries explicit key/socket config first, then auto-detects common SSH agent sockets.
+// Every method verifies host keys with gitforge's KnownHostsCallback, whose files the SSH
+// transport gitforge installs (InstallSSHTransport, in main.go) also reads the host key
+// types to negotiate from.
 func collectSSHAuthMethods(globalConfig *entities.GlobalConfig) []transport.AuthMethod {
 	var methods []transport.AuthMethod
 
@@ -1506,13 +1507,13 @@ func collectSSHAuthMethods(globalConfig *entities.GlobalConfig) []transport.Auth
 		if err != nil {
 			logger.Warnf("Failed to load SSH key from %s: %v", globalConfig.SSHKeyPath, err)
 		} else {
-			auth.HostKeyCallback = hostKeyCallback()
+			auth.HostKeyCallback = gitInfra.KnownHostsCallback()
 			methods = append(methods, auth)
 		}
 	}
 
 	if globalConfig.SSHAuthSock != "" {
-		if method := sshAgentAuthFromSocket(globalConfig.SSHAuthSock); method != nil {
+		if method := gitInfra.NewSSHAgentAuthFromSocket(globalConfig.SSHAuthSock); method != nil {
 			methods = append(methods, method)
 		}
 	}
@@ -1522,68 +1523,14 @@ func collectSSHAuthMethods(globalConfig *entities.GlobalConfig) []transport.Auth
 	}
 
 	// Auto-detect common SSH agent sockets
-	for _, sock := range detectSSHAgentSockets() {
-		if method := sshAgentAuthFromSocket(sock); method != nil {
+	for _, sock := range gitInfra.DetectSSHAgentSockets() {
+		if method := gitInfra.NewSSHAgentAuthFromSocket(sock); method != nil {
 			methods = append(methods, method)
 			break // use the first working socket
 		}
 	}
 
 	return methods
-}
-
-// sshAgentAuthFromSocket returns an SSH agent auth method for the given Unix socket, or nil
-// when nothing answers there. Every use dials the socket afresh -- one connection to list
-// the keys, then one per signature (see sshAgentSigner) -- so no connection outlives the
-// call that needed it.
-func sshAgentAuthFromSocket(socketPath string) transport.AuthMethod {
-	dialer := &net.Dialer{}
-	dial := func() (net.Conn, error) {
-		return dialer.DialContext(context.Background(), "unix", socketPath)
-	}
-
-	conn, err := dial()
-	if err != nil {
-		logger.Debugf("Cannot connect to SSH agent at %s: %v", socketPath, err)
-		return nil
-	}
-	if closeErr := conn.Close(); closeErr != nil {
-		logger.Debugf("Failed to close SSH agent probe connection for %s: %v", socketPath, closeErr)
-	}
-
-	return &gitssh.PublicKeysCallback{
-		User: "git",
-		Callback: func() ([]ssh.Signer, error) {
-			return listSSHAgentSigners(dial)
-		},
-		HostKeyCallback: hostKeyCallback(),
-	}
-}
-
-// detectSSHAgentSockets returns paths to common SSH agent sockets that exist on the filesystem.
-func detectSSHAgentSockets() []string {
-	var sockets []string
-
-	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		//nolint:gosec // sock comes from SSH_AUTH_SOCK env var, trusted input
-		if info, statErr := os.Stat(sock); statErr == nil && info.Mode().Type() == os.ModeSocket {
-			sockets = append(sockets, sock)
-		}
-	}
-
-	home, err := os.UserHomeDir()
-	if err == nil {
-		candidates := []string{
-			filepath.Join(home, ".1password", "agent.sock"),
-		}
-		for _, c := range candidates {
-			if info, statErr := os.Stat(c); statErr == nil && info.Mode().Type() == os.ModeSocket {
-				sockets = append(sockets, c)
-			}
-		}
-	}
-
-	return sockets
 }
 
 // getForgeProvider creates a gitforge ForgeProvider with the given token.

@@ -1,12 +1,7 @@
 package commands
 
 import (
-	"net"
 	"time"
-
-	"github.com/go-git/go-git/v5/plumbing/transport"
-	"github.com/skeema/knownhosts"
-	"golang.org/x/crypto/ssh"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 )
@@ -62,9 +57,6 @@ var LoadProjectConfigOverrides = loadProjectConfigOverrides //nolint:gochecknogl
 
 // CollectSSHAuthMethods exports collectSSHAuthMethods for testing.
 var CollectSSHAuthMethods = collectSSHAuthMethods //nolint:gochecknoglobals // test export
-
-// DetectSSHAgentSockets exports detectSSHAgentSockets for testing.
-var DetectSSHAgentSockets = detectSSHAgentSockets //nolint:gochecknoglobals // test export
 
 // AddCurrentVersion exports addCurrentVersion for testing.
 var AddCurrentVersion = addCurrentVersion //nolint:gochecknoglobals // test export
@@ -138,95 +130,8 @@ var ResolveDefaultBranch = resolveDefaultBranch //nolint:gochecknoglobals // tes
 // UpdateChangelogAndVersionFiles exports updateChangelogAndVersionFiles for testing.
 var UpdateChangelogAndVersionFiles = updateChangelogAndVersionFiles //nolint:gochecknoglobals // test export
 
-// HostKeyCallback exports hostKeyCallback for testing.
-var HostKeyCallback = hostKeyCallback //nolint:gochecknoglobals // test export
-
-// BuildKnownHostsDB exports buildKnownHostsDB for testing.
-var BuildKnownHostsDB = buildKnownHostsDB //nolint:gochecknoglobals // test export
-
-// SSHConfigSource exports sshConfigSource for testing. An alias rather than a definition, so
-// a test can name the files a resolution reads directly instead of arranging a home for them.
-type SSHConfigSource = sshConfigSource
-
-// SSHHostSettings exports sshHostSettings for testing.
-type SSHHostSettings = sshHostSettings
-
-// ResolveSSHHost loads the given ssh_config files, as the SSH transport loads the ones it
-// discovers, and resolves alias against them.
-func ResolveSSHHost(sources []SSHConfigSource, automountRoot, alias, remoteUser string) SSHHostSettings {
-	return loadSSHConfigFiles(sources, automountRoot).resolve(alias, remoteUser)
-}
-
-// SSHHostTarget exports sshHostSettings.target for testing.
-func SSHHostTarget(settings SSHHostSettings, endpoint *transport.Endpoint) *transport.Endpoint {
-	return settings.target(endpoint)
-}
-
-// DiscoverSSHConfigSources exports discoverSSHConfigSources for testing.
-var DiscoverSSHConfigSources = discoverSSHConfigSources //nolint:gochecknoglobals // test export
-
-// WindowsSSHConfigSourcesUnder exports windowsSSHConfigSourcesUnder for testing.
-var WindowsSSHConfigSourcesUnder = windowsSSHConfigSourcesUnder //nolint:gochecknoglobals // test export
-
-// LoadSSHIdentity exports loadSSHIdentity for testing, flattening the unexported identity
-// into its public key and whether the file yielded a key usable without the agent.
-func LoadSSHIdentity(path string) (ssh.PublicKey, bool, error) {
-	identity, err := loadSSHIdentity(path)
-	return identity.publicKey, identity.signer != nil, err
-}
-
-// SelectSigners loads the identities the IdentityFile paths name and selects the keys to
-// offer for them, as the SSH transport does for an alias.
-func SelectSigners(agentSigners []ssh.Signer, identityFiles []string, identitiesOnly bool) []ssh.Signer {
-	return selectSigners(agentSigners, loadSSHIdentities(identityFiles), identitiesOnly)
-}
-
-// GitSSHCommandInEffect exports gitSSHCommandInEffect for testing.
-var GitSSHCommandInEffect = gitSSHCommandInEffect //nolint:gochecknoglobals // test export
-
-// RunsWindowsSSH exports runsWindowsSSH for testing.
-var RunsWindowsSSH = runsWindowsSSH //nolint:gochecknoglobals // test export
-
-// WindowsProfilesOnPath exports windowsProfilesOnPath for testing.
-var WindowsProfilesOnPath = windowsProfilesOnPath //nolint:gochecknoglobals // test export
-
-// CurrentWindowsProfileSources exports currentWindowsProfileSources for testing.
-var CurrentWindowsProfileSources = currentWindowsProfileSources //nolint:gochecknoglobals // test export
-
-// LoadSSHConfigFiles loads the given ssh_config files and reports how many were usable, so a
-// test can tell a skipped file from a loaded one.
-func LoadSSHConfigFiles(sources []SSHConfigSource) int {
-	return len(loadSSHConfigFiles(sources, "").files)
-}
-
-// NewSSHTransportWith builds the SSH transport over next with fixed ssh_config and
-// known_hosts files in place of the ones the host offers.
-func NewSSHTransportWith(
-	next transport.Transport,
-	sources []SSHConfigSource,
-	automountRoot string,
-	knownHostsFiles []string,
-) transport.Transport {
-	config := loadSSHConfigFiles(sources, automountRoot)
-	hostKeys := buildKnownHostsDB(knownHostsFiles)
-	return newSSHTransport(
-		next,
-		func() *sshConfigFiles { return config },
-		func() *knownhosts.HostKeyDB { return hostKeys },
-	)
-}
-
 // DescribeUnresolvedSSHHost exports describeUnresolvedSSHHost for testing.
 var DescribeUnresolvedSSHHost = describeUnresolvedSSHHost //nolint:gochecknoglobals // test export
-
-// DiscoverKnownHostsFiles exports discoverKnownHostsFiles for testing.
-var DiscoverKnownHostsFiles = discoverKnownHostsFiles //nolint:gochecknoglobals // test export
-
-// WindowsKnownHostsFilesUnder exports windowsKnownHostsFilesUnder for testing.
-var WindowsKnownHostsFilesUnder = windowsKnownHostsFilesUnder //nolint:gochecknoglobals // test export
-
-// ParseWSLAutomountRoot exports parseWSLAutomountRoot for testing.
-var ParseWSLAutomountRoot = parseWSLAutomountRoot //nolint:gochecknoglobals // test export
 
 // IterateProjects is already exported (public), no need to re-export.
 
@@ -262,15 +167,6 @@ var CheckPullRequestExists = checkPullRequestExists //nolint:gochecknoglobals //
 
 // CollectAuthMethods exports collectAuthMethods for testing.
 var CollectAuthMethods = collectAuthMethods //nolint:gochecknoglobals // test export
-
-// SSHAgentAuthFromSocket exports sshAgentAuthFromSocket for testing.
-var SSHAgentAuthFromSocket = sshAgentAuthFromSocket //nolint:gochecknoglobals // test export
-
-// ListSSHAgentSigners exports listSSHAgentSigners for testing, taking the dialer as a plain
-// function so a test can hand it connections that fail on cue.
-func ListSSHAgentSigners(dial func() (net.Conn, error)) ([]ssh.Signer, error) {
-	return listSSHAgentSigners(dial)
-}
 
 // CommitInitialChangelog exports commitInitialChangelog for testing.
 var CommitInitialChangelog = commitInitialChangelog //nolint:gochecknoglobals // test export
@@ -366,9 +262,6 @@ var OriginRemoteURL = originRemoteURL //nolint:gochecknoglobals // test export
 
 // GitSSHCommand exports gitSSHCommand for testing.
 var GitSSHCommand = gitSSHCommand //nolint:gochecknoglobals // test export
-
-// KernelIsWSL exports kernelIsWSL for testing.
-var KernelIsWSL = kernelIsWSL //nolint:gochecknoglobals // test export
 
 // ExplainSSHPushFailure exports explainSSHPushFailure for testing.
 var ExplainSSHPushFailure = explainSSHPushFailure //nolint:gochecknoglobals // test export

@@ -4,7 +4,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -584,30 +583,6 @@ func TestCollectSSHAuthMethods(t *testing.T) {
 
 		// then
 		assert.Empty(t, methods)
-	})
-}
-
-// TestDetectSSHAgentSockets is deliberately not parallel: it calls t.Setenv, which the runtime
-// forbids in a parallel test.
-func TestDetectSSHAgentSockets(t *testing.T) {
-	t.Run("should return SSH_AUTH_SOCK from environment when set to a valid socket", func(t *testing.T) {
-		// given
-		sockDir := t.TempDir()
-
-		sockPath := filepath.Join(sockDir, "a.sock")
-		listener, err := net.Listen("unix", sockPath)
-		require.NoError(t, err)
-		defer listener.Close()
-
-		t.Setenv("SSH_AUTH_SOCK", sockPath)
-		t.Setenv("HOME", t.TempDir())
-
-		// when
-		sockets := commands.DetectSSHAgentSockets()
-
-		// then
-		require.NotEmpty(t, sockets)
-		assert.Equal(t, sockPath, sockets[0])
 	})
 }
 
