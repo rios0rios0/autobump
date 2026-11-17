@@ -2,9 +2,12 @@ package commands_test
 
 import (
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/go-git/go-git/v5/plumbing/transport"
+	logger "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -175,6 +178,94 @@ func TestResolveSSHHost(t *testing.T) {
 		assert.Equal(t, "ssh.github.com", settings.HostName)
 		assert.Equal(t, 443, settings.Port)
 	})
+}
+
+// TestLoadSSHConfigFilesReporting is deliberately not parallel: it captures the entries of
+// the global logger, which every other test writes to as well.
+//
+//nolint:paralleltest // test captures the global logger, which parallel tests write to
+func TestLoadSSHConfigFilesReporting(t *testing.T) {
+	//nolint:paralleltest // test captures the global logger, which parallel tests write to
+	t.Run(
+		"should report an unparseable system file at debug level and the operator's own as a warning",
+		func(t *testing.T) {
+			// given -- the parser accepts no Match criterion but host and all
+			captured := captureLogs(t)
+			dir := t.TempDir()
+			unparseable := "Match final all\n  HostName wrong.example.com\n"
+			system := writeSSHFixture(t, filepath.Join(dir, "system", "ssh_config"), unparseable)
+			own := writeSSHFixture(t, filepath.Join(dir, "home", ".ssh", "config"), unparseable)
+
+			// when
+			loaded := commands.LoadSSHConfigFiles([]commands.SSHConfigSource{
+				{Path: system, Home: dir, System: true},
+				{Path: own, Home: dir},
+			})
+
+			// then -- both are skipped; only the operator's own is worth a warning on every run
+			assert.Zero(t, loaded)
+			assert.Equal(t, []logger.Level{logger.DebugLevel}, captured.levelsMentioning(system))
+			assert.Equal(t, []logger.Level{logger.WarnLevel}, captured.levelsMentioning(own))
+		},
+	)
+}
+
+// logCapture records the level and message of every entry the global logger writes. Entries
+// are copied, not kept, because logrus reuses them.
+type logCapture struct {
+	mu      sync.Mutex
+	records []logRecord
+}
+
+// logRecord is one captured log entry.
+type logRecord struct {
+	level   logger.Level
+	message string
+}
+
+// captureLogs captures the global logger's entries, at every level, until the test ends.
+func captureLogs(t *testing.T) *logCapture {
+	t.Helper()
+
+	capture := &logCapture{}
+	standard := logger.StandardLogger()
+	previousHooks := standard.ReplaceHooks(make(logger.LevelHooks))
+	previousLevel := standard.GetLevel()
+	standard.AddHook(capture)
+	standard.SetLevel(logger.DebugLevel)
+	t.Cleanup(func() {
+		standard.ReplaceHooks(previousHooks)
+		standard.SetLevel(previousLevel)
+	})
+	return capture
+}
+
+// Levels captures every level.
+func (c *logCapture) Levels() []logger.Level {
+	return logger.AllLevels
+}
+
+// Fire records an entry.
+func (c *logCapture) Fire(entry *logger.Entry) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.records = append(c.records, logRecord{level: entry.Level, message: entry.Message})
+	return nil
+}
+
+// levelsMentioning returns the levels of the captured entries whose message mentions text.
+func (c *logCapture) levelsMentioning(text string) []logger.Level {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var levels []logger.Level
+	for _, record := range c.records {
+		if strings.Contains(record.message, text) {
+			levels = append(levels, record.level)
+		}
+	}
+	return levels
 }
 
 func TestSSHHostTarget(t *testing.T) {

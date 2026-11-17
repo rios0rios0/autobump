@@ -448,23 +448,41 @@ func TestExplainSSHPushFailure(t *testing.T) {
 func TestDescribeUnresolvedSSHHost(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should name the Windows profiles' files when running on WSL", func(t *testing.T) {
+	t.Run("should name the Windows profile's file when it is read", func(t *testing.T) {
 		t.Parallel()
 
 		// given / when
-		message := commands.DescribeUnresolvedSSHHost("github.com-mine", true)
+		message := commands.DescribeUnresolvedSSHHost("github.com-mine", true, true)
 
 		// then
 		assert.Contains(t, message, `"github.com-mine"`)
 		assert.Contains(t, message, "~/.ssh/config")
-		assert.Contains(t, message, "Windows profile")
+		assert.Contains(t, message, "the Windows profile's .ssh/config")
+		assert.NotContains(t, message, "read only when")
 	})
+
+	t.Run(
+		"should say when the Windows profile's file is read on a WSL machine that does not read it",
+		func(t *testing.T) {
+			t.Parallel()
+
+			// given -- an alias defined only for ssh.exe, on a machine whose git runs the Linux ssh
+
+			// when
+			message := commands.DescribeUnresolvedSSHHost("github.com-mine", true, false)
+
+			// then
+			assert.Contains(t, message, "/etc/ssh/ssh_config")
+			assert.Contains(t, message, "read only when git runs Windows' ssh.exe")
+			assert.Contains(t, message, "core.sshCommand")
+		},
+	)
 
 	t.Run("should name only the Linux files elsewhere", func(t *testing.T) {
 		t.Parallel()
 
 		// given / when
-		message := commands.DescribeUnresolvedSSHHost("github.com-mine", false)
+		message := commands.DescribeUnresolvedSSHHost("github.com-mine", false, false)
 
 		// then
 		assert.Contains(t, message, "/etc/ssh/ssh_config")

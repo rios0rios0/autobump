@@ -159,10 +159,11 @@ Every SSH connection go-git opens goes through `sshTransport` (`ssh_transport.go
 `gitssh.DefaultSSHConfig = nil` so an alias is resolved once. Sitting under go-git covers
 gitforge's own fallback too, so nothing there needs a gitforge change. Per connection it:
 resolves the host alias through ssh_config (`ssh_config.go`: `~/.ssh/config`,
-`/etc/ssh/ssh_config`, and Windows profiles under WSL, read as one OpenSSH configuration with
-first-wins keywords and accumulating `IdentityFile`) into the endpoint go-git dials; narrows
-an agent auth method (`*gitssh.PublicKeysCallback`) to the keys `IdentityFile` names
-(`ssh_identities.go`, OpenSSH's `pubkey_prepare` order, `IdentitiesOnly` drops the rest); and
+`/etc/ssh/ssh_config`, read as one OpenSSH configuration with first-wins keywords and
+accumulating `IdentityFile`) into the endpoint go-git dials; narrows an agent auth method
+(`*gitssh.PublicKeysCallback`) to the keys `IdentityFile` names (`ssh_identities.go`,
+OpenSSH's `pubkey_prepare` order: named agent keys, the agent's others unless
+`IdentitiesOnly`, then unencrypted key files the agent lacks); and
 sets `HostKeyCallbackHelper.HostKeyAlgorithms` to the types `knownHostsDB` records for the
 resolved `host:port`, because x/crypto asks for ECDSA before Ed25519 and known_hosts usually
 holds only the type OpenSSH settled on (`knownhosts: key mismatch`). It pins types only on a
@@ -172,6 +173,15 @@ signs after the `PublicKeysCallback` returns, so a signer bound to the listing's
 cannot be closed with it. A listing whose connection drops before the agent answers is
 retried (`sshAgentConn` tells a drop from a refusal); a signature is never retried. The
 loopback server in `ssh_fixtures_test.go` exercises the whole chain without a network.
+
+A Windows profile's `.ssh/config` joins the list only under WSL **when git runs Windows'
+`ssh.exe`** (`ssh_wsl.go`: `gitSSHCommandInEffect` applies git's own precedence,
+`GIT_SSH_COMMAND` → `core.sshCommand` → `GIT_SSH` → `ssh` on PATH, and `runsWindowsSSH`
+follows symlinks and wrapper scripts), and then only the profile the Windows `PATH` entries
+sit under (`windowsProfilesOnPath`), every profile when there are none. A WSL machine whose git
+runs the Linux `ssh` must resolve hosts exactly as git does, so never read a Windows file
+there. A file that fails to parse is skipped with a warning, except `/etc/ssh/ssh_config`
+(`sshConfigSource.System`), which a distribution ships and which is reported at debug level.
 
 Versioning modes: `semver` (default), `fork-dot`, `fork-dash`. Fork modes increment only the trailing fork digit (e.g. `3.3.0.16` → `3.3.0.17`) and skip language-specific version-file rewrites and the refresh. See `internal/domain/commands/fork_version.go`.
 

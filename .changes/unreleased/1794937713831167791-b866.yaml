@@ -1,3 +1,3 @@
 kind: 'Added'
-body: 'added support for SSH host aliases: AutoBump now dials the `HostName` and `Port` an alias names in `ssh_config`, read under WSL from the Windows profile''s `.ssh/config` too, and offers the SSH agent key its `IdentityFile` names first (only that key with `IdentitiesOnly`), so a remote such as `git@github.com-work:org/repo.git` pushes with that account''s key'
+body: 'added support for SSH host aliases: AutoBump now dials the `HostName` and `Port` an alias names in `ssh_config`, read under WSL from the Windows profile''s `.ssh/config` too when git runs `ssh.exe`, and offers the SSH agent key its `IdentityFile` names first (only that key with `IdentitiesOnly`), so a remote such as `git@github.com-work:org/repo.git` pushes with that account''s key'
 time: '2026-11-17T17:48:33.83108221Z'

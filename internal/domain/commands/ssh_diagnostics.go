@@ -64,7 +64,8 @@ func explainSSHPushFailure(ctx *RepoContext, pushErr error) error {
 	if host, unresolved := unresolvedSSHHost(pushErr); unresolved {
 		return fmt.Errorf(
 			"%w: %w\n\n%s",
-			ErrSSHHostUnresolved, pushErr, describeUnresolvedSSHHost(host, runningUnderWSL()),
+			ErrSSHHostUnresolved, pushErr,
+			describeUnresolvedSSHHost(host, runningUnderWSL(), sshConfig().readsWindowsProfiles()),
 		)
 	}
 
@@ -97,13 +98,13 @@ func unresolvedSSHHost(pushErr error) (string, bool) {
 // reads, so a host that still reaches DNS unresolved is an alias defined somewhere else, or a
 // name that does not exist at all. Without this, an alias that works for every git command
 // reads as a network failure.
-func describeUnresolvedSSHHost(host string, isWSL bool) string {
+func describeUnresolvedSSHHost(host string, isWSL, windowsProfiles bool) string {
 	return fmt.Sprintf(
 		"AutoBump could not resolve the SSH host %q. AutoBump never executes the \"ssh\" binary, so a "+
 			"host alias applies to the push only when it is defined in an ssh_config file AutoBump reads: "+
 			"%s. Define the alias there with at least a HostName; AutoBump applies its HostName, Port, "+
 			"IdentityFile and IdentitiesOnly.\n",
-		host, describeSSHConfigSearch(isWSL),
+		host, describeSSHConfigSearch(isWSL, windowsProfiles),
 	)
 }
 

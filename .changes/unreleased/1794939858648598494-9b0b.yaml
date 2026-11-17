@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added support for unencrypted `IdentityFile` keys the SSH agent does not hold, offered after the agent''s keys as OpenSSH does, so a host alias with `IdentitiesOnly` pushes with a key kept on disk'
+time: '2026-11-17T18:24:18.648546448Z'

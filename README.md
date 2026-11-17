@@ -169,9 +169,10 @@ Host github.com-work
 
 With `origin` set to `git@github.com-work:org/repo.git`, AutoBump dials `ssh.github.com:443` and offers only the SSH agent key `~/.ssh/work.pub` names.
 
-- **Files.** `~/.ssh/config`, `/etc/ssh/ssh_config` and, under WSL, every Windows profile's `.ssh/config` (`/mnt/c/Users/*/.ssh/config` by default), read as one configuration in that order: for each keyword the first file that sets it wins, and `IdentityFile` accumulates, as in OpenSSH.
-- **Keywords.** `HostName`, `Port`, `IdentityFile` and `IdentitiesOnly` are applied; a port written in the remote URL wins over `Port`. Other keywords (`ProxyCommand`, `ProxyJump`, `IdentityAgent`, `User`, …) are not, and a file that uses `Match exec` cannot be parsed and is skipped with a warning.
-- **`IdentityFile` picks the agent key.** It may name the public key itself (the `.pub` form 1Password documents) or a private key, whose `.pub` sibling, or the public half an OpenSSH key file carries, identifies the key in the agent. The named keys are offered first, in order, then the agent's others; with `IdentitiesOnly yes`, only the named ones, and AutoBump warns when the agent holds none of them. A key file configured as `ssh_key_path` is offered as configured.
+- **Files.** `~/.ssh/config`, `/etc/ssh/ssh_config` and, under WSL when git runs Windows' `ssh.exe`, the Windows profile's `.ssh/config`, read as one configuration in that order: for each keyword the first file that sets it wins, and `IdentityFile` accumulates, as in OpenSSH.
+- **The Windows profile (WSL).** git runs `ssh.exe` when `GIT_SSH_COMMAND`, `core.sshCommand` or `GIT_SSH` names it, or when the `ssh` on `PATH` is `ssh.exe` or a script calling it; the first of these that is set decides, as it does for git. The profile read is the one the Windows entries of `PATH` sit under — the user `ssh.exe` runs as — or every profile's under `/mnt/c/Users/` when `PATH` holds none (`appendWindowsPath = false`). A WSL machine whose git runs the Linux `ssh` reads no Windows file, so AutoBump resolves its hosts exactly as git does.
+- **Keywords.** `HostName`, `Port`, `IdentityFile` and `IdentitiesOnly` are applied; a port written in the remote URL wins over `Port`. Other keywords (`ProxyCommand`, `ProxyJump`, `IdentityAgent`, `User`, …) are not. A file using a `Match` criterion other than `host` or `all` (`Match exec`, `Match final`) cannot be parsed and is skipped: with a warning for your own file, and at debug level for `/etc/ssh/ssh_config`, which your distribution ships.
+- **`IdentityFile` picks the key.** It may name the public key itself (the `.pub` form 1Password documents) or a private key, whose `.pub` sibling, or the public half an OpenSSH key file carries, identifies the key in the agent. As in OpenSSH, the named agent keys are offered first, in order, then the agent's others, then the unencrypted key files the agent does not hold; with `IdentitiesOnly yes`, only the named ones. An encrypted key the agent does not hold cannot be used, since AutoBump cannot ask for its passphrase, and AutoBump warns when `IdentitiesOnly` leaves it no key to offer. A key file configured as `ssh_key_path` is offered as configured.
 - **Paths.** `~`, `%d`, `%h`, `%r` and `%%` expand as in OpenSSH. In a Windows profile's file they are read the way `ssh.exe` reads them: `~` is that profile, and `C:\Users\...` is the drive WSL mounts under the automount root.
 
 A push to a host that does not resolve fails with an error naming the host and these files, since an alias defined anywhere else is invisible to AutoBump.
@@ -180,10 +181,10 @@ A push to a host that does not resolve fails with an error naming the host and t
 
 AutoBump pushes with [go-git](https://github.com/go-git/go-git), a pure-Go SSH client. It **never executes the `ssh` binary**, so the usual WSL interop tricks do not apply to the push:
 
-- `git config core.sshCommand ssh.exe` is not read — that setting only redirects git's own `ssh` invocations.
+- `git config core.sshCommand ssh.exe` is never run — that setting only redirects git's own `ssh` invocations.
 - An `ssh` wrapper earlier on `PATH` (a shell script calling `ssh.exe`) is never invoked.
 
-Host aliases you defined for `ssh.exe` still apply: AutoBump reads the Windows profile's `.ssh/config` itself (see [Host aliases](#host-aliases-ssh_config)). The keys are the part it cannot reach on its own.
+Both are read, though, to tell where your host aliases live, and the aliases you defined for `ssh.exe` still apply: when git runs `ssh.exe`, AutoBump reads the Windows profile's `.ssh/config` itself (see [Host aliases](#host-aliases-ssh_config)). The keys are the part it cannot reach on its own.
 
 Commit *signing* is the exception and works normally, because it shells out to whatever `gpg.ssh.program` names (for example 1Password's `op-ssh-sign-wsl`). That asymmetry is why signing succeeds while the push cannot find a key: they travel different code paths.
 
