@@ -17,7 +17,7 @@ make run            # go run ./cmd/autobump
 make install        # Build and copy to ~/.local/bin/autobump
 make lint           # golangci-lint (always use this, never call golangci-lint directly)
 make test           # Full test suite via pipeline scripts
-make sast           # Security analysis (CodeQL, Semgrep, Trivy, Hadolint, Gitleaks)
+make sast           # Security analysis (CodeQL, Semgrep, Hadolint, ShellCheck, Gitleaks)
 ```
 
 Run a single test during development:

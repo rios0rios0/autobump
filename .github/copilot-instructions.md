@@ -10,7 +10,7 @@ AutoBump is a Go CLI tool that automatically updates CHANGELOG.md files accordin
 - Build the binary: `make build` -- takes ~35 seconds first time, <1 second after.
 - Run tests: `make test` -- NEVER run `go test` directly.
 - Run linting: `make lint` -- NEVER run `golangci-lint` directly.
-- Run security analysis: `make sast` -- NEVER run `gitleaks`, `semgrep`, `trivy`, `hadolint`, or `codeql` directly.
+- Run security analysis: `make sast` -- NEVER run `gitleaks`, `semgrep`, `hadolint`, or `codeql` directly.
 - Tidy dependencies: `go mod tidy`
 
 ### Linting, Testing, and SAST with Makefile
@@ -20,7 +20,7 @@ This project uses the [rios0rios0/pipelines](https://github.com/rios0rios0/pipel
 ```bash
 make lint    # golangci-lint via pipeline scripts
 make test    # unit + integration tests via pipeline scripts
-make sast    # CodeQL, Semgrep, Trivy, Hadolint, Gitleaks
+make sast    # CodeQL, Semgrep, Hadolint, ShellCheck, Gitleaks
 ```
 
 Note: The CI/CD pipeline automatically uses these scripts via the reusable workflow `rios0rios0/pipelines/.github/workflows/go-binary.yaml@main`.
