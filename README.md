@@ -114,15 +114,29 @@ You will need to configure at least one access token depending on which Git plat
 - **Azure DevOps**: Set `azure_devops_access_token` field with your Azure DevOps personal access token
 - **GitHub**: Set `github_access_token` field with your GitHub personal access token (e.g., `ghp_TOKEN`)
 
-You can provide the token directly in the configuration file or specify a path to a file containing the token:
+Each of these fields supports the same three formats as a provider's [`token`](#provider-discovery):
+
+- **Inline**: the token value directly
+- **Environment variable**: `"${ENV_VAR}"` -- reads the token from an environment variable
+- **File path**: `"/path/to/file"` -- reads the token from a file on disk
 
 ```yaml
-# Direct token (not recommended for security)
+# Inline (not recommended for security)
 gitlab_access_token: "???"
 
-# Or path to token file (recommended)
-gitlab_access_token: ".secure_files/gitlab_access_token.key"
+# Or an environment variable (recommended)
+github_access_token: "${GITHUB_TOKEN}"
+
+# Or a path to a file holding the token (recommended)
+azure_devops_access_token: ".secure_files/azure_devops_access_token.key"
 ```
+
+The reference is expanded before the path is checked, so `"${CREDENTIALS_DIRECTORY}/github.token"`
+reads a file too. Only the braced form is expanded (`$GITHUB_TOKEN` is taken literally). A
+variable that is unset or empty expands to an empty token and logs a warning naming it, and the
+run then behaves as if the field were not set. These fields are read only from your own
+configuration (no other [layer](#configuration-layers) can set a credential), so a reference is
+only ever expanded from your environment, at your request.
 
 ### Optional GPG Key Signing
 
@@ -130,7 +144,19 @@ You can optionally configure GPG key signing for commits:
 
 ```yaml
 gpg_key_path: "/home/user/.gnupg/autobump.asc"
+
+# Passphrase for the key (optional): inline, or a path to a file holding it
+gpg_key_passphrase: "/home/user/.gnupg/autobump-passphrase.txt"
 ```
+
+When `gpg_key_passphrase` is not set, AutoBump reads the passphrase from the `GPG_PASSPHRASE`
+environment variable. Unlike the access tokens, a passphrase never expands `${ENV_VAR}`: it is
+free text that may contain `$` or `${...}` itself, and expanding it would silently change a
+passphrase that works today. To keep it out of the configuration, point the field at a file, or
+leave it unset and export `GPG_PASSPHRASE`. `ssh_key_passphrase` follows the same rule, with no
+environment variable of its own. A passphrase that cannot even be checked as a file path, such
+as one longer than 255 bytes, is used as written with a warning that names only the setting and
+the reason, never the passphrase.
 
 To export your GPG key:
 
@@ -146,7 +172,7 @@ When pushing to SSH remotes, AutoBump auto-detects the SSH agent from `SSH_AUTH_
 # Path to SSH private key (supports ~ expansion)
 ssh_key_path: '~/.ssh/id_ed25519'
 
-# Passphrase for the key (optional, can be a file path)
+# Passphrase for the key (optional): inline or a file path; `${...}` is kept as written
 ssh_key_passphrase: ''
 
 # Or point to a custom SSH agent socket (e.g., 1Password)
@@ -414,7 +440,7 @@ And the keys it may **not**, which are reported and ignored when a repository se
 
 | Key | Why it is yours alone |
 |-----|------------------------|
-| `gitlab_access_token`, `github_access_token`, `azure_devops_access_token` | A repository handing AutoBump a credential — or a *path* to read one from — is a credential it chose |
+| `gitlab_access_token`, `github_access_token`, `azure_devops_access_token` | A repository handing AutoBump a credential — or a *path* or `${VARIABLE}` to read one from — is a credential it chose |
 | `gpg_key_path`, `gpg_key_passphrase`, `ssh_key_path`, `ssh_key_passphrase`, `ssh_auth_sock` | Same |
 | `providers`, `projects` | Which repositories get released, and which servers are talked to, is not a repository's to decide |
 | `bump_branch_prefix` | The prefix decides which branches stale-branch cleanup **deletes**, and whose pull requests it closes |

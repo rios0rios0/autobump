@@ -3,6 +3,7 @@ package entities
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -225,20 +226,54 @@ func expandHome(value *string) {
 	}
 }
 
-// handleTokenFile reads the token from a file if it exists and replaces the token string.
+// handleTokenFile replaces a secret that names an existing file with the file's trimmed
+// content, and leaves any other value as it was, `${...}` included. FinalizeGlobalConfig
+// uses it for the passphrases, which must not be expanded; the access tokens go through
+// gitforge's ResolveToken instead. See FinalizeGlobalConfig for why the two differ.
+//
+// The value is read as a path only when [os.Stat] accepts it. Every other value is used as
+// written, and that is exactly when it may be the secret itself, so no log line here may
+// carry it. A value that names nothing is the ordinary inline secret and is not logged at
+// all. One that Stat rejects for another reason -- longer than a file name may be, running
+// through a regular file, under a directory that cannot be searched -- gets a warning that
+// names the setting and the cause, never the [*fs.PathError] itself: its message embeds
+// the path, and here the path is the value. Once Stat has accepted the value it is a real
+// path, so a read that still fails may name it.
 func handleTokenFile(name string, token *string) {
-	if *token != "" {
-		if _, err := os.Stat(*token); !os.IsNotExist(err) {
-			logger.Infof("Reading %s from file...", name)
-			var fileToken []byte
-			fileToken, err = os.ReadFile(*token)
-			if err != nil {
-				logger.Errorf("failed to read %s from file: %v", name, err)
-			} else {
-				*token = strings.TrimSpace(string(fileToken))
-			}
-		}
+	if *token == "" {
+		return
 	}
+
+	if _, err := os.Stat(*token); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			logger.Warnf(
+				"Using %q as written: it could not be checked as a file path (%s)",
+				name, pathErrorCause(err),
+			)
+		}
+		return
+	}
+
+	logger.Infof("Reading %s from file...", name)
+	content, err := os.ReadFile(*token)
+	if err != nil {
+		logger.Errorf("failed to read %s from file: %v", name, err)
+		return
+	}
+
+	*token = strings.TrimSpace(string(content))
+}
+
+// pathErrorCause returns why a file-system call failed, without the path it failed on. The
+// message of a [*fs.PathError] embeds that path, and where the path may be a secret only
+// the cause is safe to log; an error of any other shape is not described at all.
+func pathErrorCause(err error) string {
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) && pathErr.Err != nil {
+		return pathErr.Err.Error()
+	}
+
+	return "unknown cause"
 }
 
 // ValidateProviders validates provider configuration entries.

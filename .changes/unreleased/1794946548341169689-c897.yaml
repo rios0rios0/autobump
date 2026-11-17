@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'stopped writing a `gpg_key_passphrase` or `ssh_key_passphrase` that could not be checked as a file path, such as one longer than 255 bytes, to the log in an error message; it is now used as written and the warning names only the setting and the cause'
+time: '2026-11-17T20:15:48.341089132Z'

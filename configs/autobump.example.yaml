@@ -21,12 +21,16 @@
 # ---------------------------------------------------------------------------
 
 # Personal access token for the platform you release to. Each value may be an inline
-# string, a `${ENV_VAR}` reference, or a path to a file containing the token.
+# string, a `${ENV_VAR}` reference, or a path to a file containing the token, exactly as
+# a provider's `token` below. An unset variable becomes an empty token, with a warning.
 gitlab_access_token: 'glpat-TOKEN'
+#gitlab_access_token: '${GITLAB_TOKEN}'
 #gitlab_access_token: '.secure_files/gitlab_access_token.key'
 azure_devops_access_token: 'azure-devops-token'
+#azure_devops_access_token: '${AZURE_DEVOPS_PAT}'
 #azure_devops_access_token: '.secure_files/azure_devops_access_token.key'
 github_access_token: 'ghp_TOKEN'
+#github_access_token: '${GITHUB_TOKEN}'
 #github_access_token: '.secure_files/github_access_token.key'
 
 # (optional) GPG private key used to sign the commits
@@ -35,11 +39,13 @@ github_access_token: 'ghp_TOKEN'
 #gpg_key_path: '/home/user/.gnupg/autobump.asc'
 
 # (optional) passphrase for the GPG key above
-# an inline string, a file path, or the GPG_PASSPHRASE environment variable
+# an inline string or a file path; when unset, the GPG_PASSPHRASE environment variable.
+# Unlike the tokens, `${...}` is kept as written: a passphrase may contain it.
 #gpg_key_passphrase: '/home/user/.gnupg/autobump-passphrase.txt'
 
 # (optional) SSH private key for push authentication, used when no SSH agent is
 # available (CI, for instance). Common agent sockets are auto-detected otherwise.
+# Its passphrase is an inline string or a file path, `${...}` kept as written.
 #ssh_key_path: '~/.ssh/id_ed25519'
 #ssh_key_passphrase: ''
 #ssh_auth_sock: '~/.1password/agent.sock'
