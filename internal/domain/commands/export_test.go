@@ -167,13 +167,35 @@ var DiscoverSSHConfigSources = discoverSSHConfigSources //nolint:gochecknoglobal
 // WindowsSSHConfigSourcesUnder exports windowsSSHConfigSourcesUnder for testing.
 var WindowsSSHConfigSourcesUnder = windowsSSHConfigSourcesUnder //nolint:gochecknoglobals // test export
 
-// IdentityPublicKey exports identityPublicKey for testing.
-var IdentityPublicKey = identityPublicKey //nolint:gochecknoglobals // test export
+// LoadSSHIdentity exports loadSSHIdentity for testing, flattening the unexported identity
+// into its public key and whether the file yielded a key usable without the agent.
+func LoadSSHIdentity(path string) (ssh.PublicKey, bool, error) {
+	identity, err := loadSSHIdentity(path)
+	return identity.publicKey, identity.signer != nil, err
+}
 
-// SelectAgentSigners loads the identities the IdentityFile paths name and selects the agent
-// keys for them, as the SSH transport does for an alias.
-func SelectAgentSigners(agentSigners []ssh.Signer, identityFiles []string, identitiesOnly bool) []ssh.Signer {
-	return selectAgentSigners(agentSigners, loadSSHIdentities(identityFiles), identitiesOnly)
+// SelectSigners loads the identities the IdentityFile paths name and selects the keys to
+// offer for them, as the SSH transport does for an alias.
+func SelectSigners(agentSigners []ssh.Signer, identityFiles []string, identitiesOnly bool) []ssh.Signer {
+	return selectSigners(agentSigners, loadSSHIdentities(identityFiles), identitiesOnly)
+}
+
+// GitSSHCommandInEffect exports gitSSHCommandInEffect for testing.
+var GitSSHCommandInEffect = gitSSHCommandInEffect //nolint:gochecknoglobals // test export
+
+// RunsWindowsSSH exports runsWindowsSSH for testing.
+var RunsWindowsSSH = runsWindowsSSH //nolint:gochecknoglobals // test export
+
+// WindowsProfilesOnPath exports windowsProfilesOnPath for testing.
+var WindowsProfilesOnPath = windowsProfilesOnPath //nolint:gochecknoglobals // test export
+
+// CurrentWindowsProfileSources exports currentWindowsProfileSources for testing.
+var CurrentWindowsProfileSources = currentWindowsProfileSources //nolint:gochecknoglobals // test export
+
+// LoadSSHConfigFiles loads the given ssh_config files and reports how many were usable, so a
+// test can tell a skipped file from a loaded one.
+func LoadSSHConfigFiles(sources []SSHConfigSource) int {
+	return len(loadSSHConfigFiles(sources, "").files)
 }
 
 // NewSSHTransportWith builds the SSH transport over next with fixed ssh_config and

@@ -36,11 +36,13 @@ var (
 // sshConfigSource names one ssh_config file and the home directory its paths are relative
 // to. Windows marks a Windows profile's file, whose paths ssh.exe resolves on the Windows
 // side: `~` there is the profile, and a drive letter is a drive WSL mounts under the
-// automount root.
+// automount root. System marks the machine-wide file, which a distribution ships and the
+// operator seldom edits, so a failure to read it is reported only at debug level.
 type sshConfigSource struct {
 	Path    string
 	Home    string
 	Windows bool
+	System  bool
 }
 
 // sshConfigFile is a decoded ssh_config file and the source it was read from.
@@ -91,15 +93,18 @@ func sshConfig() *sshConfigFiles {
 }
 
 // discoverSSHConfigSources returns the ssh_config files AutoBump reads, in precedence
-// order, together with the WSL automount root their Windows paths are mapped into:
+// order, together with the WSL automount root their Windows paths are mapped into -- an
+// empty root when no Windows profile's file is among them:
 //
 //   - the user's ~/.ssh/config;
 //   - the machine-wide /etc/ssh/ssh_config;
-//   - under WSL, every Windows profile's .ssh/config reachable through the automount root,
-//     because a WSL setup that delegates SSH to Windows (an ssh wrapper calling ssh.exe,
-//     Git for Windows) defines its host aliases there and nowhere else.
+//   - under WSL, when git runs Windows' ssh.exe (gitRunsWindowsSSH), the .ssh/config of the
+//     Windows profile PATH reaches into, which is the file ssh.exe reads and where such a
+//     setup defines its host aliases. When PATH reaches into no profile, every profile's.
 //
-// Files that do not exist are kept here and skipped when the files are loaded.
+// A WSL machine whose git runs the Linux ssh reads no Windows file, so AutoBump resolves a
+// host there exactly as git does. Files that do not exist are kept here and skipped when the
+// files are loaded.
 func discoverSSHConfigSources() (string, []sshConfigSource) {
 	var sources []sshConfigSource
 	home, err := os.UserHomeDir()
@@ -108,9 +113,9 @@ func discoverSSHConfigSources() (string, []sshConfigSource) {
 	} else {
 		sources = append(sources, sshConfigSource{Path: filepath.Join(home, ".ssh", "config"), Home: home})
 	}
-	sources = append(sources, sshConfigSource{Path: systemSSHConfigPath, Home: home})
+	sources = append(sources, sshConfigSource{Path: systemSSHConfigPath, Home: home, System: true})
 
-	if !runningUnderWSL() {
+	if !runningUnderWSL() || !gitRunsWindowsSSH() {
 		return "", sources
 	}
 	automountRoot, automountEnabled := wslAutomountRoot()
@@ -119,7 +124,10 @@ func discoverSSHConfigSources() (string, []sshConfigSource) {
 		return "", sources
 	}
 
-	return automountRoot, append(sources, windowsSSHConfigSourcesUnder(automountRoot)...)
+	windowsSources := currentWindowsProfileSources(
+		windowsSSHConfigSourcesUnder(automountRoot), windowsProfilesOnPath(automountRoot, os.Getenv("PATH")),
+	)
+	return automountRoot, append(sources, windowsSources...)
 }
 
 // windowsSSHConfigSourcesUnder returns the ssh_config of every Windows profile mounted under
@@ -136,8 +144,11 @@ func windowsSSHConfigSourcesUnder(automountRoot string) []sshConfigSource {
 }
 
 // loadSSHConfigFiles decodes the sources that exist, in order. A file that cannot be read
-// or parsed -- kevinburke/ssh_config refuses `Match exec`, for one -- is skipped with a
-// warning rather than failing the run: its aliases are lost, the other files' are not.
+// or parsed -- kevinburke/ssh_config accepts no `Match` criterion but `host` and `all`, so
+// `Match exec` or `Match final` fail it -- is skipped rather than failing the run: its
+// aliases are lost, the other files' are not. The operator's own file is reported with a
+// warning; the system file, which a distribution ships, only at debug level, since its
+// failure costs nothing the operator configured and recurs on every run.
 //
 // Each file is decoded the way OpenSSH reads a user's file, so a relative Include in it is
 // looked up under ~/.ssh. The system file's own Include is absolute on the distributions
@@ -145,17 +156,22 @@ func windowsSSHConfigSourcesUnder(automountRoot string) []sshConfigSource {
 func loadSSHConfigFiles(sources []sshConfigSource, automountRoot string) *sshConfigFiles {
 	files := make([]sshConfigFile, 0, len(sources))
 	for _, source := range sources {
+		report := logger.Warnf
+		if source.System {
+			report = logger.Debugf
+		}
+
 		data, err := os.ReadFile(source.Path)
 		if err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
-				logger.Warnf("Cannot read ssh_config %s: %v, ignoring it", source.Path, err)
+				report("Cannot read ssh_config %s: %v, ignoring it", source.Path, err)
 			}
 			continue
 		}
 
 		config, err := ssh_config.DecodeBytes(data)
 		if err != nil {
-			logger.Warnf("Cannot parse ssh_config %s: %v, ignoring the host aliases it defines", source.Path, err)
+			report("Cannot parse ssh_config %s: %v, ignoring the host aliases it defines", source.Path, err)
 			continue
 		}
 
@@ -326,12 +342,24 @@ func windowsDrivePathUnder(path, automountRoot string) string {
 	return filepath.Join(automountRoot, strings.ToLower(path[:1]), path[2:])
 }
 
+// readsWindowsProfiles reports whether a Windows profile's ssh_config is among the places
+// searched, which is so exactly when the files were loaded with an automount root.
+func (c *sshConfigFiles) readsWindowsProfiles() bool {
+	return c != nil && c.automountRoot != ""
+}
+
 // describeSSHConfigSearch names the ssh_config files AutoBump reads, for a message that has
-// to send the operator to one of them.
-func describeSSHConfigSearch(isWSL bool) string {
-	if isWSL {
-		return "~/.ssh/config, " + systemSSHConfigPath +
-			" and every Windows profile's .ssh/config under the WSL automount root"
+// to send the operator to one of them. Under WSL it says whether the Windows profile's file
+// is among them, and when it is not, what would make it so: an alias defined only there is
+// the usual reason a host does not resolve.
+func describeSSHConfigSearch(isWSL, windowsProfiles bool) string {
+	switch {
+	case windowsProfiles:
+		return "~/.ssh/config, " + systemSSHConfigPath + " and the Windows profile's .ssh/config"
+	case isWSL:
+		return "~/.ssh/config and " + systemSSHConfigPath + " (the Windows profile's .ssh/config is read only " +
+			"when git runs Windows' ssh.exe, through GIT_SSH_COMMAND, core.sshCommand, GIT_SSH or an ssh on PATH)"
+	default:
+		return "~/.ssh/config and " + systemSSHConfigPath
 	}
-	return "~/.ssh/config and " + systemSSHConfigPath
 }

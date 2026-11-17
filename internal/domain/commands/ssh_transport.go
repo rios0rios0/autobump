@@ -17,11 +17,12 @@ import (
 // push, the clone and the stale-branch listing AutoBump asks for as much as the SSH agent
 // fallback gitforge opens on its own after AutoBump's methods fail. For each connection it:
 //
-//   - dials the HostName and Port the remote's host alias names in ssh_config, read under
-//     WSL from the Windows profiles too, where a setup that delegates SSH to ssh.exe defines
-//     its aliases;
-//   - offers an SSH agent's keys the way OpenSSH would for that alias: the keys its
-//     IdentityFile entries name first, and with IdentitiesOnly nothing else;
+//   - dials the HostName and Port the remote's host alias names in ssh_config -- under WSL,
+//     in the Windows profile's file too when git runs ssh.exe, since that is where such a
+//     setup defines its aliases;
+//   - offers keys the way OpenSSH would for that alias: the agent keys its IdentityFile
+//     entries name first, with IdentitiesOnly no other agent key, and the unencrypted
+//     IdentityFile keys the agent does not hold last;
 //   - negotiates only the host key types known_hosts records for the host, so the key the
 //     server presents is one the host key callback can verify.
 type sshTransport struct {
@@ -87,10 +88,11 @@ func (t *sshTransport) prepare(
 	return target, withHostKeyAlgorithms(auth, t.hostKeys(), sshHostWithPort(target))
 }
 
-// withIdentities makes an SSH agent auth method offer the agent's keys the way OpenSSH
-// would for the alias (see selectAgentSigners). Only an agent's keys are chosen among: a key
-// file configured as ssh_key_path is offered as configured, and an alias with no
-// IdentityFile leaves the agent's keys in the agent's order.
+// withIdentities makes an SSH agent auth method offer keys the way OpenSSH would for the
+// alias (see selectSigners): the agent keys its IdentityFile entries name, the agent's
+// others unless IdentitiesOnly, and the unencrypted IdentityFile keys the agent does not
+// hold. A key file configured as ssh_key_path is offered as configured, and an alias with
+// no IdentityFile leaves the agent's keys in the agent's order.
 func (t *sshTransport) withIdentities(
 	auth transport.AuthMethod,
 	alias string,
@@ -110,7 +112,7 @@ func (t *sshTransport) withIdentities(
 			return nil, err
 		}
 
-		selected := selectAgentSigners(signers, identities, settings.IdentitiesOnly)
+		selected := selectSigners(signers, identities, settings.IdentitiesOnly)
 		if len(selected) == 0 && len(signers) > 0 {
 			t.warnNoKeyOffered(alias, settings)
 		}
@@ -120,16 +122,17 @@ func (t *sshTransport) withIdentities(
 }
 
 // warnNoKeyOffered explains, once per alias, a connection that offers no key at all:
-// IdentitiesOnly narrowed the agent's keys to the ones IdentityFile names, and the agent
-// holds none of them. The server's refusal that follows says nothing about why.
+// IdentitiesOnly narrowed the keys to the ones IdentityFile names, the agent holds none of
+// them, and none is a key file AutoBump can use without a passphrase. The server's refusal
+// that follows says nothing about why.
 func (t *sshTransport) warnNoKeyOffered(alias string, settings sshHostSettings) {
 	if _, alreadyWarned := t.warned.LoadOrStore(alias, struct{}{}); alreadyWarned {
 		return
 	}
 	logger.Warnf(
-		"The ssh_config entry for %q sets IdentitiesOnly, and the SSH agent holds none of the keys "+
-			"its IdentityFile names (%s), so no key is offered: add that key to the agent, or point "+
-			"IdentityFile at the public key of one it holds",
+		"The ssh_config entry for %q sets IdentitiesOnly, and none of the keys its IdentityFile names "+
+			"(%s) is held by the SSH agent or readable without a passphrase, so no key is offered: add "+
+			"that key to the agent, or configure it as ssh_key_path",
 		alias, strings.Join(settings.IdentityFiles, ", "),
 	)
 }

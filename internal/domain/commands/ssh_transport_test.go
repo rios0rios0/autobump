@@ -293,7 +293,7 @@ func TestDiscoverSSHConfigSources(t *testing.T) {
 		// then -- under WSL the Windows profiles' files follow these two
 		require.GreaterOrEqual(t, len(sources), 2)
 		assert.Equal(t, commands.SSHConfigSource{Path: filepath.Join(home, ".ssh", "config"), Home: home}, sources[0])
-		assert.Equal(t, commands.SSHConfigSource{Path: "/etc/ssh/ssh_config", Home: home}, sources[1])
+		assert.Equal(t, commands.SSHConfigSource{Path: "/etc/ssh/ssh_config", Home: home, System: true}, sources[1])
 		for _, source := range sources[2:] {
 			assert.True(t, source.Windows, "only Windows profiles' files come after the Linux ones")
 		}
@@ -337,6 +337,45 @@ func TestSSHTransportAgainstAServer(t *testing.T) {
 		require.ErrorIs(t, err, transport.ErrEmptyRemoteRepository)
 		assert.Equal(t, []string{ssh.FingerprintSHA256(forge.authorizedKey)}, forge.server.offeredKeys())
 	})
+
+	t.Run(
+		"should reach the git protocol with an unencrypted IdentityFile key the agent does not hold",
+		func(t *testing.T) {
+			t.Parallel()
+
+			// given -- IdentitiesOnly, the key on disk, and an agent holding only other accounts'
+			// keys: before, the fallback offered those; OpenSSH offers the file's key
+			forge := newForgeFixture(t)
+			home := t.TempDir()
+			writePrivateKeyFixture(t, filepath.Join(home, ".ssh", "id_chosen"), forge.authorizedPrivateKey)
+			config := writeSSHFixture(t, filepath.Join(home, ".ssh", "config"), ""+
+				"Host forge-alias\n"+
+				"  HostName 127.0.0.1\n"+
+				"  Port "+forge.server.port()+"\n"+
+				"  IdentityFile ~/.ssh/id_chosen\n"+
+				"  IdentitiesOnly yes\n")
+			socket := serveSSHAgent(t, newEd25519Key(t), newEd25519Key(t))
+			auth := agentAuthVerifyingAgainst(t, socket, forge.knownHosts)
+			sshTransport := commands.NewSSHTransportWith(
+				gitssh.DefaultClient,
+				[]commands.SSHConfigSource{{Path: config, Home: home}},
+				"",
+				[]string{forge.knownHosts},
+			)
+			endpoint, err := transport.NewEndpoint("git@forge-alias:owner/repo.git")
+			require.NoError(t, err)
+
+			// when
+			session, err := sshTransport.NewUploadPackSession(endpoint, auth)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = session.Close() })
+			_, err = session.AdvertisedReferences()
+
+			// then
+			require.ErrorIs(t, err, transport.ErrEmptyRemoteRepository)
+			assert.Equal(t, []string{ssh.FingerprintSHA256(forge.authorizedKey)}, forge.server.offeredKeys())
+		},
+	)
 
 	t.Run("should fail host key verification without the transport", func(t *testing.T) {
 		t.Parallel()

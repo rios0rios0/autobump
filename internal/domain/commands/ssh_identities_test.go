@@ -1,6 +1,7 @@
 package commands_test
 
 import (
+	"crypto/ed25519"
 	"encoding/pem"
 	"path/filepath"
 	"testing"
@@ -12,7 +13,7 @@ import (
 	"github.com/rios0rios0/autobump/internal/domain/commands"
 )
 
-func TestIdentityPublicKey(t *testing.T) {
+func TestLoadSSHIdentity(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should read the public key an IdentityFile ending in .pub names", func(t *testing.T) {
@@ -23,11 +24,12 @@ func TestIdentityPublicKey(t *testing.T) {
 		path := writePublicKeyFixture(t, filepath.Join(t.TempDir(), "work.pub"), publicKey)
 
 		// when
-		result, err := commands.IdentityPublicKey(path)
+		result, usable, err := commands.LoadSSHIdentity(path)
 
-		// then
+		// then -- a public key alone can only pick a key out of the agent
 		require.NoError(t, err)
 		assert.Equal(t, publicKey.Marshal(), result.Marshal())
+		assert.False(t, usable)
 	})
 
 	t.Run("should read the .pub beside a private key path even when the private key is absent", func(t *testing.T) {
@@ -39,28 +41,30 @@ func TestIdentityPublicKey(t *testing.T) {
 		writePublicKeyFixture(t, filepath.Join(dir, "id_work.pub"), publicKey)
 
 		// when
-		result, err := commands.IdentityPublicKey(filepath.Join(dir, "id_work"))
+		result, usable, err := commands.LoadSSHIdentity(filepath.Join(dir, "id_work"))
 
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, publicKey.Marshal(), result.Marshal())
+		assert.False(t, usable)
 	})
 
-	t.Run("should read the public half of an unencrypted private key with no .pub", func(t *testing.T) {
+	t.Run("should load an unencrypted private key as a key usable without the agent", func(t *testing.T) {
 		t.Parallel()
 
-		// given
+		// given -- OpenSSH uses such a key directly, with or without a .pub beside it
 		key := newEd25519Key(t)
-		block, err := ssh.MarshalPrivateKey(key, "")
-		require.NoError(t, err)
-		path := writeSSHFixture(t, filepath.Join(t.TempDir(), "id_work"), string(pem.EncodeToMemory(block)))
+		dir := t.TempDir()
+		path := writePrivateKeyFixture(t, filepath.Join(dir, "id_work"), key)
+		writePublicKeyFixture(t, filepath.Join(dir, "id_work.pub"), newTestSigner(t, key).PublicKey())
 
 		// when
-		result, err := commands.IdentityPublicKey(path)
+		result, usable, err := commands.LoadSSHIdentity(path)
 
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, newTestSigner(t, key).PublicKey().Marshal(), result.Marshal())
+		assert.True(t, usable)
 	})
 
 	t.Run("should read the public half of an encrypted OpenSSH key without its passphrase", func(t *testing.T) {
@@ -73,11 +77,12 @@ func TestIdentityPublicKey(t *testing.T) {
 		path := writeSSHFixture(t, filepath.Join(t.TempDir(), "id_work"), string(pem.EncodeToMemory(block)))
 
 		// when
-		result, err := commands.IdentityPublicKey(path)
+		result, usable, err := commands.LoadSSHIdentity(path)
 
-		// then
+		// then -- without the passphrase it can only pick the key out of the agent
 		require.NoError(t, err)
 		assert.Equal(t, newTestSigner(t, key).PublicKey().Marshal(), result.Marshal())
+		assert.False(t, usable)
 	})
 
 	t.Run("should fail when neither the file nor its .pub exists", func(t *testing.T) {
@@ -87,14 +92,14 @@ func TestIdentityPublicKey(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "absent")
 
 		// when
-		_, err := commands.IdentityPublicKey(path)
+		_, _, err := commands.LoadSSHIdentity(path)
 
 		// then
 		require.Error(t, err)
 	})
 }
 
-func TestSelectAgentSigners(t *testing.T) {
+func TestSelectSigners(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should offer only the named keys, in IdentityFile order, when IdentitiesOnly is set", func(t *testing.T) {
@@ -107,7 +112,7 @@ func TestSelectAgentSigners(t *testing.T) {
 		first := writePublicKeyFixture(t, filepath.Join(dir, "first.pub"), agentKeys[0].PublicKey())
 
 		// when
-		selected := commands.SelectAgentSigners(agentKeys, []string{third, first}, true)
+		selected := commands.SelectSigners(agentKeys, []string{third, first}, true)
 
 		// then
 		assert.Equal(t, []ssh.Signer{agentKeys[2], agentKeys[0]}, selected)
@@ -121,25 +126,76 @@ func TestSelectAgentSigners(t *testing.T) {
 		named := writePublicKeyFixture(t, filepath.Join(t.TempDir(), "named.pub"), agentKeys[2].PublicKey())
 
 		// when
-		selected := commands.SelectAgentSigners(agentKeys, []string{named}, false)
+		selected := commands.SelectSigners(agentKeys, []string{named}, false)
 
 		// then
 		assert.Equal(t, []ssh.Signer{agentKeys[2], agentKeys[0], agentKeys[1]}, selected)
 	})
 
-	t.Run("should offer nothing when IdentitiesOnly is set and the agent holds no named key", func(t *testing.T) {
+	t.Run("should offer nothing when IdentitiesOnly is set and no named key is usable", func(t *testing.T) {
 		t.Parallel()
 
-		// given
+		// given -- only the public half of a key the agent does not hold
 		agentKeys := newAgentSigners(t, 2)
 		stranger := newTestSigner(t, newEd25519Key(t)).PublicKey()
 		named := writePublicKeyFixture(t, filepath.Join(t.TempDir(), "stranger.pub"), stranger)
 
 		// when
-		selected := commands.SelectAgentSigners(agentKeys, []string{named}, true)
+		selected := commands.SelectSigners(agentKeys, []string{named}, true)
 
 		// then
 		assert.Empty(t, selected)
+	})
+
+	t.Run(
+		"should offer an unencrypted key file the agent does not hold when IdentitiesOnly is set",
+		func(t *testing.T) {
+			t.Parallel()
+
+			// given -- the key is on disk, and the agent holds keys of other accounts
+			agentKeys := newAgentSigners(t, 2)
+			key := newEd25519Key(t)
+			path := writePrivateKeyFixture(t, filepath.Join(t.TempDir(), "id_work"), key)
+
+			// when
+			selected := commands.SelectSigners(agentKeys, []string{path}, true)
+
+			// then
+			require.Len(t, selected, 1)
+			assert.Equal(t, newTestSigner(t, key).PublicKey().Marshal(), selected[0].PublicKey().Marshal())
+		},
+	)
+
+	t.Run("should offer an unencrypted key file the agent does not hold after the agent's keys", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- OpenSSH tries keys only listed in the config file last
+		agentKeys := newAgentSigners(t, 2)
+		key := newEd25519Key(t)
+		path := writePrivateKeyFixture(t, filepath.Join(t.TempDir(), "id_work"), key)
+
+		// when
+		selected := commands.SelectSigners(agentKeys, []string{path}, false)
+
+		// then
+		require.Len(t, selected, 3)
+		assert.Equal(t, []ssh.Signer{agentKeys[0], agentKeys[1]}, selected[:2])
+		assert.Equal(t, newTestSigner(t, key).PublicKey().Marshal(), selected[2].PublicKey().Marshal())
+	})
+
+	t.Run("should offer the agent's copy of a key the file holds too", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the agent may hold the key the file names
+		key := newEd25519Key(t)
+		agentKeys := []ssh.Signer{newTestSigner(t, newEd25519Key(t)), newTestSigner(t, key)}
+		path := writePrivateKeyFixture(t, filepath.Join(t.TempDir(), "id_work"), key)
+
+		// when
+		selected := commands.SelectSigners(agentKeys, []string{path}, true)
+
+		// then -- once, and the agent's
+		assert.Equal(t, []ssh.Signer{agentKeys[1]}, selected)
 	})
 
 	t.Run("should skip an IdentityFile that names no readable key", func(t *testing.T) {
@@ -150,7 +206,7 @@ func TestSelectAgentSigners(t *testing.T) {
 		absent := filepath.Join(t.TempDir(), "absent.pub")
 
 		// when
-		selected := commands.SelectAgentSigners(agentKeys, []string{absent}, false)
+		selected := commands.SelectSigners(agentKeys, []string{absent}, false)
 
 		// then
 		assert.Equal(t, agentKeys, selected)
@@ -166,4 +222,13 @@ func newAgentSigners(t *testing.T, count int) []ssh.Signer {
 		signers = append(signers, newTestSigner(t, newEd25519Key(t)))
 	}
 	return signers
+}
+
+// writePrivateKeyFixture writes key to path as an unencrypted OpenSSH private key.
+func writePrivateKeyFixture(t *testing.T, path string, key ed25519.PrivateKey) string {
+	t.Helper()
+
+	block, err := ssh.MarshalPrivateKey(key, "")
+	require.NoError(t, err)
+	return writeSSHFixture(t, path, string(pem.EncodeToMemory(block)))
 }
