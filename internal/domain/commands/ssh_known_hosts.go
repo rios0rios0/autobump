@@ -34,25 +34,38 @@ const (
 	defaultAutomountRoot = "/mnt/"
 )
 
-// The discovered callback is built once and reused: hostKeyCallback runs for every SSH
-// auth method a release collects, and neither the discovery nor its warnings are worth
-// repeating per method within one CLI run.
+// The discovered host keys are parsed once and reused: every SSH auth method a release
+// collects verifies against them, the SSH transport asks them which host key types to
+// negotiate on every connection, and neither the discovery nor its warnings are worth
+// repeating within one CLI run.
 var (
-	hostKeyCallbackOnce sync.Once           //nolint:gochecknoglobals // memoization guard for cachedHostKeyCb
-	cachedHostKeyCb     ssh.HostKeyCallback //nolint:gochecknoglobals // memoized per process by hostKeyCallbackOnce
+	knownHostsOnce   sync.Once             //nolint:gochecknoglobals // memoization guard for cachedKnownHosts
+	cachedKnownHosts *knownhosts.HostKeyDB //nolint:gochecknoglobals // memoized per process by knownHostsOnce
 )
+
+// knownHostsDB returns the host keys recorded by every known_hosts file this host offers,
+// or nil when there is none. Every host key callback AutoBump builds verifies against it,
+// and the SSH transport reads from it the host key types to negotiate, so the type a
+// server is asked for is always one the callback can verify.
+//
+// The result is memoized for the lifetime of the process: discovery stats a handful of
+// paths and, under WSL, globs the Windows profiles, none of which changes mid-run.
+func knownHostsDB() *knownhosts.HostKeyDB {
+	knownHostsOnce.Do(func() {
+		cachedKnownHosts = buildKnownHostsDB(discoverKnownHostsFiles())
+	})
+	return cachedKnownHosts
+}
 
 // hostKeyCallback returns an ssh.HostKeyCallback that validates against every known_hosts
 // file this host offers, or nil when there is none, letting go-git fall back to its own
 // default host key verification.
-//
-// The result is memoized for the lifetime of the process: discovery stats a handful of
-// paths and, under WSL, globs the Windows profiles, none of which changes mid-run.
 func hostKeyCallback() ssh.HostKeyCallback {
-	hostKeyCallbackOnce.Do(func() {
-		cachedHostKeyCb = buildHostKeyCallback(discoverKnownHostsFiles())
-	})
-	return cachedHostKeyCb
+	hostKeys := knownHostsDB()
+	if hostKeys == nil {
+		return nil
+	}
+	return hostKeys.HostKeyCallback()
 }
 
 // SSHHostKeyCallback returns a host key callback for gitforge's default SSH agent
@@ -80,16 +93,16 @@ func SSHHostKeyCallback() ssh.HostKeyCallback {
 	}
 }
 
-// buildHostKeyCallback turns discovered known_hosts files into a verification callback.
-// An empty list, or files skeema/knownhosts cannot parse, yield nil so go-git produces its
-// own (actionable) error rather than a connection AutoBump silently never verified.
-func buildHostKeyCallback(files []string) ssh.HostKeyCallback {
+// buildKnownHostsDB parses discovered known_hosts files. An empty list, or files
+// skeema/knownhosts cannot parse, yield nil so go-git produces its own (actionable) error
+// rather than a connection AutoBump silently never verified.
+func buildKnownHostsDB(files []string) *knownhosts.HostKeyDB {
 	if len(files) == 0 {
 		warnNoKnownHosts()
 		return nil
 	}
 
-	cb, err := knownhosts.New(files...)
+	hostKeys, err := knownhosts.NewDB(files...)
 	if err != nil {
 		logger.Warnf(
 			"Cannot parse known_hosts from %s: %v, deferring to go-git default host key verification",
@@ -99,7 +112,7 @@ func buildHostKeyCallback(files []string) ssh.HostKeyCallback {
 	}
 
 	logger.Debugf("Loaded SSH host keys from %s", strings.Join(files, ", "))
-	return ssh.HostKeyCallback(cb)
+	return hostKeys
 }
 
 // warnNoKnownHosts tells the operator the search came up empty, naming the WSL-specific
@@ -182,10 +195,16 @@ func windowsKnownHostsFiles() []string {
 	return windowsKnownHostsFilesUnder(root)
 }
 
-// windowsKnownHostsFilesUnder globs the Windows profile layout under an automount root:
-// <root><drive letter>/Users/*/.ssh/known_hosts. Reserved entries (Public, Default, …)
-// need no exclusion — they never contain the file.
+// windowsKnownHostsFilesUnder globs the Windows profiles' known_hosts under an automount
+// root.
 func windowsKnownHostsFilesUnder(root string) []string {
+	return windowsProfileSSHFilesUnder(root, "known_hosts")
+}
+
+// windowsProfileSSHFilesUnder globs the Windows profile layout under an automount root for
+// one file of the profiles' .ssh directory: <root><drive letter>/Users/*/.ssh/<name>.
+// Reserved entries (Public, Default, …) need no exclusion — they never contain the file.
+func windowsProfileSSHFilesUnder(root, name string) []string {
 	drives, err := os.ReadDir(root)
 	if err != nil {
 		logger.Debugf("Cannot read the WSL automount root %s: %v", root, err)
@@ -197,9 +216,9 @@ func windowsKnownHostsFilesUnder(root string) []string {
 		if !drive.IsDir() || !isDriveLetterName(drive.Name()) {
 			continue
 		}
-		matches, globErr := filepath.Glob(filepath.Join(root, drive.Name(), "Users", "*", ".ssh", "known_hosts"))
+		matches, globErr := filepath.Glob(filepath.Join(root, drive.Name(), "Users", "*", ".ssh", name))
 		if globErr != nil {
-			logger.Debugf("Cannot glob the Windows known_hosts under %s: %v", drive.Name(), globErr)
+			logger.Debugf("Cannot glob the Windows %s under %s: %v", name, drive.Name(), globErr)
 			continue
 		}
 		files = append(files, matches...)

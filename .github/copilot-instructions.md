@@ -10,7 +10,7 @@ AutoBump is a Go CLI tool that automatically updates CHANGELOG.md files accordin
 - Build the binary: `make build` -- takes ~35 seconds first time, <1 second after.
 - Run tests: `make test` -- NEVER run `go test` directly.
 - Run linting: `make lint` -- NEVER run `golangci-lint` directly.
-- Run security analysis: `make sast` -- NEVER run `gitleaks`, `semgrep`, `trivy`, `hadolint`, or `codeql` directly.
+- Run security analysis: `make sast` -- NEVER run `gitleaks`, `semgrep`, `hadolint`, or `codeql` directly.
 - Tidy dependencies: `go mod tidy`
 
 ### Linting, Testing, and SAST with Makefile
@@ -20,7 +20,7 @@ This project uses the [rios0rios0/pipelines](https://github.com/rios0rios0/pipel
 ```bash
 make lint    # golangci-lint via pipeline scripts
 make test    # unit + integration tests via pipeline scripts
-make sast    # CodeQL, Semgrep, Trivy, Hadolint, Gitleaks
+make sast    # CodeQL, Semgrep, Hadolint, ShellCheck, Gitleaks
 ```
 
 Note: The CI/CD pipeline automatically uses these scripts via the reusable workflow `rios0rios0/pipelines/.github/workflows/go-binary.yaml@main`.
@@ -199,6 +199,7 @@ autobump/
 - Supports `projects` list and/or `providers` list (both processed by `run` command)
 - Token resolution: inline string, `${ENV_VAR}` expansion, or file path auto-detection
 - SSH push auth: `ssh_key_path`, `ssh_key_passphrase`, `ssh_auth_sock` fields; auto-detects common SSH agent sockets (1Password, standard `ssh-agent`) when not explicitly set
+- SSH host aliases: `sshTransport` (`internal/domain/commands/ssh_transport.go`), installed for the `ssh` scheme in `main.go`, applies ssh_config to every go-git SSH connection (gitforge's fallback included): `HostName`/`Port` from `~/.ssh/config`, `/etc/ssh/ssh_config` and, under WSL, the Windows profiles' `.ssh/config` (`ssh_config.go`); agent keys narrowed to `IdentityFile`/`IdentitiesOnly` (`ssh_identities.go`); host key types pinned to what `known_hosts` records. Agent signers dial per listing and per signature (`ssh_agent.go`)
 - Per-project `.autobump.yaml` discovered via `entities.FindProjectConfigFile`; `loadProjectConfigOverrides` in `internal/domain/commands/service.go` applies it as the fourth layer through `entities.ApplyProjectLayer`. It may set `refresh`, `changelog_path`, `versioning`, `detect_chlog`, `cleanup_stale_branches`, `exclude_forks`, `exclude_archived`, `languages`, `skip` and `reason`, and it **wins over the operator's `projects[]` entry**. The project-entry pass reads what *that document* declared, not the folded configuration — otherwise a global default would overwrite the entry written beside it
 - `skip: true` (plus an optional `reason`) takes a repository out of every release. Only the repository's own `.autobump.yaml` can set it: `applyToProject` carries it onto the unexported `ProjectConfig.skip`/`skipReason` (read via `IsSkipped`/`SkipReason`), `applyTo` warns when the built-in or published defaults carry it, and the operator's strict `projects[]` decode has no key for it. `ProcessRepo` checks it through `honourSkipRequest` right after `loadProjectConfigOverrides`, before any changelog creation, stale-branch cleanup, branch, commit, push or pull request, so a skipped repository is left untouched in every mode
 - `versioning` mode (`semver`, `fork-dot`, `fork-dash`) drives `getNextVersionString` and `updateChangelogFileString`; fork modes preserve the upstream `X.Y.Z` and skip language-specific version-file rewrites. See `internal/domain/commands/fork_version.go`

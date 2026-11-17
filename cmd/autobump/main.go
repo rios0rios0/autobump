@@ -4,6 +4,8 @@ import (
 	"os"
 	"slices"
 
+	"github.com/go-git/go-git/v5/plumbing/transport/client"
+	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/rios0rios0/cliforge/pkg/selfupdate"
 	logger "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -193,6 +195,16 @@ func main() {
 	// discovery AutoBump uses, which under WSL includes the Windows profiles' files,
 	// rather than go-git's own lookup, which fails when ~/.ssh/known_hosts is absent.
 	gitInfra.SetDefaultSSHHostKeyCallback(commands.SSHHostKeyCallback())
+
+	// Every SSH connection go-git opens -- AutoBump's push, clone and remote listing, and
+	// the gitforge fallback above -- goes through AutoBump's transport, which dials the
+	// HostName and Port a host alias names in ssh_config (under WSL, the Windows profile's
+	// too), offers the agent key the alias's IdentityFile names, and negotiates the host key
+	// types known_hosts records. go-git's own ssh_config reader is switched off: it applies
+	// only HostName and Port, and the transport has already replaced the alias with the
+	// HostName it names, which must not be resolved a second time.
+	client.InstallProtocol("ssh", commands.NewSSHTransport(gitssh.DefaultClient))
+	gitssh.DefaultSSHConfig = nil //nolint:reassign // the SSH transport resolves ssh_config instead
 
 	// Inject the root controller and create root command
 	rootController := injectRootController()

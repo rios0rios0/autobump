@@ -2,6 +2,7 @@ package commands_test
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"path/filepath"
 	"testing"
@@ -413,6 +414,61 @@ func TestExplainSSHPushFailure(t *testing.T) {
 
 		// then
 		assert.Equal(t, pushErr, result)
+	})
+
+	t.Run("should name the host and where aliases are read when an SSH host does not resolve", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the shape go-git's dial returns for a host alias DNS has never heard of
+		repo, err := git.PlainInit(filepath.Join(t.TempDir(), "repo"), false)
+		require.NoError(t, err)
+		_, err = repo.CreateRemote(&gitconfig.RemoteConfig{
+			Name: "origin",
+			URLs: []string{"git@github.com-mine:rios0rios0/autobump.git"},
+		})
+		require.NoError(t, err)
+
+		ctx := &commands.RepoContext{Repo: repo, GlobalConfig: &entities.GlobalConfig{}}
+		dnsErr := &net.DNSError{Err: "no such host", Name: "github.com-mine", IsNotFound: true}
+		pushErr := fmt.Errorf("could not push changes to remote repository: %w",
+			&net.OpError{Op: "dial", Net: "tcp", Err: dnsErr})
+
+		// when
+		result := commands.ExplainSSHPushFailure(ctx, pushErr)
+
+		// then
+		require.ErrorIs(t, result, commands.ErrSSHHostUnresolved)
+		require.ErrorIs(t, result, pushErr, "the original failure stays in the chain")
+		require.NotErrorIs(t, result, commands.ErrNoSSHCredential)
+		assert.Contains(t, result.Error(), `"github.com-mine"`)
+		assert.Contains(t, result.Error(), "HostName")
+	})
+}
+
+func TestDescribeUnresolvedSSHHost(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should name the Windows profiles' files when running on WSL", func(t *testing.T) {
+		t.Parallel()
+
+		// given / when
+		message := commands.DescribeUnresolvedSSHHost("github.com-mine", true)
+
+		// then
+		assert.Contains(t, message, `"github.com-mine"`)
+		assert.Contains(t, message, "~/.ssh/config")
+		assert.Contains(t, message, "Windows profile")
+	})
+
+	t.Run("should name only the Linux files elsewhere", func(t *testing.T) {
+		t.Parallel()
+
+		// given / when
+		message := commands.DescribeUnresolvedSSHHost("github.com-mine", false)
+
+		// then
+		assert.Contains(t, message, "/etc/ssh/ssh_config")
+		assert.NotContains(t, message, "Windows")
 	})
 }
 

@@ -19,7 +19,6 @@ import (
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	logger "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	infraRepos "github.com/rios0rios0/autobump/internal/infrastructure/repositories"
@@ -1533,11 +1532,17 @@ func collectSSHAuthMethods(globalConfig *entities.GlobalConfig) []transport.Auth
 	return methods
 }
 
-// sshAgentAuthFromSocket returns an SSH agent auth method that dials the given Unix socket
-// on each use and closes the connection after retrieving the available signers.
+// sshAgentAuthFromSocket returns an SSH agent auth method for the given Unix socket, or nil
+// when nothing answers there. Every use dials the socket afresh -- one connection to list
+// the keys, then one per signature (see sshAgentSigner) -- so no connection outlives the
+// call that needed it.
 func sshAgentAuthFromSocket(socketPath string) transport.AuthMethod {
 	dialer := &net.Dialer{}
-	conn, err := dialer.DialContext(context.Background(), "unix", socketPath)
+	dial := func() (net.Conn, error) {
+		return dialer.DialContext(context.Background(), "unix", socketPath)
+	}
+
+	conn, err := dial()
 	if err != nil {
 		logger.Debugf("Cannot connect to SSH agent at %s: %v", socketPath, err)
 		return nil
@@ -1549,18 +1554,7 @@ func sshAgentAuthFromSocket(socketPath string) transport.AuthMethod {
 	return &gitssh.PublicKeysCallback{
 		User: "git",
 		Callback: func() ([]ssh.Signer, error) {
-			c, dialErr := dialer.DialContext(context.Background(), "unix", socketPath)
-			if dialErr != nil {
-				return nil, dialErr
-			}
-			defer func() {
-				if closeErr := c.Close(); closeErr != nil {
-					logger.Debugf("Failed to close SSH agent connection for %s: %v", socketPath, closeErr)
-				}
-			}()
-
-			agentClient := agent.NewClient(c)
-			return agentClient.Signers()
+			return listSSHAgentSigners(dial)
 		},
 		HostKeyCallback: hostKeyCallback(),
 	}

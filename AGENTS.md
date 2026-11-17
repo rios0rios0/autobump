@@ -17,7 +17,7 @@ make run            # go run ./cmd/autobump
 make install        # Build and copy to ~/.local/bin/autobump
 make lint           # golangci-lint (always use this, never call golangci-lint directly)
 make test           # Full test suite via pipeline scripts
-make sast           # Security analysis (CodeQL, Semgrep, Trivy, Hadolint, Gitleaks)
+make sast           # Security analysis (CodeQL, Semgrep, Hadolint, ShellCheck, Gitleaks)
 ```
 
 Run a single test during development:
@@ -146,11 +146,32 @@ Pushes run on go-git's **pure-Go** SSH client: `collectSSHAuthMethods` can only 
 or a Unix socket it can dial, and `core.sshCommand` or an `ssh` wrapper on `PATH` is ignored
 (commit signing does shell out to `gpg.ssh.program`). `ssh_diagnostics.go` explains the
 failure (`explainSSHPushFailure` → `ErrNoSSHCredential`) only for an SSH remote with no
-collected method. Everything that reaches its renderers has already failed to dial, so a
+collected method, and an unresolvable host (`ErrSSHHostUnresolved`, from a `*net.DNSError`)
+before that. Everything that reaches its renderers has already failed to dial, so a
 detected socket there is a dead one (`UnusableAgentSockets`); `TestDetectSSHEnvironment` covers
 that seam with a real socket. Known-hosts discovery (`ssh_known_hosts.go`: `SSH_KNOWN_HOSTS`,
-`~/.ssh`, `/etc/ssh`, and Windows profiles under WSL) is memoized per process, and `main.go`
-hands the same callback to gitforge's `SetDefaultSSHHostKeyCallback`.
+`~/.ssh`, `/etc/ssh`, and Windows profiles under WSL) is memoized per process as a skeema
+`HostKeyDB` (`knownHostsDB`), and `main.go` hands the same callback to gitforge's
+`SetDefaultSSHHostKeyCallback`.
+
+Every SSH connection go-git opens goes through `sshTransport` (`ssh_transport.go`), which
+`main.go` installs for the `ssh` scheme with `client.InstallProtocol`, setting
+`gitssh.DefaultSSHConfig = nil` so an alias is resolved once. Sitting under go-git covers
+gitforge's own fallback too, so nothing there needs a gitforge change. Per connection it:
+resolves the host alias through ssh_config (`ssh_config.go`: `~/.ssh/config`,
+`/etc/ssh/ssh_config`, and Windows profiles under WSL, read as one OpenSSH configuration with
+first-wins keywords and accumulating `IdentityFile`) into the endpoint go-git dials; narrows
+an agent auth method (`*gitssh.PublicKeysCallback`) to the keys `IdentityFile` names
+(`ssh_identities.go`, OpenSSH's `pubkey_prepare` order, `IdentitiesOnly` drops the rest); and
+sets `HostKeyCallbackHelper.HostKeyAlgorithms` to the types `knownHostsDB` records for the
+resolved `host:port`, because x/crypto asks for ECDSA before Ed25519 and known_hosts usually
+holds only the type OpenSSH settled on (`knownhosts: key mismatch`). It pins types only on a
+method whose callback was given to it: go-git fills an empty one from its own known_hosts.
+Agent signers (`ssh_agent.go`) dial a connection per listing and per signature: x/crypto
+signs after the `PublicKeysCallback` returns, so a signer bound to the listing's connection
+cannot be closed with it. A listing whose connection drops before the agent answers is
+retried (`sshAgentConn` tells a drop from a refusal); a signature is never retried. The
+loopback server in `ssh_fixtures_test.go` exercises the whole chain without a network.
 
 Versioning modes: `semver` (default), `fork-dot`, `fork-dash`. Fork modes increment only the trailing fork digit (e.g. `3.3.0.16` → `3.3.0.17`) and skip language-specific version-file rewrites and the refresh. See `internal/domain/commands/fork_version.go`.
 

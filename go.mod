@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/go-git/go-git/v5 v5.19.3
+	github.com/kevinburke/ssh_config v1.6.0
 	github.com/rios0rios0/cliforge v0.5.3
 	github.com/rios0rios0/gitforge/v4 v4.4.0
 	github.com/rios0rios0/langforge v1.1.12
@@ -36,7 +37,6 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
-	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/pjbgf/sha1cd v0.7.0 // indirect
 	github.com/sergi/go-diff v1.4.5 // indirect
 	github.com/spf13/pflag v1.1.0 // indirect

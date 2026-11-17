@@ -3,6 +3,10 @@ package commands
 import (
 	"time"
 
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/skeema/knownhosts"
+	"golang.org/x/crypto/ssh"
+
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 )
 
@@ -136,8 +140,61 @@ var UpdateChangelogAndVersionFiles = updateChangelogAndVersionFiles //nolint:goc
 // HostKeyCallback exports hostKeyCallback for testing.
 var HostKeyCallback = hostKeyCallback //nolint:gochecknoglobals // test export
 
-// BuildHostKeyCallback exports buildHostKeyCallback for testing.
-var BuildHostKeyCallback = buildHostKeyCallback //nolint:gochecknoglobals // test export
+// BuildKnownHostsDB exports buildKnownHostsDB for testing.
+var BuildKnownHostsDB = buildKnownHostsDB //nolint:gochecknoglobals // test export
+
+// SSHConfigSource exports sshConfigSource for testing. An alias rather than a definition, so
+// a test can name the files a resolution reads directly instead of arranging a home for them.
+type SSHConfigSource = sshConfigSource
+
+// SSHHostSettings exports sshHostSettings for testing.
+type SSHHostSettings = sshHostSettings
+
+// ResolveSSHHost loads the given ssh_config files, as the SSH transport loads the ones it
+// discovers, and resolves alias against them.
+func ResolveSSHHost(sources []SSHConfigSource, automountRoot, alias, remoteUser string) SSHHostSettings {
+	return loadSSHConfigFiles(sources, automountRoot).resolve(alias, remoteUser)
+}
+
+// SSHHostTarget exports sshHostSettings.target for testing.
+func SSHHostTarget(settings SSHHostSettings, endpoint *transport.Endpoint) *transport.Endpoint {
+	return settings.target(endpoint)
+}
+
+// DiscoverSSHConfigSources exports discoverSSHConfigSources for testing.
+var DiscoverSSHConfigSources = discoverSSHConfigSources //nolint:gochecknoglobals // test export
+
+// WindowsSSHConfigSourcesUnder exports windowsSSHConfigSourcesUnder for testing.
+var WindowsSSHConfigSourcesUnder = windowsSSHConfigSourcesUnder //nolint:gochecknoglobals // test export
+
+// IdentityPublicKey exports identityPublicKey for testing.
+var IdentityPublicKey = identityPublicKey //nolint:gochecknoglobals // test export
+
+// SelectAgentSigners loads the identities the IdentityFile paths name and selects the agent
+// keys for them, as the SSH transport does for an alias.
+func SelectAgentSigners(agentSigners []ssh.Signer, identityFiles []string, identitiesOnly bool) []ssh.Signer {
+	return selectAgentSigners(agentSigners, loadSSHIdentities(identityFiles), identitiesOnly)
+}
+
+// NewSSHTransportWith builds the SSH transport over next with fixed ssh_config and
+// known_hosts files in place of the ones the host offers.
+func NewSSHTransportWith(
+	next transport.Transport,
+	sources []SSHConfigSource,
+	automountRoot string,
+	knownHostsFiles []string,
+) transport.Transport {
+	config := loadSSHConfigFiles(sources, automountRoot)
+	hostKeys := buildKnownHostsDB(knownHostsFiles)
+	return newSSHTransport(
+		next,
+		func() *sshConfigFiles { return config },
+		func() *knownhosts.HostKeyDB { return hostKeys },
+	)
+}
+
+// DescribeUnresolvedSSHHost exports describeUnresolvedSSHHost for testing.
+var DescribeUnresolvedSSHHost = describeUnresolvedSSHHost //nolint:gochecknoglobals // test export
 
 // DiscoverKnownHostsFiles exports discoverKnownHostsFiles for testing.
 var DiscoverKnownHostsFiles = discoverKnownHostsFiles //nolint:gochecknoglobals // test export
