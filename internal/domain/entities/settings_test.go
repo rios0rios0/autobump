@@ -1,11 +1,17 @@
 package entities_test
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 
+	logger "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -260,6 +266,17 @@ func TestMergeLanguagesConfig(t *testing.T) {
 		require.NotNil(t, ts.Refresh)
 		assert.True(t, *ts.Refresh)
 	})
+}
+
+// writeSecretFixture writes a placeholder secret under name, readable by its owner only,
+// and returns its path.
+func writeSecretFixture(t *testing.T, dir, name, content string) string {
+	t.Helper()
+
+	path := filepath.Join(dir, name)
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	return path
 }
 
 // writeNamedConfig writes a per-project config under name and returns its path.
@@ -810,6 +827,124 @@ func TestHandleTokenFile(t *testing.T) {
 		// then
 		assert.Empty(t, token)
 	})
+
+	t.Run("should keep the path as written when it exists but cannot be read", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- a directory passes the Stat check, and reading it fails
+		dir := t.TempDir()
+		token := dir
+
+		// when
+		entities.HandleTokenFile("test token", &token)
+
+		// then
+		assert.Equal(t, dir, token)
+	})
+}
+
+// TestHandleTokenFileLogging is deliberately not parallel: it records the standard logger,
+// which every test in the package shares.
+//
+// Each value is what an inline passphrase can look like, and handleTokenFile tries it as a
+// path first. Stat refuses the first two for a reason other than "does not exist", and the
+// [*fs.PathError] it returns embeds the value, so a log line built from that error would
+// print the passphrase.
+//
+//nolint:paralleltest // test mutates global state or uses t.Setenv
+func TestHandleTokenFileLogging(t *testing.T) {
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
+	t.Run("should use the value as written and never log it when it is too long to be a file name", func(t *testing.T) {
+		// given
+		passphrase := strings.Repeat("p", longPassphraseBytes)
+		_, statErr := os.Stat(passphrase)
+		require.ErrorIs(t, statErr, syscall.ENAMETOOLONG)
+		logs := recordLogs(t)
+		value := passphrase
+
+		// when
+		entities.HandleTokenFile("gpg_key_passphrase", &value)
+
+		// then
+		assert.Equal(t, passphrase, value)
+		assert.False(t, logs.mentions(passphrase), "no log line may carry the value: it may be the passphrase")
+		warnings := logs.warnings()
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "gpg_key_passphrase")
+		assert.Contains(t, warnings[0], syscall.ENAMETOOLONG.Error())
+	})
+
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
+	t.Run("should use the value as written and never log it when it runs through a regular file", func(t *testing.T) {
+		// given
+		regularFile := filepath.Join(t.TempDir(), "fixture-file")
+		require.NoError(t, os.WriteFile(regularFile, []byte("fixture-content-placeholder\n"), 0o600))
+		passphrase := filepath.Join(regularFile, "fixture-passphrase-placeholder")
+		_, statErr := os.Stat(passphrase)
+		require.ErrorIs(t, statErr, syscall.ENOTDIR)
+		logs := recordLogs(t)
+		value := passphrase
+
+		// when
+		entities.HandleTokenFile("ssh_key_passphrase", &value)
+
+		// then
+		assert.Equal(t, passphrase, value)
+		assert.False(t, logs.mentions(passphrase), "no log line may carry the value: it may be the passphrase")
+		warnings := logs.warnings()
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "ssh_key_passphrase")
+		assert.Contains(t, warnings[0], syscall.ENOTDIR.Error())
+	})
+
+	//nolint:paralleltest // test mutates global state or uses t.Setenv
+	t.Run("should use the value as written without logging anything when no such file exists", func(t *testing.T) {
+		// given
+		logs := recordLogs(t)
+		value := "fixture-passphrase-placeholder"
+
+		// when
+		entities.HandleTokenFile("gpg_key_passphrase", &value)
+
+		// then
+		assert.Equal(t, "fixture-passphrase-placeholder", value)
+		assert.Empty(t, logs.entries)
+	})
+}
+
+// longPassphraseBytes is longer than a file name may be (NAME_MAX is 255 bytes), so
+// [os.Stat] refuses a value of that length with ENAMETOOLONG before it looks anything up.
+const longPassphraseBytes = 300
+
+func TestPathErrorCause(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return the cause without the path when the error is a path error", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		err := &fs.PathError{Op: "stat", Path: "fixture-passphrase-placeholder", Err: syscall.ENAMETOOLONG}
+
+		// when
+		cause := entities.PathErrorCause(err)
+
+		// then
+		assert.Equal(t, syscall.ENAMETOOLONG.Error(), cause)
+	})
+
+	t.Run("should describe none of the error when it is not a path error", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- an error of any other shape may embed the value, so none of its text is used
+		err := errors.New("checking fixture-passphrase-placeholder failed")
+
+		// when
+		cause := entities.PathErrorCause(err)
+
+		// then
+		assert.NotContains(t, cause, "fixture-passphrase-placeholder")
+		assert.NotContains(t, cause, "checking")
+	})
 }
 
 func TestValidateGlobalConfig(t *testing.T) {
@@ -1033,33 +1168,234 @@ func TestFinalizeGlobalConfig(t *testing.T) {
 		assert.Equal(t, "already-named", cfg.Projects[2].Name)
 	})
 
-	t.Run("should read a token out of the file it names", func(t *testing.T) {
+	t.Run("should read every access token out of the file it names", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		tokenPath := filepath.Join(t.TempDir(), "token.key")
-		require.NoError(t, os.WriteFile(tokenPath, []byte("ghp_from_file\n"), 0o600))
-		cfg := &entities.GlobalConfig{GitHubAccessToken: tokenPath}
+		dir := t.TempDir()
+		gitlabPath := filepath.Join(dir, "gitlab.key")
+		azurePath := filepath.Join(dir, "azure-devops.key")
+		githubPath := filepath.Join(dir, "github.key")
+		require.NoError(t, os.WriteFile(gitlabPath, []byte("fixture-gitlab-token-placeholder\n"), 0o600))
+		require.NoError(t, os.WriteFile(azurePath, []byte("fixture-azure-token-placeholder\n"), 0o600))
+		require.NoError(t, os.WriteFile(githubPath, []byte("fixture-github-token-placeholder\n"), 0o600))
+		cfg := &entities.GlobalConfig{
+			GitLabAccessToken:      gitlabPath,
+			AzureDevOpsAccessToken: azurePath,
+			GitHubAccessToken:      githubPath,
+		}
 
 		// when
 		entities.FinalizeGlobalConfig(cfg)
 
 		// then
-		assert.Equal(t, "ghp_from_file", cfg.GitHubAccessToken)
+		assert.Equal(t, "fixture-gitlab-token-placeholder", cfg.GitLabAccessToken)
+		assert.Equal(t, "fixture-azure-token-placeholder", cfg.AzureDevOpsAccessToken)
+		assert.Equal(t, "fixture-github-token-placeholder", cfg.GitHubAccessToken)
 	})
 
-	t.Run("should leave an inline token alone", func(t *testing.T) {
+	t.Run("should leave every inline access token alone", func(t *testing.T) {
 		t.Parallel()
 
 		// given
-		cfg := &entities.GlobalConfig{GitHubAccessToken: "ghp_inline"}
+		cfg := &entities.GlobalConfig{
+			GitLabAccessToken:      "fixture-gitlab-token-placeholder",
+			AzureDevOpsAccessToken: "fixture-azure-token-placeholder",
+			GitHubAccessToken:      "fixture-github-token-placeholder",
+		}
 
 		// when
 		entities.FinalizeGlobalConfig(cfg)
 
 		// then
-		assert.Equal(t, "ghp_inline", cfg.GitHubAccessToken)
+		assert.Equal(t, "fixture-gitlab-token-placeholder", cfg.GitLabAccessToken)
+		assert.Equal(t, "fixture-azure-token-placeholder", cfg.AzureDevOpsAccessToken)
+		assert.Equal(t, "fixture-github-token-placeholder", cfg.GitHubAccessToken)
 	})
+
+	t.Run("should read every passphrase out of the file it names", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- each passphrase setting names a file holding the passphrase
+		dir := t.TempDir()
+		cfg := &entities.GlobalConfig{
+			GpgKeyPassphrase: writeSecretFixture(t, dir, "gpg.txt", "fixture-gpg-passphrase-placeholder\n"),
+			SSHKeyPassphrase: writeSecretFixture(t, dir, "ssh.txt", "fixture-ssh-passphrase-placeholder\n"),
+		}
+
+		// when
+		entities.FinalizeGlobalConfig(cfg)
+
+		// then
+		assert.Equal(t, "fixture-gpg-passphrase-placeholder", cfg.GpgKeyPassphrase)
+		assert.Equal(t, "fixture-ssh-passphrase-placeholder", cfg.SSHKeyPassphrase)
+	})
+}
+
+// TestFinalizeGlobalConfigEnvironment is deliberately not parallel: it calls t.Setenv, which
+// the runtime forbids in a parallel test, and it records the standard logger, which every
+// test in the package shares.
+func TestFinalizeGlobalConfigEnvironment(t *testing.T) {
+	t.Run("should expand a ${ENV_VAR} reference in every access token when the variable is set", func(t *testing.T) {
+		// given
+		t.Setenv("AUTOBUMP_TEST_GITLAB_TOKEN", "fixture-gitlab-token-placeholder")
+		t.Setenv("AUTOBUMP_TEST_AZURE_DEVOPS_TOKEN", "fixture-azure-token-placeholder")
+		t.Setenv("AUTOBUMP_TEST_GITHUB_TOKEN", "fixture-github-token-placeholder")
+		cfg := &entities.GlobalConfig{
+			GitLabAccessToken:      "${AUTOBUMP_TEST_GITLAB_TOKEN}",
+			AzureDevOpsAccessToken: "${AUTOBUMP_TEST_AZURE_DEVOPS_TOKEN}",
+			GitHubAccessToken:      "${AUTOBUMP_TEST_GITHUB_TOKEN}",
+		}
+
+		// when
+		entities.FinalizeGlobalConfig(cfg)
+
+		// then
+		assert.Equal(t, "fixture-gitlab-token-placeholder", cfg.GitLabAccessToken)
+		assert.Equal(t, "fixture-azure-token-placeholder", cfg.AzureDevOpsAccessToken)
+		assert.Equal(t, "fixture-github-token-placeholder", cfg.GitHubAccessToken)
+	})
+
+	t.Run("should resolve an access token to empty and warn when its variable is not set", func(t *testing.T) {
+		// given
+		t.Setenv("AUTOBUMP_TEST_UNSET_TOKEN", "")
+		require.NoError(t, os.Unsetenv("AUTOBUMP_TEST_UNSET_TOKEN"))
+		logs := recordLogs(t)
+		cfg := &entities.GlobalConfig{GitHubAccessToken: "${AUTOBUMP_TEST_UNSET_TOKEN}"}
+
+		// when
+		entities.FinalizeGlobalConfig(cfg)
+
+		// then
+		assert.Empty(t, cfg.GitHubAccessToken, "a literal reference would reach the forge and be refused")
+		assert.Contains(t, strings.Join(logs.warnings(), "\n"), "AUTOBUMP_TEST_UNSET_TOKEN")
+	})
+
+	t.Run("should read the file an expanded ${ENV_VAR} reference names", func(t *testing.T) {
+		// given
+		tokenPath := filepath.Join(t.TempDir(), "github.key")
+		require.NoError(t, os.WriteFile(tokenPath, []byte("fixture-github-token-placeholder\n"), 0o600))
+		t.Setenv("AUTOBUMP_TEST_TOKEN_FILE", tokenPath)
+		cfg := &entities.GlobalConfig{GitHubAccessToken: "${AUTOBUMP_TEST_TOKEN_FILE}"}
+
+		// when
+		entities.FinalizeGlobalConfig(cfg)
+
+		// then
+		assert.Equal(t, "fixture-github-token-placeholder", cfg.GitHubAccessToken)
+	})
+
+	t.Run("should keep a ${ENV_VAR} reference in a passphrase literally when the variable is set", func(t *testing.T) {
+		// given -- a passphrase is free text a person chose, and `${...}` is legitimate in one
+		t.Setenv("AUTOBUMP_TEST_PASSPHRASE_PART", "fixture-expanded-placeholder")
+		cfg := &entities.GlobalConfig{
+			GpgKeyPassphrase: "fixture-${AUTOBUMP_TEST_PASSPHRASE_PART}-gpg",
+			SSHKeyPassphrase: "fixture-${AUTOBUMP_TEST_PASSPHRASE_PART}-ssh",
+		}
+
+		// when
+		entities.FinalizeGlobalConfig(cfg)
+
+		// then
+		assert.Equal(t, "fixture-${AUTOBUMP_TEST_PASSPHRASE_PART}-gpg", cfg.GpgKeyPassphrase)
+		assert.Equal(t, "fixture-${AUTOBUMP_TEST_PASSPHRASE_PART}-ssh", cfg.SSHKeyPassphrase)
+	})
+
+	t.Run("should take the GPG passphrase from GPG_PASSPHRASE when none is configured", func(t *testing.T) {
+		// given
+		t.Setenv("GPG_PASSPHRASE", "fixture-environment-passphrase-placeholder")
+		cfg := &entities.GlobalConfig{}
+
+		// when
+		entities.FinalizeGlobalConfig(cfg)
+
+		// then
+		assert.Equal(t, "fixture-environment-passphrase-placeholder", cfg.GpgKeyPassphrase)
+	})
+
+	t.Run("should keep the configured GPG passphrase when GPG_PASSPHRASE is set too", func(t *testing.T) {
+		// given
+		t.Setenv("GPG_PASSPHRASE", "fixture-environment-passphrase-placeholder")
+		cfg := &entities.GlobalConfig{GpgKeyPassphrase: "fixture-configured-passphrase-placeholder"}
+
+		// when
+		entities.FinalizeGlobalConfig(cfg)
+
+		// then
+		assert.Equal(t, "fixture-configured-passphrase-placeholder", cfg.GpgKeyPassphrase)
+	})
+}
+
+// logRecorder is a handwritten logrus hook: it keeps every entry the standard logger emits
+// while it is installed, at every level.
+type logRecorder struct {
+	entries []recordedEntry
+}
+
+// recordedEntry is what a logRecorder keeps of one entry: its level, its message, and its
+// fields as they would be printed.
+type recordedEntry struct {
+	message string
+	fields  string
+	level   logger.Level
+}
+
+// Levels subscribes the recorder to every level.
+func (r *logRecorder) Levels() []logger.Level {
+	return logger.AllLevels
+}
+
+// Fire records one entry.
+func (r *logRecorder) Fire(entry *logger.Entry) error {
+	r.entries = append(r.entries, recordedEntry{
+		message: entry.Message,
+		fields:  fmt.Sprint(entry.Data),
+		level:   entry.Level,
+	})
+	return nil
+}
+
+// warnings returns the message of every recorded warning, in order.
+func (r *logRecorder) warnings() []string {
+	var messages []string
+	for _, entry := range r.entries {
+		if entry.level == logger.WarnLevel {
+			messages = append(messages, entry.message)
+		}
+	}
+	return messages
+}
+
+// mentions reports whether any recorded entry, at any level, carries text in its message
+// or in its fields.
+func (r *logRecorder) mentions(text string) bool {
+	for _, entry := range r.entries {
+		if strings.Contains(entry.message, text) || strings.Contains(entry.fields, text) {
+			return true
+		}
+	}
+	return false
+}
+
+// recordLogs installs a logRecorder on the standard logger, with every level enabled, until
+// the test ends. The caller must not be parallel: the standard logger is shared by every
+// test in the package, so a parallel test's entries would be recorded too.
+func recordLogs(t *testing.T) *logRecorder {
+	t.Helper()
+
+	recorder := &logRecorder{entries: nil}
+	hooks := make(logger.LevelHooks)
+	hooks.Add(recorder)
+	standard := logger.StandardLogger()
+	originalHooks := standard.ReplaceHooks(hooks)
+	originalLevel := standard.GetLevel()
+	standard.SetLevel(logger.TraceLevel)
+	t.Cleanup(func() {
+		standard.SetLevel(originalLevel)
+		standard.ReplaceHooks(originalHooks)
+	})
+
+	return recorder
 }
 
 func TestReadLayerData(t *testing.T) {

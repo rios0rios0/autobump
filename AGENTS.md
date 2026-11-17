@@ -120,6 +120,10 @@ functions named; read it before changing one.
 - Only the operator's layer is `ScopeOperator`. The others decode through `RestrictedConfig`,
   which has **no field** for `providers`, `projects`, any credential, or `bump_branch_prefix`.
   The schema is the enforcement; never add one. `operatorOnlyKeys` only reports what was ignored.
+- `${ENV_VAR}` expansion reads the operator's environment, so `FinalizeGlobalConfig` applies
+  it to operator-only keys alone (`providers[].token` and the three top-level access tokens).
+  Never expand a key a restricted layer can set: a repository's `.autobump.yaml` could then
+  copy any of the operator's variables into a request or a log line.
 - `cleanup_stale_branches` may be switched **off** by a restricted layer, never on
   (`acceptSwitchOff`): an enable would arrive after `applySkipCleanupFlag` and override
   `--skip-cleanup`.
@@ -137,10 +141,19 @@ functions named; read it before changing one.
   produces (`bumpBranchVersionRegex`: `X.Y.Z`, `X.Y.Z.N` or `X.Y.Z-N`), never the default
   branch; a prefix match alone is not ownership.
 
-Token values support inline strings, `${ENV_VAR}` expansion, and file paths, resolved once by
-`FinalizeGlobalConfig` over the *folded* configuration, never per layer. SSH push auth uses
-`ssh_key_path`, `ssh_key_passphrase` and `ssh_auth_sock`; common agent sockets are
-auto-detected when not set.
+Credentials are resolved once, by `FinalizeGlobalConfig` over the *folded* configuration,
+never per layer. `providers[].token` and the top-level `github_access_token`,
+`gitlab_access_token` and `azure_devops_access_token` go through gitforge's `ResolveToken`:
+an inline string, a `${ENV_VAR}` reference (an unset variable is warned about and becomes
+empty), or a file path, checked after the expansion. `gpg_key_passphrase` and
+`ssh_key_passphrase` go through `handleTokenFile`: an inline string or a file path, never
+expanded, because a passphrase is free text that may contain `${...}`; `GPG_PASSPHRASE`
+fills an empty GPG passphrase. `handleTokenFile` reads a path only when `os.Stat` accepts
+it, and no log line there may carry a value it did not read as a path, since that value may
+be the passphrase: a Stat failure other than not-exist is warned about by the setting and
+the `*fs.PathError`'s cause alone (`pathErrorCause`). SSH push auth uses `ssh_key_path`,
+`ssh_key_passphrase` and `ssh_auth_sock`; common agent sockets are auto-detected when not
+set.
 
 Pushes run on go-git's **pure-Go** SSH client: `collectSSHAuthMethods` can only use a key file
 or a Unix socket it can dial, and `core.sshCommand` or an `ssh` wrapper on `PATH` is never run

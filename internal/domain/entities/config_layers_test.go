@@ -1,6 +1,7 @@
 package entities_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -352,6 +353,49 @@ func TestResolveGlobalConfig(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "ghp_inline", result.GitHubAccessToken)
 		assert.Equal(t, "repo", result.Projects[0].Name)
+	})
+}
+
+// TestResolveGlobalConfigEnvironment is deliberately not parallel: it calls t.Setenv, which
+// the runtime forbids in a parallel test, and it records the standard logger, which every
+// test in the package shares.
+func TestResolveGlobalConfigEnvironment(t *testing.T) {
+	t.Run("should expand the operator's ${ENV_VAR} reference in a top-level token", func(t *testing.T) {
+		// given -- the shape that sent a literal `${GH_TOKEN}` to GitHub, which refused it
+		t.Setenv("AUTOBUMP_TEST_GITHUB_TOKEN", "fixture-github-token-placeholder")
+		layers := []entities.ConfigLayer{
+			defaultsLayer("# nothing\n"),
+			operatorLayer("github_access_token: '${AUTOBUMP_TEST_GITHUB_TOKEN}'\n"),
+		}
+
+		// when
+		result, err := entities.ResolveGlobalConfig(layers)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "fixture-github-token-placeholder", result.GitHubAccessToken)
+	})
+
+	t.Run("should expand only the reference left after folding, never one a later layer replaced", func(t *testing.T) {
+		// given -- resolved per layer, the replaced reference would be expanded, and warned
+		// about, on the way past
+		t.Setenv("AUTOBUMP_TEST_GITHUB_TOKEN", "fixture-github-token-placeholder")
+		t.Setenv("AUTOBUMP_TEST_REPLACED_TOKEN", "")
+		require.NoError(t, os.Unsetenv("AUTOBUMP_TEST_REPLACED_TOKEN"))
+		logs := recordLogs(t)
+		layers := []entities.ConfigLayer{
+			operatorLayer("github_access_token: '${AUTOBUMP_TEST_REPLACED_TOKEN}'\n"),
+			operatorLayer("github_access_token: '${AUTOBUMP_TEST_GITHUB_TOKEN}'\n"),
+		}
+
+		// when
+		result, err := entities.ResolveGlobalConfig(layers)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "fixture-github-token-placeholder", result.GitHubAccessToken)
+		assert.False(t, logs.mentions("AUTOBUMP_TEST_REPLACED_TOKEN"),
+			"a reference replaced by a later layer must never be resolved")
 	})
 }
 

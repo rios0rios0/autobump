@@ -12,6 +12,8 @@ import (
 
 	logger "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+
+	configEntities "github.com/rios0rios0/gitforge/v4/pkg/config/domain/entities"
 )
 
 // The four configuration layers, in the order they are applied. Each one overrides only
@@ -637,9 +639,29 @@ func documentMapping(document *yaml.Node) *yaml.Node {
 }
 
 // FinalizeGlobalConfig applies the resolution steps that belong to the finished
-// configuration rather than to any one layer: a project name derived from its path, a
-// token read out of the file it names, "~" expanded, provider tokens resolved, and the
-// environment consulted where a value is still empty.
+// configuration rather than to any one layer: a project name derived from its path,
+// credentials resolved, "~" expanded, and the environment consulted where a value is
+// still empty.
+//
+// Every access token -- the three top-level ones and each `providers[].token` -- goes
+// through gitforge's ResolveToken, so one rule covers them all: `${ENV_VAR}` references
+// are expanded (an unset variable is logged and becomes empty), and a result that names
+// an existing file is replaced by the file's trimmed content.
+//
+// Expanding is safe here only because a credential can come from nowhere but the
+// operator's own configuration: RestrictedConfig has no field for one, so a reference is
+// always the operator's file asking for the operator's environment. Never expand a key a
+// restricted layer can set, or a repository's .autobump.yaml could copy any of the
+// operator's variables into a request or a log line.
+//
+// The passphrases are deliberately not expanded, and go through handleTokenFile, which
+// only reads a file and never logs a value it could not read as one, since that value
+// may be the passphrase itself. A passphrase is free text a person chose, and `$` or
+// `${...}` is legitimate in one: expanding it would silently change a passphrase that
+// works today, and the warning for an unset variable would write part of it to the log.
+// A token cannot contain `${`, since every forge issues tokens from a fixed alphabet, so
+// the expansion changes no token that worked before. GPG_PASSPHRASE, below, is how the
+// environment supplies the GPG passphrase.
 func FinalizeGlobalConfig(config *GlobalConfig) {
 	for i := range config.Projects {
 		if config.Projects[i].Name == "" {
@@ -648,11 +670,12 @@ func FinalizeGlobalConfig(config *GlobalConfig) {
 		}
 	}
 
-	handleTokenFile("GPG passphrase", &config.GpgKeyPassphrase)
-	handleTokenFile("SSH key passphrase", &config.SSHKeyPassphrase)
-	handleTokenFile("GitLab access token", &config.GitLabAccessToken)
-	handleTokenFile("Azure DevOps access token", &config.AzureDevOpsAccessToken)
-	handleTokenFile("GitHub access token", &config.GitHubAccessToken)
+	handleTokenFile("gpg_key_passphrase", &config.GpgKeyPassphrase)
+	handleTokenFile("ssh_key_passphrase", &config.SSHKeyPassphrase)
+
+	config.GitLabAccessToken = configEntities.ResolveToken(config.GitLabAccessToken)
+	config.AzureDevOpsAccessToken = configEntities.ResolveToken(config.AzureDevOpsAccessToken)
+	config.GitHubAccessToken = configEntities.ResolveToken(config.GitHubAccessToken)
 
 	expandHome(&config.SSHKeyPath)
 	expandHome(&config.SSHAuthSock)
