@@ -32,15 +32,17 @@ var errUnsupportedAgentAlgorithm = errors.New("the SSH agent protocol cannot req
 // sshAgentDialer opens a new connection to an SSH agent.
 type sshAgentDialer func() (net.Conn, error)
 
-// sshAgentConn is a connection to an SSH agent that remembers whether reading from it
-// failed. x/crypto reports a dropped connection and a request the agent refused alike, as
-// a plain error, so this is what tells a listing worth retrying -- the agent, or the relay
-// in front of it, never answered -- from one the agent itself turned down. The flag is
-// atomic because x/crypto reads a closable connection from a goroutine of its own.
+// sshAgentConn is a connection to an SSH agent that remembers whether writing to it or
+// reading from it failed. x/crypto reports a dropped connection and a request the agent
+// refused alike, as a plain error, so this is what tells a listing worth retrying -- the
+// request never reached the agent, or its answer never came back -- from one the agent
+// itself turned down. A relay that drops the connection may do so before the request is
+// written, failing the write with a broken pipe, or after, failing the read with EOF. The
+// flag is atomic because x/crypto reads a closable connection from a goroutine of its own.
 type sshAgentConn struct {
 	net.Conn
 
-	readFailed atomic.Bool
+	failed atomic.Bool
 }
 
 // sshAgentSigner is a key the SSH agent holds, signing over a connection of its own.
@@ -105,7 +107,7 @@ func listSSHAgentKeys(dial sshAgentDialer) ([]*agent.Key, bool, error) {
 
 	keys, err := agent.NewClient(conn).List()
 	if err != nil {
-		return nil, conn.readFailed.Load(), err
+		return nil, conn.failed.Load(), err
 	}
 	return keys, false, nil
 }
@@ -114,9 +116,18 @@ func listSSHAgentKeys(dial sshAgentDialer) ([]*agent.Key, bool, error) {
 func (c *sshAgentConn) Read(buffer []byte) (int, error) {
 	read, err := c.Conn.Read(buffer)
 	if err != nil {
-		c.readFailed.Store(true)
+		c.failed.Store(true)
 	}
 	return read, err
+}
+
+// Write writes to the agent, remembering whether a write failed.
+func (c *sshAgentConn) Write(buffer []byte) (int, error) {
+	written, err := c.Conn.Write(buffer)
+	if err != nil {
+		c.failed.Store(true)
+	}
+	return written, err
 }
 
 // PublicKey returns the public half of the agent key.

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"net"
+	"sync/atomic"
 	"testing"
 
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
@@ -155,6 +156,49 @@ func TestSSHAgentListingRetries(t *testing.T) {
 		// then
 		require.ErrorContains(t, err, "cannot list the SSH agent's keys")
 		assert.Equal(t, 4, scripted.connectionCount(), "the probe and three listings")
+	})
+
+	t.Run("should list again when the relay dropped the connection before the request was written", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- every connection is closed on the agent's side before the client writes
+		var dials atomic.Int32
+		dial := func() (net.Conn, error) {
+			dials.Add(1)
+			client, agentSide := net.Pipe()
+			_ = agentSide.Close()
+			return client, nil
+		}
+
+		// when
+		_, err := commands.ListSSHAgentSigners(dial)
+
+		// then -- a request that never reached the agent cannot have asked anyone anything
+		require.Error(t, err)
+		assert.Equal(t, int32(3), dials.Load(), "three listings")
+	})
+
+	t.Run("should list again when the relay dropped the connection before the answer", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the agent's side reads the request and closes without answering
+		var dials atomic.Int32
+		dial := func() (net.Conn, error) {
+			dials.Add(1)
+			client, agentSide := net.Pipe()
+			go func() {
+				_, _ = agentSide.Read(make([]byte, 64))
+				_ = agentSide.Close()
+			}()
+			return client, nil
+		}
+
+		// when
+		_, err := commands.ListSSHAgentSigners(dial)
+
+		// then
+		require.Error(t, err)
+		assert.Equal(t, int32(3), dials.Load(), "three listings")
 	})
 }
 

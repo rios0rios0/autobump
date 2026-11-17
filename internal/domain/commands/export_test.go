@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"net"
 	"time"
 
 	"github.com/go-git/go-git/v5/plumbing/transport"
@@ -264,6 +265,12 @@ var CollectAuthMethods = collectAuthMethods //nolint:gochecknoglobals // test ex
 
 // SSHAgentAuthFromSocket exports sshAgentAuthFromSocket for testing.
 var SSHAgentAuthFromSocket = sshAgentAuthFromSocket //nolint:gochecknoglobals // test export
+
+// ListSSHAgentSigners exports listSSHAgentSigners for testing, taking the dialer as a plain
+// function so a test can hand it connections that fail on cue.
+func ListSSHAgentSigners(dial func() (net.Conn, error)) ([]ssh.Signer, error) {
+	return listSSHAgentSigners(dial)
+}
 
 // CommitInitialChangelog exports commitInitialChangelog for testing.
 var CommitInitialChangelog = commitInitialChangelog //nolint:gochecknoglobals // test export
