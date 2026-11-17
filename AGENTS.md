@@ -165,7 +165,9 @@ reaches its renderers has already failed to dial, so a detected socket there is 
 (`UnusableAgentSockets`); `TestDetectSSHEnvironment` covers that seam with a real socket.
 
 The SSH client configuration lives in **gitforge** (`pkg/git/infrastructure`, `ssh_*.go`), shared
-with autoupdate; `main.go` calls `gitInfra.InstallSSHTransport()` once. That installs gitforge's
+with autoupdate; `main.go` calls `gitInfra.InstallSSHTransportWith` once, with a `MissingKeyRemedy`
+of `configure it as ssh_key_path`, so the warning for an `IdentitiesOnly` alias with no key to
+offer names AutoBump's key-file setting, which gitforge cannot know. That installs gitforge's
 transport under every go-git SSH connection (push, clone, stale-branch listing and gitforge's own
 fallback), which resolves host aliases through ssh_config (`HostName`, `Port`, `IdentityFile`,
 `IdentitiesOnly`; under WSL, the Windows profile's file only when git runs `ssh.exe`), offers
