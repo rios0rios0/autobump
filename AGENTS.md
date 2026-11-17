@@ -171,8 +171,11 @@ method whose callback was given to it: go-git fills an empty one from its own kn
 Agent signers (`ssh_agent.go`) dial a connection per listing and per signature: x/crypto
 signs after the `PublicKeysCallback` returns, so a signer bound to the listing's connection
 cannot be closed with it. A listing whose connection drops before the agent answers is
-retried (`sshAgentConn` tells a drop from a refusal); a signature is never retried. The
-loopback server in `ssh_fixtures_test.go` exercises the whole chain without a network.
+retried; a signature is never retried. `sshAgentConn` tells a drop from a refusal by
+recording a failed write as well as a failed read: a relay that closes before the
+request is written fails the write with a broken pipe, which can reach the caller before
+x/crypto's reader goroutine has seen the connection end. The loopback server in
+`ssh_fixtures_test.go` exercises the whole chain without a network.
 
 A Windows profile's `.ssh/config` joins the list only under WSL **when git runs Windows'
 `ssh.exe`** (`ssh_wsl.go`: `gitSSHCommandInEffect` applies git's own precedence,
