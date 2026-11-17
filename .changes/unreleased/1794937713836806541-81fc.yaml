@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed SSH agent authentication, which closed the agent connection before the handshake could sign with it and so failed every time, leaving each SSH push to gitforge''s fallback; a listing the agent drops is also retried, which a WSL `npiperelay` bridge does right after a connection that closed without a request'
+time: '2026-11-17T17:48:33.836764378Z'

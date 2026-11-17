@@ -155,12 +155,35 @@ ssh_auth_sock: '~/.1password/agent.sock'
 
 Host keys are verified against the `known_hosts` files AutoBump discovers — `~/.ssh/known_hosts`, the machine-wide file, and under WSL the Windows profiles' files; set `SSH_KNOWN_HOSTS` to point somewhere else explicitly. See [SSH Authentication on WSL](#ssh-authentication-on-wsl) for the full discovery order.
 
+#### Host aliases (ssh_config)
+
+AutoBump never runs the `ssh` binary, so it reads the SSH client configuration itself, and a host alias — the usual way to keep one key per account on the same forge — works for the push as it does for `git`:
+
+```
+Host github.com-work
+  HostName ssh.github.com
+  Port 443
+  IdentityFile ~/.ssh/work.pub
+  IdentitiesOnly yes
+```
+
+With `origin` set to `git@github.com-work:org/repo.git`, AutoBump dials `ssh.github.com:443` and offers only the SSH agent key `~/.ssh/work.pub` names.
+
+- **Files.** `~/.ssh/config`, `/etc/ssh/ssh_config` and, under WSL, every Windows profile's `.ssh/config` (`/mnt/c/Users/*/.ssh/config` by default), read as one configuration in that order: for each keyword the first file that sets it wins, and `IdentityFile` accumulates, as in OpenSSH.
+- **Keywords.** `HostName`, `Port`, `IdentityFile` and `IdentitiesOnly` are applied; a port written in the remote URL wins over `Port`. Other keywords (`ProxyCommand`, `ProxyJump`, `IdentityAgent`, `User`, …) are not, and a file that uses `Match exec` cannot be parsed and is skipped with a warning.
+- **`IdentityFile` picks the agent key.** It may name the public key itself (the `.pub` form 1Password documents) or a private key, whose `.pub` sibling, or the public half an OpenSSH key file carries, identifies the key in the agent. The named keys are offered first, in order, then the agent's others; with `IdentitiesOnly yes`, only the named ones, and AutoBump warns when the agent holds none of them. A key file configured as `ssh_key_path` is offered as configured.
+- **Paths.** `~`, `%d`, `%h`, `%r` and `%%` expand as in OpenSSH. In a Windows profile's file they are read the way `ssh.exe` reads them: `~` is that profile, and `C:\Users\...` is the drive WSL mounts under the automount root.
+
+A push to a host that does not resolve fails with an error naming the host and these files, since an alias defined anywhere else is invisible to AutoBump.
+
 ### SSH Authentication on WSL
 
 AutoBump pushes with [go-git](https://github.com/go-git/go-git), a pure-Go SSH client. It **never executes the `ssh` binary**, so the usual WSL interop tricks do not apply to the push:
 
 - `git config core.sshCommand ssh.exe` is not read — that setting only redirects git's own `ssh` invocations.
 - An `ssh` wrapper earlier on `PATH` (a shell script calling `ssh.exe`) is never invoked.
+
+Host aliases you defined for `ssh.exe` still apply: AutoBump reads the Windows profile's `.ssh/config` itself (see [Host aliases](#host-aliases-ssh_config)). The keys are the part it cannot reach on its own.
 
 Commit *signing* is the exception and works normally, because it shells out to whatever `gpg.ssh.program` names (for example 1Password's `op-ssh-sign-wsl`). That asymmetry is why signing succeeds while the push cannot find a key: they travel different code paths.
 
@@ -208,6 +231,8 @@ Before any credential is tried, go-git verifies the server's host key against a 
 4. every Windows profile's `known_hosts` reachable through the WSL automount root — `/mnt/c/Users/*/.ssh/known_hosts` by default, honouring `[automount] root` and `enabled` in `/etc/wsl.conf`.
 
 So when your SSH life happens on the Windows side (`ssh.exe`, Git for Windows, a bridged Windows agent), the host keys it already trusts are picked up automatically — no need to duplicate the file into WSL, and Windows-written CRLF files parse fine. The same discovery backs gitforge's default SSH agent fallback, so the push and the stale-branch listing verify against the same files instead of failing with "unable to find any valid known_hosts file".
+
+AutoBump also asks the server for a host key of a type `known_hosts` records for it. OpenSSH usually records only the type it negotiated — Ed25519 for GitHub — and Go's SSH library would otherwise ask for ECDSA first, receive a key the file does not hold, and fail with `knownhosts: key mismatch` against a host it trusts. A host behind an alias is looked up under its `HostName` and port, as OpenSSH records it: `[ssh.github.com]:443`.
 
 ### Stale Branch Cleanup
 

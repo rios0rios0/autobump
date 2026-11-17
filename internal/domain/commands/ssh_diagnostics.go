@@ -3,6 +3,7 @@ package commands
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
@@ -12,9 +13,15 @@ import (
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 )
 
-// ErrNoSSHCredential reports that an SSH push was attempted without any credential
-// AutoBump is able to use.
-var ErrNoSSHCredential = errors.New("no usable SSH credential for pushing")
+var (
+	// ErrNoSSHCredential reports that an SSH push was attempted without any credential
+	// AutoBump is able to use.
+	ErrNoSSHCredential = errors.New("no usable SSH credential for pushing")
+
+	// ErrSSHHostUnresolved reports an SSH push whose host has no address -- typically a host
+	// alias defined only in a file AutoBump does not read.
+	ErrSSHHostUnresolved = errors.New("cannot resolve the SSH host")
+)
 
 const (
 	// wslKernelMarker is the substring Microsoft's WSL kernels carry in their release string.
@@ -45,12 +52,20 @@ type sshEnvironment struct {
 	SSHCommand string
 }
 
-// explainSSHPushFailure wraps a failed push with the reason AutoBump had no SSH credential
-// to offer. A push over a non-SSH remote, and one that failed with a credential in hand, are
-// returned unchanged: the explanation is only ever added to the failure it actually explains.
+// explainSSHPushFailure wraps a failed SSH push with what AutoBump knows about its cause: a
+// host that has no address, or no SSH credential to offer. A push over a non-SSH remote, and
+// one that failed for any other reason, are returned unchanged: the explanation is only ever
+// added to the failure it actually explains.
 func explainSSHPushFailure(ctx *RepoContext, pushErr error) error {
 	if !isSSHRemote(originRemoteURL(ctx.Repo)) {
 		return pushErr
+	}
+
+	if host, unresolved := unresolvedSSHHost(pushErr); unresolved {
+		return fmt.Errorf(
+			"%w: %w\n\n%s",
+			ErrSSHHostUnresolved, pushErr, describeUnresolvedSSHHost(host, runningUnderWSL()),
+		)
 	}
 
 	// Recomputed rather than threaded through the push: this runs only on the failure path,
@@ -64,6 +79,31 @@ func explainSSHPushFailure(ctx *RepoContext, pushErr error) error {
 	return fmt.Errorf(
 		"%w: %w\n\n%s",
 		ErrNoSSHCredential, pushErr, describeMissingSSHCredential(ctx.GlobalConfig, env),
+	)
+}
+
+// unresolvedSSHHost returns the host name a failed push found no address for, when that is
+// why it failed.
+func unresolvedSSHHost(pushErr error) (string, bool) {
+	var dnsErr *net.DNSError
+	if errors.As(pushErr, &dnsErr) && dnsErr.IsNotFound {
+		return dnsErr.Name, true
+	}
+	return "", false
+}
+
+// describeUnresolvedSSHHost renders the operator-facing explanation for an SSH host that has
+// no address. The SSH transport resolves host aliases itself, from the ssh_config files it
+// reads, so a host that still reaches DNS unresolved is an alias defined somewhere else, or a
+// name that does not exist at all. Without this, an alias that works for every git command
+// reads as a network failure.
+func describeUnresolvedSSHHost(host string, isWSL bool) string {
+	return fmt.Sprintf(
+		"AutoBump could not resolve the SSH host %q. AutoBump never executes the \"ssh\" binary, so a "+
+			"host alias applies to the push only when it is defined in an ssh_config file AutoBump reads: "+
+			"%s. Define the alias there with at least a HostName; AutoBump applies its HostName, Port, "+
+			"IdentityFile and IdentitiesOnly.\n",
+		host, describeSSHConfigSearch(isWSL),
 	)
 }
 

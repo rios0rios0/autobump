@@ -223,14 +223,14 @@ func TestDiscoverKnownHostsFiles(t *testing.T) {
 	})
 }
 
-func TestBuildHostKeyCallback(t *testing.T) {
+func TestBuildKnownHostsDB(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return nil when no file was discovered", func(t *testing.T) {
 		t.Parallel()
 
 		// given / when / then
-		assert.Nil(t, commands.BuildHostKeyCallback(nil))
+		assert.Nil(t, commands.BuildKnownHostsDB(nil))
 	})
 
 	t.Run("should verify a host key listed in a CRLF file", func(t *testing.T) {
@@ -243,13 +243,32 @@ func TestBuildHostKeyCallback(t *testing.T) {
 		require.NoError(t, os.WriteFile(path, []byte(line+"\r\n"), 0o600))
 
 		// when
-		cb := commands.BuildHostKeyCallback([]string{path})
+		hostKeys := commands.BuildKnownHostsDB([]string{path})
 
 		// then -- go-git always hands the callback a host:port address (getHostWithPort)
-		require.NotNil(t, cb)
+		require.NotNil(t, hostKeys)
+		cb := hostKeys.HostKeyCallback()
 		addr := &net.TCPAddr{IP: net.ParseIP("140.82.112.3"), Port: 22}
 		require.NoError(t, cb("github.com:22", addr, trusted), "the trusted key must verify")
 		require.Error(t, cb("github.com:22", addr, wrongKey), "an untrusted key must be rejected")
+	})
+
+	t.Run("should report the key types a CRLF file records for a host on a custom port", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- ssh.exe records a host on port 443 as [host]:443, CRLF-terminated
+		line := xknownhosts.Line([]string{"ssh.github.com:443"}, ed25519GenerateSSHKey(t))
+		path := filepath.Join(t.TempDir(), "known_hosts")
+		require.NoError(t, os.WriteFile(path, []byte(line+"\r\n"), 0o600))
+
+		// when
+		hostKeys := commands.BuildKnownHostsDB([]string{path})
+
+		// then -- the transport negotiates exactly these types, so a server offering an
+		// ECDSA key first still presents the Ed25519 one recorded here
+		require.NotNil(t, hostKeys)
+		assert.Equal(t, []string{ssh.KeyAlgoED25519}, hostKeys.HostKeyAlgorithms("ssh.github.com:443"))
+		assert.Empty(t, hostKeys.HostKeyAlgorithms("ssh.github.com:22"), "the port is part of the host's name")
 	})
 
 	t.Run("should return nil when the file cannot be parsed", func(t *testing.T) {
@@ -259,7 +278,7 @@ func TestBuildHostKeyCallback(t *testing.T) {
 		path := t.TempDir()
 
 		// when / then
-		assert.Nil(t, commands.BuildHostKeyCallback([]string{path}))
+		assert.Nil(t, commands.BuildKnownHostsDB([]string{path}))
 	})
 }
 
