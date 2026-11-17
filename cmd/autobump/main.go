@@ -193,8 +193,9 @@ func main() {
 	// dials the HostName and Port a host alias names in ssh_config (under WSL, the Windows
 	// profile's too when git runs ssh.exe), offers the keys the alias's IdentityFile names,
 	// and verifies hosts against the known_hosts discovery, Windows profiles included,
-	// negotiating only the host key types it records.
-	gitInfra.InstallSSHTransport()
+	// negotiating only the host key types it records. When IdentitiesOnly leaves an alias no
+	// key to offer, its warning also suggests ssh_key_path, which AutoBump offers as a key file.
+	gitInfra.InstallSSHTransportWith(gitInfra.SSHTransportOptions{MissingKeyRemedy: "configure it as ssh_key_path"})
 
 	// Inject the root controller and create root command
 	rootController := injectRootController()
