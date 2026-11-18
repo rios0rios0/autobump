@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed an SSH agent that refused to list its keys and then closed the connection being asked up to twice more, as if a relay had dropped the connection before the agent answered'
-time: '2026-11-17T20:24:52.872882632Z'

@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added an explanation to an SSH push whose host does not resolve, naming the host and the `ssh_config` files AutoBump reads host aliases from'
-time: '2026-11-17T17:48:33.833051275Z'

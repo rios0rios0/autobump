@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed SSH pushes failing with `knownhosts: key mismatch` when `known_hosts` records only some of a server''s host key types, such as GitHub''s Ed25519 key, by negotiating only the types `known_hosts` records'
-time: '2026-11-17T17:48:33.834957781Z'

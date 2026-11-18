@@ -22,6 +22,34 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-11-18
+
+### Added
+
+- added an explanation to an SSH push whose host does not resolve, naming the host and the `ssh_config` files AutoBump reads host aliases from
+- added support for SSH host aliases: AutoBump now dials the `HostName` and `Port` an alias names in `ssh_config`, read under WSL from the Windows profile's `.ssh/config` too when git runs `ssh.exe`, and offers the SSH agent key its `IdentityFile` names first (only that key with `IdentitiesOnly`), so a remote such as `git@github.com-work:org/repo.git` pushes with that account's key
+- added support for unencrypted `IdentityFile` keys the SSH agent does not hold, offered after the agent's keys as OpenSSH does, so a host alias with `IdentitiesOnly` pushes with a key kept on disk
+
+### Changed
+
+- changed the Go module `github.com/rios0rios0/gitforge/v4` from `v4.4.0` to `v4.6.0`
+- changed the Go module `gitlab.com/gitlab-org/api/client-go/v3` from `v3.51.0` to `v3.52.0`
+- changed the Go modules `github.com/rios0rios0/cliforge` from `v0.5.2` to `v0.5.3`, `github.com/rios0rios0/gitforge/v4` from `v4.3.2` to `v4.4.0`, `github.com/rios0rios0/langforge` from `v1.1.11` to `v1.1.12`, `github.com/rios0rios0/testkit` from `v0.3.8` to `v0.3.9` and `github.com/sergi/go-diff` from `v1.4.0` to `v1.4.5`
+- changed the SAST tools the agent and contributor instructions list for `make sast` to CodeQL, Semgrep, Hadolint, ShellCheck and Gitleaks, dropping the deprecated Trivy
+- changed the SSH client configuration (host aliases, key selection, host key negotiation and agent signing) to come from `gitforge`'s SSH transport, which autoupdate now shares, leaving AutoBump's behaviour unchanged
+
+### Fixed
+
+- fixed an SSH agent that refused to list its keys and then closed the connection being asked up to twice more, as if a relay had dropped the connection before the agent answered
+- fixed SSH agent authentication, which closed the agent connection before the handshake could sign with it and so failed every time, leaving each SSH push to gitforge's fallback; a listing the agent drops is also retried, which a WSL `npiperelay` bridge does right after a connection that closed without a request
+- fixed SSH pushes failing with `knownhosts: key mismatch` when `known_hosts` records only some of a server's host key types, such as GitHub's Ed25519 key, by negotiating only the types `known_hosts` records
+- fixed SSH pushes giving up on the SSH agent when a relay such as a WSL `npiperelay` bridge dropped the connection before the key listing request was written, failing with `broken pipe`; that listing is now retried like one dropped before the agent answers
+- fixed the top-level `github_access_token`, `gitlab_access_token` and `azure_devops_access_token` sending a `${ENV_VAR}` reference to the forge literally, although the example configuration documented it; they now resolve it as `providers[].token` does, while `gpg_key_passphrase` and `ssh_key_passphrase` still take only an inline value or a file path, since a passphrase may contain `${...}`
+
+### Security
+
+- stopped writing a `gpg_key_passphrase` or `ssh_key_passphrase` that could not be checked as a file path, such as one longer than 255 bytes, to the log in an error message; it is now used as written and the warning names only the setting and the cause
+
 ## [3.3.4] - 2026-11-16
 
 ### Changed

@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the SSH client configuration (host aliases, key selection, host key negotiation and agent signing) to come from `gitforge`''s SSH transport, which autoupdate now shares, leaving AutoBump''s behaviour unchanged'
-time: '2026-11-17T18:51:09.567736677Z'

@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the SAST tools the agent and contributor instructions list for `make sast` to CodeQL, Semgrep, Hadolint, ShellCheck and Gitleaks, dropping the deprecated Trivy'
-time: '2026-11-17T18:04:14.997079515Z'
