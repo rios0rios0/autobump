@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed SSH pushes giving up on the SSH agent when a relay such as a WSL `npiperelay` bridge dropped the connection before the key listing request was written, failing with `broken pipe`; that listing is now retried like one dropped before the agent answers'
-time: '2026-11-17T19:30:39.917675604Z'

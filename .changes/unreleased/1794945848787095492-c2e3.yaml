@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the top-level `github_access_token`, `gitlab_access_token` and `azure_devops_access_token` sending a `${ENV_VAR}` reference to the forge literally, although the example configuration documented it; they now resolve it as `providers[].token` does, while `gpg_key_passphrase` and `ssh_key_passphrase` still take only an inline value or a file path, since a passphrase may contain `${...}`'
-time: '2026-11-17T20:04:08.787023553Z'
