@@ -67,7 +67,7 @@ Dependencies always point inward: infrastructure → domain, never the reverse.
 
 ### Key External Libraries
 
-- **`gitforge`** (`github.com/rios0rios0/gitforge/v4`) — Git provider adapters, changelog processing, PR creation
+- **`gitforge`** (`github.com/rios0rios0/gitforge/v4`) — Git provider adapters, changelog processing, PR creation, and the credential chain (`pkg/credentials`) that supplies the API token when none is configured
 - **`langforge`** (`github.com/rios0rios0/langforge`) — Language detection via marker files
 - **`cliforge`** (`github.com/rios0rios0/cliforge`) — CLI framework: self-update, version commands, startup update checks
 - **`testkit`** (`github.com/rios0rios0/testkit`) — Test builder base classes
@@ -140,6 +140,11 @@ functions named; read it before changing one.
   `filterStaleBumpBranches` selects only the prefix followed by a version `createBumpBranch`
   produces (`bumpBranchVersionRegex`: `X.Y.Z`, `X.Y.Z.N` or `X.Y.Z-N`), never the default
   branch; a prefix match alone is not ownership.
+- A token the credential fallback finds goes to the forge **API** alone. `collectTokens` and
+  `collectAuthMethods` (clone, push, branch listing and deletion) must never include it:
+  gitforge matches a forge by a substring of the remote URL, and an HTTP(S) push sends Basic
+  auth to the remote's own host, so a lookalike host would receive the operator's `gh` token.
+  gitforge's providers call fixed API hosts. `TestForgeAPICallsUseCredentialFallback` pins it.
 
 Credentials are resolved once, by `FinalizeGlobalConfig` over the *folded* configuration,
 never per layer. `providers[].token` and the top-level `github_access_token`,
@@ -154,6 +159,23 @@ be the passphrase: a Stat failure other than not-exist is warned about by the se
 the `*fs.PathError`'s cause alone (`pathErrorCause`). SSH push auth uses `ssh_key_path`,
 `ssh_key_passphrase` and `ssh_auth_sock`; common agent sockets are auto-detected when not
 set.
+
+The forge API calls (`openPullRequest`, `checkPullRequestExists`, `resolveCleanupProvider`)
+take their token from `resolveAPIToken` (`api_token.go`): the configured token first
+(`resolveToken`), and only when the configuration holds none for the forge,
+`RepoContext.CredentialFallback`. That is gitforge's `NewDefaultCredentialResolver()` chain,
+installed in `main.go` through `SetCredentialFallback` and copied into every repository's
+context by `ProcessRepo`: the forge's token environment variables, then
+`gh auth token --hostname github.com` or `az account get-access-token`, with the Azure DevOps
+request naming origin's organization so az picks its tenant. `askCredentialFallback` keeps the
+answer per `CredentialRequest` on the context, failures included, so each repository asks at
+most once per forge; it logs the credential's `Source` at INFO and never its `Token`.
+`apiTokenSettings` names each forge's key for the warnings and limits the fallback to the forges
+AutoBump has an API client for. Discovery never reaches the fallback: every discovered
+repository carries its provider's token as `project_access_token`. The package default is nil,
+so tests never run gh or az: set `CredentialFallback` on the context to gitforge's
+`doubles.CredentialResolverStub`, or call `SetCredentialFallback` (and reset it) in a test that
+goes through `ProcessRepo`.
 
 Pushes run on go-git's **pure-Go** SSH client: `collectSSHAuthMethods` can only use a key file
 or a Unix socket it can dial, and `core.sshCommand` or an `ssh` wrapper on `PATH` is never run

@@ -23,6 +23,7 @@ import (
 	"github.com/rios0rios0/autobump/internal/infrastructure/repositories/python"
 	"github.com/rios0rios0/autobump/internal/support"
 	downloadHelpers "github.com/rios0rios0/gitforge/v4/pkg/config/infrastructure/helpers"
+	credentialEntities "github.com/rios0rios0/gitforge/v4/pkg/credentials/domain/entities"
 	gitInfra "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure"
 	gitHelpers "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure/helpers"
 	globalEntities "github.com/rios0rios0/gitforge/v4/pkg/global/domain/entities"
@@ -129,6 +130,15 @@ type RepoContext struct {
 	// over uncommitted edits after it has already moved HEAD, leaving the new file staged
 	// on the branch the run started on.
 	Cloned bool
+
+	// CredentialFallback supplies the token for the forge's API when the configuration holds
+	// none for the forge; see resolveAPIToken. ProcessRepo hands every repository the one
+	// SetCredentialFallback installed, and nil means there is no fallback.
+	CredentialFallback credentialEntities.CredentialResolver
+
+	// fallbackAnswers keeps what CredentialFallback answered, per request, so one
+	// repository's release asks it at most once; see askCredentialFallback.
+	fallbackAnswers map[credentialEntities.CredentialRequest]fallbackAnswer
 }
 
 // langIDJava is the user-facing config key alias shared by all Java langforge variants
@@ -293,8 +303,8 @@ func createPullRequest(
 }
 
 // openPullRequest opens a pull request from branchName to the repository's default branch.
-// A missing token or an unsupported forge is only logged, because a run without a token
-// never meant to open one.
+// A missing token or an unsupported forge is only logged: the branch is already pushed, and
+// the warning says what would have let AutoBump open the pull request itself.
 func openPullRequest(
 	ctx *RepoContext,
 	repo *git.Repository,
@@ -302,9 +312,9 @@ func openPullRequest(
 	serviceType entities.ServiceType,
 	title, description string,
 ) error {
-	token := resolveToken(serviceType, ctx.GlobalConfig, ctx.ProjectConfig)
-	if token == "" {
-		logger.Warnf("No token found for service type '%v', cannot create pull request", serviceType)
+	token, err := resolveAPIToken(ctx, serviceType)
+	if err != nil {
+		logger.Warnf("Cannot create the pull request: %v", err)
 		return nil
 	}
 
@@ -1093,10 +1103,13 @@ func chlogChangelogPath(ctx *RepoContext) (string, error) {
 // - pushes the branch to the remote repository
 // - creates a new merge request on GitLab.
 func ProcessRepo(globalConfig *entities.GlobalConfig, projectConfig *entities.ProjectConfig) error {
-	// Initialize RepoContext
+	// Initialize RepoContext. Each repository gets a context of its own, and so asks the
+	// credential fallback afresh: a run over many repositories can outlast a token az issued
+	// for the first one.
 	ctx := &RepoContext{
-		GlobalConfig:  globalConfig,
-		ProjectConfig: projectConfig,
+		GlobalConfig:       globalConfig,
+		ProjectConfig:      projectConfig,
+		CredentialFallback: credentialFallback,
 	}
 
 	// Get global Git config
@@ -1257,9 +1270,9 @@ func checkPullRequestExists(ctx *RepoContext, branchName string) (bool, error) {
 		return false, err
 	}
 
-	token := resolveToken(serviceType, ctx.GlobalConfig, ctx.ProjectConfig)
-	if token == "" {
-		logger.Warnf("No token found for service type '%v', cannot check PR", serviceType)
+	token, err := resolveAPIToken(ctx, serviceType)
+	if err != nil {
+		logger.Warnf("Cannot check for an open pull request: %v", err)
 		return false, nil
 	}
 
@@ -1424,7 +1437,15 @@ func resolveToken(
 	return ""
 }
 
-// collectTokens returns all possible tokens for authentication, ordered by priority.
+// collectTokens returns the configured tokens git operations (clone, push, listing and
+// deleting remote branches) authenticate with, ordered by priority.
+//
+// It deliberately leaves out the credential fallback resolveAPIToken uses (the forge's token
+// environment variables, the gh and az CLIs): gitforge picks a forge by a substring of the
+// remote URL, and a push over HTTP(S) sends the token as Basic auth to the remote's own host,
+// so a lookalike host such as github.com.example.net would receive the operator's gh token. A
+// configured token is one the operator chose to hand over; the fallback's token only ever
+// goes to the forge's fixed API host.
 func collectTokens(
 	serviceType entities.ServiceType,
 	globalConfig *entities.GlobalConfig,

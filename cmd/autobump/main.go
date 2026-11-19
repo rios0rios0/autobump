@@ -11,6 +11,7 @@ import (
 	"github.com/rios0rios0/autobump/internal"
 	"github.com/rios0rios0/autobump/internal/domain/commands"
 	"github.com/rios0rios0/autobump/internal/infrastructure/controllers"
+	credentialsInfra "github.com/rios0rios0/gitforge/v4/pkg/credentials/infrastructure"
 	gitInfra "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure"
 )
 
@@ -187,6 +188,12 @@ func main() {
 	gitOps := gitInfra.NewGitOperations(providerRegistry)
 	commands.SetGitOperations(gitOps)
 	commands.SetProviderRegistry(providerRegistry)
+
+	// When the configuration holds no token for a forge, its API calls (opening, checking
+	// and closing pull requests) fall back to the forge's token environment variables, then
+	// to its CLI: `gh auth token` or `az account get-access-token`. Pushes never do; see
+	// resolveAPIToken and collectTokens.
+	commands.SetCredentialFallback(credentialsInfra.NewDefaultCredentialResolver())
 
 	// Every SSH connection go-git opens -- AutoBump's push, clone and remote listing, and
 	// gitforge's default SSH agent fallback -- goes through gitforge's SSH transport, which
