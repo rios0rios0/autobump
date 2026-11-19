@@ -22,6 +22,17 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-11-19
+
+### Added
+
+- added a credential fallback for the pull request API calls: when no token is configured for the forge, AutoBump now takes it from `GITHUB_TOKEN` or `GH_TOKEN`, `GITLAB_TOKEN` or `GL_TOKEN`, `AZURE_DEVOPS_EXT_PAT` or `SYSTEM_ACCESSTOKEN`, then from `gh auth token` or `az account get-access-token`, instead of skipping the pull request; the source is logged, the warning for a missing token names the forge, its setting and every source tried, and pushes over HTTPS and provider discovery still use only configured tokens
+
+### Changed
+
+- changed the Go module `github.com/rios0rios0/gitforge/v4` from `v4.6.0` to `v4.7.0`
+- changed the Go modules `github.com/rios0rios0/cliforge` from `v0.5.3` to `v0.5.4`, `github.com/rios0rios0/langforge` from `v1.1.12` to `v1.1.13`, `gitlab.com/gitlab-org/api/client-go/v3` from `v3.52.0` to `v3.53.0` and `golang.org/x/net` from `v0.62.0` to `v0.63.0`
+
 ## [3.4.0] - 2026-11-18
 
 ### Added
