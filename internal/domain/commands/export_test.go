@@ -46,6 +46,12 @@ var ResolveToken = resolveToken //nolint:gochecknoglobals // test export
 // CollectTokens exports collectTokens for testing.
 var CollectTokens = collectTokens //nolint:gochecknoglobals // test export
 
+// ResolveAPIToken exports resolveAPIToken for testing.
+var ResolveAPIToken = resolveAPIToken //nolint:gochecknoglobals // test export
+
+// ResolveCleanupProvider exports resolveCleanupProvider for testing.
+var ResolveCleanupProvider = resolveCleanupProvider //nolint:gochecknoglobals // test export
+
 // GetForgeProvider exports getForgeProvider for testing.
 var GetForgeProvider = getForgeProvider //nolint:gochecknoglobals // test export
 

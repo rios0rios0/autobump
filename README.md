@@ -108,7 +108,9 @@ would substitute a project's overrides for the operator's rather than layering t
 
 Copy [`configs/autobump.example.yaml`](configs/autobump.example.yaml) to
 `~/.config/autobump.yaml` and fill in what you need.
-You will need to configure at least one access token depending on which Git platform you use:
+Configure an access token for each Git platform you release to. It opens the release's pull request
+and closes stale ones, and authenticates a push over HTTPS. If you are signed in to `gh` or `az`, the
+pull requests need no configured token: see [Forge API token](#forge-api-token).
 
 - **GitLab**: Set `gitlab_access_token` field with your GitLab personal access token (e.g., `glpat-TOKEN`)
 - **Azure DevOps**: Set `azure_devops_access_token` field with your Azure DevOps personal access token
@@ -137,6 +139,52 @@ variable that is unset or empty expands to an empty token and logs a warning nam
 run then behaves as if the field were not set. These fields are read only from your own
 configuration (no other [layer](#configuration-layers) can set a credential), so a reference is
 only ever expanded from your environment, at your request.
+
+### Forge API token
+
+The pull request calls — opening the release's pull request, checking whether one is already open,
+and closing the pull requests of [stale bump branches](#stale-branch-cleanup) — use the first token
+found, in this order:
+
+1. the project's `project_access_token` (a [`projects`](#static-project-list) entry; every repository
+   [discovered](#provider-discovery) through `providers` carries its provider's `token` here)
+2. the platform's key: `github_access_token`, `gitlab_access_token` (then `CI_JOB_TOKEN`), or
+   `azure_devops_access_token`
+3. the platform's token environment variables: `GITHUB_TOKEN`, then `GH_TOKEN`; `GITLAB_TOKEN`, then
+   `GL_TOKEN`, unless `GITLAB_HOST` or `GL_HOST` names a server other than gitlab.com (that token
+   belongs to the other server); `AZURE_DEVOPS_EXT_PAT`, then `SYSTEM_ACCESSTOKEN`
+4. the platform's CLI, when you are signed in to it: `gh auth token --hostname github.com` for GitHub,
+   and `az account get-access-token` for Azure DevOps, issued in the Microsoft Entra tenant of the
+   organization the repository belongs to. GitLab has no step 4: `glab` has no command that prints a
+   token.
+
+So someone signed in to `gh` or `az` whose remote is SSH can run `autobump .` without a configuration
+file and still get the pull request. Steps 3 and 4 are tried only when no token is configured for the
+platform, at most once per repository, and AutoBump logs which one supplied the token, never the token
+itself:
+
+```text
+INFO No github_access_token configured; calling the GitHub API with the token from the gh CLI
+```
+
+When no step has a token, the branch is still pushed, and the warning names everything that was tried:
+
+```text
+WARN Cannot create the pull request: no API token for GitHub: github_access_token is not set, and no GitHub credential available: GITHUB_TOKEN and GH_TOKEN are not set; the gh CLI is not installed
+```
+
+Steps 3 and 4 serve these API calls alone, which go to the platform's fixed API host
+(`api.github.com`, `gitlab.com`, `dev.azure.com`): the platform that issued the token. **A push,
+clone or branch listing over HTTPS uses only the tokens you configured** (steps 1 and 2), never one
+AutoBump found on its own. AutoBump recognises a platform by a substring of the remote URL, and a push
+over HTTPS sends its token to the remote's own host, so a lookalike host such as
+`github.com.example.net` would receive your `gh` token. To push over HTTPS, configure the token, or
+use an SSH remote, which needs none.
+
+The fallback serves `autobump .` and every repository listed under [`projects`](#static-project-list)
+in `autobump run`, so an unattended run on a machine signed in to `gh` or `az` opens its pull requests
+as that account. [Provider discovery](#provider-discovery) is unchanged: it still requires each
+provider's `token`, and every repository it finds uses that token.
 
 ### Optional GPG Key Signing
 
@@ -246,7 +294,7 @@ ssh-add -l                                      # should list the Windows agent'
 
 Without systemd, `socat UNIX-LISTEN:$SSH_AUTH_SOCK,fork,mode=600 EXEC:'npiperelay.exe -ei -s //./pipe/openssh-ssh-agent'` achieves the same thing.
 
-If you would rather not bridge, either point `ssh_key_path` at a key stored inside WSL, or use an HTTPS remote so the push authenticates with the provider token instead.
+If you would rather not bridge, either point `ssh_key_path` at a key stored inside WSL, or use an HTTPS remote so the push authenticates with the platform token you configured instead (a push never uses a token AutoBump [found on its own](#forge-api-token)).
 
 #### Host key verification (known_hosts)
 
@@ -285,7 +333,7 @@ Or disable it for a single run with `--skip-cleanup`:
 autobump run --skip-cleanup
 ```
 
-> **Note:** closing pull requests needs a token for the platform. Without one, AutoBump still deletes the branches and logs a warning that the pull requests were left open.
+> **Note:** closing pull requests needs a token for the platform, configured or found as described in [Forge API token](#forge-api-token). Without one, AutoBump still deletes the branches and logs a warning that the pull requests were left open.
 
 ## Usage
 
@@ -311,7 +359,7 @@ autobump /path/to/repo        # Specific path
 > The `local` subcommand was removed in 3.0.0. `autobump local` still works, hidden and
 > deprecated, so that the word is not silently read as a path -- but it warns and will go.
 
-AutoBump will automatically detect the project language, update the version files, update the CHANGELOG.md file, and create a merge request/pull request on your Git platform (GitLab, Azure DevOps, or GitHub).
+AutoBump will automatically detect the project language, update the version files, update the CHANGELOG.md file, and create a merge request/pull request on your Git platform (GitLab, Azure DevOps, or GitHub). The pull request needs no configuration when you are signed in to `gh` or `az`; see [Forge API token](#forge-api-token).
 
 You can manually specify the project language using the `-l` or `--language` flag:
 

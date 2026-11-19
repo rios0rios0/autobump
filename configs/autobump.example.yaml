@@ -23,6 +23,8 @@
 # Personal access token for the platform you release to. Each value may be an inline
 # string, a `${ENV_VAR}` reference, or a path to a file containing the token, exactly as
 # a provider's `token` below. An unset variable becomes an empty token, with a warning.
+# Left out, the pull request calls take the platform's token environment variable or ask
+# its CLI (`gh`, `az`); a push over HTTPS still needs the token configured here.
 gitlab_access_token: 'glpat-TOKEN'
 #gitlab_access_token: '${GITLAB_TOKEN}'
 #gitlab_access_token: '.secure_files/gitlab_access_token.key'

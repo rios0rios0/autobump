@@ -173,20 +173,18 @@ func removeStaleBumpBranch(branch string, actions staleBranchActions) {
 }
 
 // resolveCleanupProvider returns the forge provider used to close stale pull requests
-// along with the repository it addresses. It returns a nil provider when no token is
-// configured or the remote cannot be resolved; cleanup then degrades to deleting
-// branches only, which is still worth doing.
+// along with the repository it addresses. It returns a nil provider when there is no token
+// for the forge's API, configured or found by the credential fallback (resolveAPIToken), or
+// the remote cannot be resolved; cleanup then degrades to deleting branches only, which is
+// still worth doing.
 func resolveCleanupProvider(
 	ctx *RepoContext,
 	serviceType entities.ServiceType,
 	defaultBranch string,
 ) (globalEntities.ForgeProvider, globalEntities.Repository) {
-	token := resolveToken(serviceType, ctx.GlobalConfig, ctx.ProjectConfig)
-	if token == "" {
-		logger.Warnf(
-			"No token found for service type '%v', stale pull requests will not be closed",
-			serviceType,
-		)
+	token, err := resolveAPIToken(ctx, serviceType)
+	if err != nil {
+		logger.Warnf("Stale pull requests will not be closed: %v", err)
 		return nil, globalEntities.Repository{}
 	}
 
