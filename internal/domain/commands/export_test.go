@@ -263,8 +263,8 @@ var DescribeMissingSSHCredential = describeMissingSSHCredential //nolint:gocheck
 // IsSSHRemote exports isSSHRemote for testing.
 var IsSSHRemote = isSSHRemote //nolint:gochecknoglobals // test export
 
-// OriginRemoteURL exports originRemoteURL for testing.
-var OriginRemoteURL = originRemoteURL //nolint:gochecknoglobals // test export
+// OriginPushURL exports originPushURL for testing.
+var OriginPushURL = originPushURL //nolint:gochecknoglobals // test export
 
 // GitSSHCommand exports gitSSHCommand for testing.
 var GitSSHCommand = gitSSHCommand //nolint:gochecknoglobals // test export

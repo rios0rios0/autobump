@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	gitInfra "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure"
@@ -48,8 +49,14 @@ type sshEnvironment struct {
 // host that has no address, or no SSH credential to offer. A push over a non-SSH remote, and
 // one that failed for any other reason, are returned unchanged: the explanation is only ever
 // added to the failure it actually explains.
+//
+// The remote is origin's push URL (originPushURL), the one the push dialed, and never its
+// first URL, the one fetches use: with a pushurl beside it the two can differ in transport and
+// host, and reading the first one left an SSH push beside an HTTPS fetch URL unexplained and
+// explained an HTTPS push beside an SSH fetch URL as an SSH one.
 func explainSSHPushFailure(ctx *RepoContext, pushErr error) error {
-	if !isSSHRemote(originRemoteURL(ctx.Repo)) {
+	pushURL := originPushURL(ctx.Repo)
+	if !isSSHRemote(pushURL) {
 		return pushErr
 	}
 
@@ -70,9 +77,35 @@ func explainSSHPushFailure(ctx *RepoContext, pushErr error) error {
 	env := detectSSHEnvironment(gitSSHCommand(ctx.GlobalGitConfig))
 
 	return fmt.Errorf(
-		"%w: %w\n\n%s",
-		ErrNoSSHCredential, pushErr, describeMissingSSHCredential(ctx.GlobalConfig, env),
+		"%w%s: %w\n\n%s",
+		ErrNoSSHCredential, describePushHost(pushURL), pushErr,
+		describeMissingSSHCredential(ctx.GlobalConfig, env),
 	)
+}
+
+// describePushHost names the host of origin's push URL for the diagnosis, which tells the
+// operator where the push went when origin fetches from another URL, or returns an empty
+// string when the URL names no host. Only the host is named: a URL can carry a credential in
+// its userinfo.
+func describePushHost(pushURL string) string {
+	host := remoteHost(pushURL)
+	if host == "" {
+		return ""
+	}
+
+	return fmt.Sprintf(" to %q, the host of origin's push URL", host)
+}
+
+// remoteHost returns the host name a remote URL names, in any form go-git reads (scp-like,
+// ssh://, http(s)://), or an empty string for a URL that names none. It reads the host as
+// gitforge's push does when it compares hosts (remoteHost, in pkg/git/infrastructure).
+func remoteHost(remoteURL string) string {
+	endpoint, err := transport.NewEndpoint(remoteURL)
+	if err != nil {
+		return ""
+	}
+
+	return endpoint.Host
 }
 
 // unresolvedSSHHost returns the host name a failed push found no address for, when that is
@@ -107,25 +140,20 @@ func isSSHRemote(remoteURL string) bool {
 	return strings.HasPrefix(remoteURL, "git@") || strings.HasPrefix(remoteURL, "ssh://")
 }
 
-// originRemoteURL returns the first URL configured for origin, or an empty string when the
-// remote is missing or carries none. An empty string is not an SSH remote, which leaves the
-// original push error untouched — the diagnosis never displaces a more specific failure.
-func originRemoteURL(repo *git.Repository) string {
-	if repo == nil {
-		return ""
-	}
-
-	remote, err := repo.Remote("origin")
-	if err != nil {
-		return ""
-	}
-
-	urls := remote.Config().URLs
+// originPushURL returns the URL a push to origin dials: the last of origin's URLs, which is
+// its pushurl when one is set. go-git appends every pushurl to the URLs it read from url, and
+// gitforge's push pins the last of them (originPushTarget, in pkg/git/infrastructure, which
+// PushWithTransportDetection classifies the transport by); gitforge does not export that rule,
+// so it is mirrored here. It returns an empty string when the remote is missing or carries no
+// URL. An empty string is not an SSH remote, which leaves the original push error untouched —
+// the diagnosis never displaces a more specific failure.
+func originPushURL(repo *git.Repository) string {
+	urls := originURLs(repo)
 	if len(urls) == 0 {
 		return ""
 	}
 
-	return urls[0]
+	return urls[len(urls)-1]
 }
 
 // gitSSHCommand returns git's core.sshCommand. AutoBump never runs it; it is read so the

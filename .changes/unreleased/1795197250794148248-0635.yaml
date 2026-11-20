@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the SSH push diagnosis reading origin''s first URL, the one fetches use, instead of the URL the push dialed: with a `pushurl` beside it, an SSH push beside an HTTPS fetch URL went unexplained, and an HTTPS push beside an SSH fetch URL was explained as a missing SSH credential or an unresolvable SSH host. The diagnosis now reads the last of origin''s URLs, as gitforge''s push does, and names that URL''s host when it finds no SSH credential'
+time: '2026-11-20T17:54:10.794083856Z'
