@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/rios0rios0/cliforge v0.5.4
-	github.com/rios0rios0/gitforge/v4 v4.7.0
+	github.com/rios0rios0/gitforge/v4 v4.7.1
 	github.com/rios0rios0/langforge v1.1.13
 	github.com/rios0rios0/testkit v0.3.9
 	github.com/sirupsen/logrus v1.10.2
@@ -41,7 +41,7 @@ require (
 	github.com/skeema/knownhosts v1.3.3 // indirect
 	github.com/spf13/pflag v1.1.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
-	gitlab.com/gitlab-org/api/client-go/v3 v3.53.0 // indirect
+	gitlab.com/gitlab-org/api/client-go/v3 v3.54.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/net v0.63.0 // indirect
 	golang.org/x/oauth2 v0.38.0 // indirect
