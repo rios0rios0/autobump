@@ -152,7 +152,7 @@ found, in this order:
    GitLab CI job runs on gitlab.com, as the job's own `CI_SERVER_*` variables say), or
    `azure_devops_access_token`. Cloning, pushing and cleaning up offer `CI_JOB_TOKEN` to git only for a
    remote on the server the job runs on: only that server accepts it
-3. the platform's token environment variables: `GITHUB_TOKEN`, then `GH_TOKEN`; `GITLAB_TOKEN`, then
+3. the platform's token environment variables: `GH_TOKEN`, then `GITHUB_TOKEN`, unless `GITHUB_SERVER_URL`, `GITHUB_API_URL` or a `*.ghe.com` `GH_HOST` names another GitHub server; `GITLAB_TOKEN`, then
    `GL_TOKEN`, unless a variable names a GitLab server other than gitlab.com (that token belongs to
    the other server): glab's `GITLAB_HOST`, `GITLAB_URI`, `GL_HOST`, `GITLAB_API_HOST` and
    `GITLAB_REPO`, semantic-release's `GL_URL` and `GITLAB_URL`, Lerna's `GL_API_URL`, Terraform's

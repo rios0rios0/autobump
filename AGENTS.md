@@ -180,11 +180,19 @@ goes through `ProcessRepo`.
 Pushes run on go-git's **pure-Go** SSH client: `collectSSHAuthMethods` can only use a key file
 or a Unix socket it can dial, and `core.sshCommand` or an `ssh` wrapper on `PATH` is never run
 (commit signing does shell out to `gpg.ssh.program`). `ssh_diagnostics.go` explains the
-failure (`explainSSHPushFailure` → `ErrNoSSHCredential`) only for an SSH remote with no
-collected method, and an unresolvable host (`ErrSSHHostUnresolved`, from a `*net.DNSError`,
-naming the files from gitforge's `SSHConfigSearchDescription`) before that. Everything that
-reaches its renderers has already failed to dial, so a detected socket there is a dead one
-(`UnusableAgentSockets`); `TestDetectSSHEnvironment` covers that seam with a real socket.
+failure (`explainSSHPushFailure` → `ErrNoSSHCredential`, naming the push URL's host) only
+when origin's push URL is SSH and no method was collected, and an unresolvable host
+(`ErrSSHHostUnresolved`, from a `*net.DNSError`, naming the files from gitforge's
+`SSHConfigSearchDescription`) before that. gitforge's transport dials the push URL's host
+verbatim unless an alias's `HostName` replaces it, so a DNS name that differs from that host
+(compared exactly) is a defined alias's `HostName`, and `describeUnresolvedSSHHost` says so
+instead of asking for the alias to be defined. The push URL is the last of origin's URLs, its
+`pushurl` when one is set: `originPushURL` mirrors gitforge's unexported `originPushTarget`,
+the URL `PushWithTransportDetection` classifies and dials. Origin's first URL is the fetch
+URL and the forge API's: `azureDevOpsOrganization` reads it through `GetRemoteRepoURL`, like
+the API calls it asks a token for. Everything that reaches the renderers has already failed
+to dial, so a detected socket there is a dead one (`UnusableAgentSockets`);
+`TestDetectSSHEnvironment` covers that seam with a real socket.
 
 The SSH client configuration lives in **gitforge** (`pkg/git/infrastructure`, `ssh_*.go`), shared
 with autoupdate; `main.go` calls `gitInfra.InstallSSHTransportWith` once, with a `MissingKeyRemedy`

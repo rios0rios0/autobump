@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 
 	"github.com/rios0rios0/autobump/internal/domain/entities"
 	gitInfra "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure"
@@ -48,8 +49,14 @@ type sshEnvironment struct {
 // host that has no address, or no SSH credential to offer. A push over a non-SSH remote, and
 // one that failed for any other reason, are returned unchanged: the explanation is only ever
 // added to the failure it actually explains.
+//
+// The remote is origin's push URL (originPushURL), the one the push dialed, and never its
+// first URL, the one fetches use: with a pushurl beside it the two can differ in transport and
+// host, and reading the first one left an SSH push beside an HTTPS fetch URL unexplained and
+// explained an HTTPS push beside an SSH fetch URL as an SSH one.
 func explainSSHPushFailure(ctx *RepoContext, pushErr error) error {
-	if !isSSHRemote(originRemoteURL(ctx.Repo)) {
+	pushURL := originPushURL(ctx.Repo)
+	if !isSSHRemote(pushURL) {
 		return pushErr
 	}
 
@@ -57,7 +64,7 @@ func explainSSHPushFailure(ctx *RepoContext, pushErr error) error {
 		return fmt.Errorf(
 			"%w: %w\n\n%s",
 			ErrSSHHostUnresolved, pushErr,
-			describeUnresolvedSSHHost(host, gitInfra.SSHConfigSearchDescription()),
+			describeUnresolvedSSHHost(remoteHost(pushURL), host, gitInfra.SSHConfigSearchDescription()),
 		)
 	}
 
@@ -70,9 +77,35 @@ func explainSSHPushFailure(ctx *RepoContext, pushErr error) error {
 	env := detectSSHEnvironment(gitSSHCommand(ctx.GlobalGitConfig))
 
 	return fmt.Errorf(
-		"%w: %w\n\n%s",
-		ErrNoSSHCredential, pushErr, describeMissingSSHCredential(ctx.GlobalConfig, env),
+		"%w%s: %w\n\n%s",
+		ErrNoSSHCredential, describePushHost(pushURL), pushErr,
+		describeMissingSSHCredential(ctx.GlobalConfig, env),
 	)
+}
+
+// describePushHost names the host of origin's push URL for the diagnosis, which tells the
+// operator where the push went when origin fetches from another URL, or returns an empty
+// string when the URL names no host. Only the host is named: a URL can carry a credential in
+// its userinfo.
+func describePushHost(pushURL string) string {
+	host := remoteHost(pushURL)
+	if host == "" {
+		return ""
+	}
+
+	return fmt.Sprintf(" to %q, the host of origin's push URL", host)
+}
+
+// remoteHost returns the host name a remote URL names, in any form go-git reads (scp-like,
+// ssh://, http(s)://), or an empty string for a URL that names none. It reads the host as
+// gitforge's push does when it compares hosts (remoteHost, in pkg/git/infrastructure).
+func remoteHost(remoteURL string) string {
+	endpoint, err := transport.NewEndpoint(remoteURL)
+	if err != nil {
+		return ""
+	}
+
+	return endpoint.Host
 }
 
 // unresolvedSSHHost returns the host name a failed push found no address for, when that is
@@ -86,18 +119,41 @@ func unresolvedSSHHost(pushErr error) (string, bool) {
 }
 
 // describeUnresolvedSSHHost renders the operator-facing explanation for an SSH host that has
-// no address; searched names the ssh_config files read on this host, as gitforge's
-// SSHConfigSearchDescription gives them. gitforge's SSH transport resolves host aliases
-// itself, from those files, so a host that still reaches DNS unresolved is an alias defined
-// somewhere else, or a name that does not exist at all. Without this, an alias that works for
-// every git command reads as a network failure.
-func describeUnresolvedSSHHost(host, searched string) string {
+// no address: pushHost is the host origin's push URL names, dialedHost the name DNS found no
+// address for, and searched names the ssh_config files read on this host, as gitforge's
+// SSHConfigSearchDescription gives them.
+//
+// gitforge's SSH transport resolves host aliases itself, from those files, and dials the host
+// as the URL writes it unless the alias has a HostName, which replaces it; Go reports the name
+// exactly as it was dialed. So a dialedHost that is the URL's own host is an alias defined
+// somewhere else, or a name that does not exist at all, and without saying so an alias that
+// works for every git command reads as a network failure. Any other dialedHost is the HostName
+// of an alias those files do define (describeUnresolvedSSHHostName).
+func describeUnresolvedSSHHost(pushHost, dialedHost, searched string) string {
+	if pushHost != "" && dialedHost != pushHost {
+		return describeUnresolvedSSHHostName(pushHost, dialedHost, searched)
+	}
+
 	return fmt.Sprintf(
 		"AutoBump could not resolve the SSH host %q. AutoBump never executes the \"ssh\" binary, so a "+
 			"host alias applies to the push only when it is defined in an ssh_config file AutoBump reads: "+
 			"%s. Define the alias there with at least a HostName; AutoBump applies its HostName, Port, "+
 			"IdentityFile and IdentitiesOnly.\n",
-		host, searched,
+		dialedHost, searched,
+	)
+}
+
+// describeUnresolvedSSHHostName renders the explanation for a host alias whose HostName has no
+// address: alias is the host origin's push URL names, and hostName the HostName an ssh_config
+// file gives it, the name the push dialed in its place. The alias is defined and was applied, so
+// asking the operator to define it would send them to a line that is already right.
+func describeUnresolvedSSHHostName(alias, hostName, searched string) string {
+	return fmt.Sprintf(
+		"AutoBump could not resolve the SSH host %q. It is the HostName of %q, the host alias origin's "+
+			"push URL names: the alias is defined in an ssh_config file AutoBump reads (%s), and AutoBump "+
+			"applied it, but its HostName does not resolve. Correct that HostName, or make sure the name "+
+			"resolves from this machine.\n",
+		hostName, alias, searched,
 	)
 }
 
@@ -107,25 +163,21 @@ func isSSHRemote(remoteURL string) bool {
 	return strings.HasPrefix(remoteURL, "git@") || strings.HasPrefix(remoteURL, "ssh://")
 }
 
-// originRemoteURL returns the first URL configured for origin, or an empty string when the
-// remote is missing or carries none. An empty string is not an SSH remote, which leaves the
-// original push error untouched — the diagnosis never displaces a more specific failure.
-func originRemoteURL(repo *git.Repository) string {
+// originPushURL returns the URL a push to origin dials, as gitforge's push picks it
+// (gitInfra.OriginPushURL): the last of origin's URLs, which is its pushurl when one is
+// set. It returns an empty string when the remote is missing or carries no URL. An empty
+// string is not an SSH remote, which leaves the original push error untouched — the
+// diagnosis never displaces a more specific failure.
+func originPushURL(repo *git.Repository) string {
 	if repo == nil {
 		return ""
 	}
-
-	remote, err := repo.Remote("origin")
+	pushURL, err := gitInfra.OriginPushURL(repo)
 	if err != nil {
 		return ""
 	}
 
-	urls := remote.Config().URLs
-	if len(urls) == 0 {
-		return ""
-	}
-
-	return urls[0]
+	return pushURL
 }
 
 // gitSSHCommand returns git's core.sshCommand. AutoBump never runs it; it is read so the

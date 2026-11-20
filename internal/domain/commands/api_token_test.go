@@ -235,12 +235,54 @@ func TestResolveAPIToken(t *testing.T) {
 		}, fallback.Requests())
 	})
 
-	t.Run("should keep the Azure CLI's default tenant when origin is not a URL gitforge parses", func(t *testing.T) {
+	t.Run("should ask for the first URL's organization when origin pushes to another one", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the pull request is opened in the repository origin's first URL names, so the
+		// token is for that organization, whatever a pushurl points the push at
+		fallback := newSupplyingFallback()
+		ctx := newFallbackContext(t, azureDevOpsRemoteURL, fallback)
+		ctx.Repo = newRepoWithOriginPushURL(t,
+			azureDevOpsRemoteURL, "git@ssh.dev.azure.com:v3/other-org/fixture-project/fixture-repo",
+		)
+
+		// when
+		_, err := commands.ResolveAPIToken(ctx, gitforgeEntities.AZUREDEVOPS)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []credentialEntities.CredentialRequest{
+			{ServiceType: gitforgeEntities.AZUREDEVOPS, Organization: "fixture-org"},
+		}, fallback.Requests())
+	})
+
+	t.Run("should ask for the token in the organization a visualstudio.com origin names", func(t *testing.T) {
 		t.Parallel()
 
 		// given
 		fallback := newSupplyingFallback()
 		ctx := newFallbackContext(t, "https://fixture-org.visualstudio.com/fixture-project/_git/fixture-repo", fallback)
+
+		// when
+		_, err := commands.ResolveAPIToken(ctx, gitforgeEntities.AZUREDEVOPS)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(
+			t,
+			[]credentialEntities.CredentialRequest{
+				{ServiceType: gitforgeEntities.AZUREDEVOPS, Organization: "fixture-org"},
+			},
+			fallback.Requests(),
+		)
+	})
+
+	t.Run("should keep the Azure CLI's default tenant when origin is not a URL gitforge parses", func(t *testing.T) {
+		t.Parallel()
+
+		// given
+		fallback := newSupplyingFallback()
+		ctx := newFallbackContext(t, "/srv/repositories/fixture-repo", fallback)
 
 		// when
 		_, err := commands.ResolveAPIToken(ctx, gitforgeEntities.AZUREDEVOPS)

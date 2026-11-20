@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 
 	"github.com/rios0rios0/autobump/internal/domain/commands"
 	"github.com/rios0rios0/autobump/internal/domain/entities"
+	"github.com/rios0rios0/autobump/test/domain/entitybuilders"
 )
 
 func TestIsSSHRemote(t *testing.T) {
@@ -61,7 +63,7 @@ func TestIsSSHRemote(t *testing.T) {
 	t.Run("should not report SSH when the remote is unknown", func(t *testing.T) {
 		t.Parallel()
 
-		// given -- originRemoteURL returns an empty string when it cannot resolve a remote
+		// given -- originPushURL returns an empty string when it cannot resolve a remote
 		remote := ""
 
 		// when
@@ -279,26 +281,54 @@ func TestGitSSHCommand(t *testing.T) {
 	})
 }
 
-func TestOriginRemoteURL(t *testing.T) {
+func TestOriginPushURL(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return the origin URL when the remote is configured", func(t *testing.T) {
+	t.Run("should return the only URL when origin has one", func(t *testing.T) {
 		t.Parallel()
 
 		// given
+		repo := newRepoWithOriginPushURL(t, "git@github.com:rios0rios0/autobump.git", "")
+
+		// when
+		result := commands.OriginPushURL(repo)
+
+		// then
+		assert.Equal(t, "git@github.com:rios0rios0/autobump.git", result)
+	})
+
+	t.Run("should return the pushurl when origin fetches from another URL", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- what `git remote set-url --push` leaves: an HTTPS fetch URL, an SSH push URL
+		repo := newRepoWithOriginPushURL(t,
+			"https://github.com/rios0rios0/autobump.git", "git@github.com-mine:rios0rios0/autobump.git",
+		)
+
+		// when
+		result := commands.OriginPushURL(repo)
+
+		// then
+		assert.Equal(t, "git@github.com-mine:rios0rios0/autobump.git", result)
+	})
+
+	t.Run("should return the last URL when origin has two url entries", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- go-git pushes to the last of origin's URLs, whether a pushurl or a url set it
 		repo, err := git.PlainInit(filepath.Join(t.TempDir(), "repo"), false)
 		require.NoError(t, err)
 		_, err = repo.CreateRemote(&gitconfig.RemoteConfig{
 			Name: "origin",
-			URLs: []string{"git@github.com:rios0rios0/autobump.git"},
+			URLs: []string{"git@github.com:rios0rios0/autobump.git", "git@gitlab.com:rios0rios0/autobump.git"},
 		})
 		require.NoError(t, err)
 
 		// when
-		result := commands.OriginRemoteURL(repo)
+		result := commands.OriginPushURL(repo)
 
 		// then
-		assert.Equal(t, "git@github.com:rios0rios0/autobump.git", result)
+		assert.Equal(t, "git@gitlab.com:rios0rios0/autobump.git", result)
 	})
 
 	t.Run("should return empty when the repository has no origin", func(t *testing.T) {
@@ -309,7 +339,7 @@ func TestOriginRemoteURL(t *testing.T) {
 		require.NoError(t, err)
 
 		// when
-		result := commands.OriginRemoteURL(repo)
+		result := commands.OriginPushURL(repo)
 
 		// then
 		assert.Empty(t, result)
@@ -322,7 +352,7 @@ func TestOriginRemoteURL(t *testing.T) {
 		var repo *git.Repository
 
 		// when
-		result := commands.OriginRemoteURL(repo)
+		result := commands.OriginPushURL(repo)
 
 		// then
 		assert.Empty(t, result)
@@ -376,7 +406,7 @@ func TestExplainSSHPushFailure(t *testing.T) {
 	t.Run("should name the host and where aliases are read when an SSH host does not resolve", func(t *testing.T) {
 		t.Parallel()
 
-		// given -- the shape go-git's dial returns for a host alias DNS has never heard of
+		// given
 		repo, err := git.PlainInit(filepath.Join(t.TempDir(), "repo"), false)
 		require.NoError(t, err)
 		_, err = repo.CreateRemote(&gitconfig.RemoteConfig{
@@ -386,9 +416,7 @@ func TestExplainSSHPushFailure(t *testing.T) {
 		require.NoError(t, err)
 
 		ctx := &commands.RepoContext{Repo: repo, GlobalConfig: &entities.GlobalConfig{}}
-		dnsErr := &net.DNSError{Err: "no such host", Name: "github.com-mine", IsNotFound: true}
-		pushErr := fmt.Errorf("could not push changes to remote repository: %w",
-			&net.OpError{Op: "dial", Net: "tcp", Err: dnsErr})
+		pushErr := newUnresolvedHostPushError("github.com-mine")
 
 		// when
 		result := commands.ExplainSSHPushFailure(ctx, pushErr)
@@ -400,6 +428,203 @@ func TestExplainSSHPushFailure(t *testing.T) {
 		assert.Contains(t, result.Error(), `"github.com-mine"`)
 		assert.Contains(t, result.Error(), "HostName")
 	})
+
+	t.Run("should name the unresolved HostName when the push URL's alias is defined", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the push dialed another name than the alias the URL holds, which only a
+		// HostName that an ssh_config file gives the alias makes gitforge's transport do
+		repo := newRepoWithOriginPushURL(t, "git@github.com-mine:rios0rios0/autobump.git", "")
+		ctx := &commands.RepoContext{
+			Repo:         repo,
+			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
+		}
+		pushErr := newUnresolvedHostPushError("github.example.invalid")
+
+		// when
+		result := commands.ExplainSSHPushFailure(ctx, pushErr)
+
+		// then
+		require.ErrorIs(t, result, commands.ErrSSHHostUnresolved)
+		require.ErrorIs(t, result, pushErr, "the original failure stays in the chain")
+		assert.Contains(t, result.Error(), `the SSH host "github.example.invalid"`)
+		assert.Contains(t, result.Error(), `the HostName of "github.com-mine"`)
+		assert.Contains(t, result.Error(), "the alias is defined")
+		assert.NotContains(t, result.Error(), "Define the alias")
+	})
+
+	t.Run("should explain an unresolved SSH push URL when origin fetches over HTTPS", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the push dialed the SSH pushurl; the HTTPS url beside it is only fetched from
+		repo := newRepoWithOriginPushURL(t,
+			"https://github.com/rios0rios0/autobump.git", "git@github.com-mine:rios0rios0/autobump.git",
+		)
+		ctx := &commands.RepoContext{
+			Repo:         repo,
+			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
+		}
+		pushErr := newUnresolvedHostPushError("github.com-mine")
+
+		// when
+		result := commands.ExplainSSHPushFailure(ctx, pushErr)
+
+		// then
+		require.ErrorIs(t, result, commands.ErrSSHHostUnresolved)
+		require.ErrorIs(t, result, pushErr, "the original failure stays in the chain")
+		assert.Contains(t, result.Error(), `"github.com-mine"`)
+	})
+
+	t.Run("should return the push error unchanged when origin pushes over HTTPS beside an SSH URL", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- an HTTPS push whose host does not resolve: ssh_config has nothing to do with it,
+		// whatever origin fetches from
+		repo := newRepoWithOriginPushURL(t,
+			"git@github.com-mine:rios0rios0/autobump.git", "https://git.example.invalid/rios0rios0/autobump.git",
+		)
+		ctx := &commands.RepoContext{
+			Repo:         repo,
+			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
+		}
+		pushErr := newUnresolvedHostPushError("git.example.invalid")
+
+		// when
+		result := commands.ExplainSSHPushFailure(ctx, pushErr)
+
+		// then
+		assert.Equal(t, pushErr, result)
+		assert.NotErrorIs(t, result, commands.ErrSSHHostUnresolved)
+	})
+}
+
+// TestExplainSSHPushFailureWithoutSSHCredential is deliberately not parallel: it empties
+// SSH_AUTH_SOCK and points HOME at an empty directory with t.Setenv, which the runtime forbids
+// in a parallel test, so that collectSSHAuthMethods finds no SSH credential on any host.
+func TestExplainSSHPushFailureWithoutSSHCredential(t *testing.T) {
+	tests := []struct {
+		name     string
+		fetchURL string
+		// pushURL is origin's pushurl, or empty when origin has only fetchURL.
+		pushURL string
+		// wantHost is the host the diagnosis names, or empty when it must name none.
+		wantHost string
+		// fetchHost is the host of fetchURL when the push went elsewhere, which the diagnosis
+		// must not name.
+		fetchHost string
+	}{
+		{
+			name:     "should name the host of origin's only URL when it is SSH",
+			fetchURL: "git@github.com:rios0rios0/autobump.git",
+			wantHost: "github.com",
+		},
+		{
+			name:      "should explain the SSH push URL when origin fetches over HTTPS",
+			fetchURL:  "https://github.com/rios0rios0/autobump.git",
+			pushURL:   "git@github.com-mine:rios0rios0/autobump.git",
+			wantHost:  "github.com-mine",
+			fetchHost: "github.com",
+		},
+		{
+			name:      "should name the push URL's host when origin fetches from another SSH host",
+			fetchURL:  "git@gitlab.com:rios0rios0/autobump.git",
+			pushURL:   "ssh://git@ssh.dev.azure.com/v3/rios0rios0/autobump/autobump",
+			wantHost:  "ssh.dev.azure.com",
+			fetchHost: "gitlab.com",
+		},
+		{
+			name:     "should name no host when origin's SSH URL names none",
+			fetchURL: "ssh:///rios0rios0/autobump.git",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// given
+			t.Setenv("SSH_AUTH_SOCK", "")
+			t.Setenv("HOME", t.TempDir())
+			ctx := &commands.RepoContext{
+				Repo:         newRepoWithOriginPushURL(t, test.fetchURL, test.pushURL),
+				GlobalConfig: entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
+			}
+			pushErr := errors.New("could not push changes to remote repository")
+
+			// when
+			result := commands.ExplainSSHPushFailure(ctx, pushErr)
+
+			// then
+			require.ErrorIs(t, result, commands.ErrNoSSHCredential)
+			require.ErrorIs(t, result, pushErr, "the original failure stays in the chain")
+			if test.wantHost == "" {
+				assert.NotContains(t, result.Error(), "the host of origin's push URL")
+				return
+			}
+			assert.Contains(t, result.Error(),
+				fmt.Sprintf("pushing to %q, the host of origin's push URL", test.wantHost))
+			if test.fetchHost != "" {
+				assert.NotContains(t, result.Error(), fmt.Sprintf("%q", test.fetchHost))
+			}
+		})
+	}
+
+	t.Run("should return the push error unchanged when origin pushes over HTTPS beside an SSH URL", func(t *testing.T) {
+		// given -- an HTTPS push authenticates with a token, so a missing SSH credential is not
+		// why it failed, even though origin fetches over SSH
+		t.Setenv("SSH_AUTH_SOCK", "")
+		t.Setenv("HOME", t.TempDir())
+		ctx := &commands.RepoContext{
+			Repo: newRepoWithOriginPushURL(t,
+				"git@github.com-mine:rios0rios0/autobump.git", "https://github.com/rios0rios0/autobump.git",
+			),
+			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
+		}
+		pushErr := errors.New("authentication required")
+
+		// when
+		result := commands.ExplainSSHPushFailure(ctx, pushErr)
+
+		// then
+		assert.Equal(t, pushErr, result)
+		assert.NotErrorIs(t, result, commands.ErrNoSSHCredential)
+	})
+}
+
+// newRepoWithOriginPushURL returns a repository whose origin fetches from fetchURL and, when
+// pushURL is not empty, pushes to pushURL. The pushurl is written to .git/config the way
+// `git remote set-url --push` writes it: go-git's RemoteConfig has no field for one, and
+// reading it from the file is what appends it to RemoteConfig.URLs.
+func newRepoWithOriginPushURL(t *testing.T, fetchURL, pushURL string) *git.Repository {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "repo")
+	_, err := git.PlainInit(path, false)
+	require.NoError(t, err)
+
+	origin := "[remote \"origin\"]\n\turl = " + fetchURL + "\n"
+	wantURLs := []string{fetchURL}
+	if pushURL != "" {
+		origin += "\tpushurl = " + pushURL + "\n"
+		wantURLs = append(wantURLs, pushURL)
+	}
+	configPath := filepath.Join(path, ".git", "config")
+	existing, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(configPath, append(existing, origin...), 0o600))
+
+	repo, err := git.PlainOpen(path)
+	require.NoError(t, err)
+	remote, err := repo.Remote("origin")
+	require.NoError(t, err)
+	require.Equal(t, wantURLs, remote.Config().URLs, "go-git should read the pushurl after the url")
+	return repo
+}
+
+// newUnresolvedHostPushError returns the error a push fails with when go-git's dial finds no
+// address for host, which is what it returns for a host alias DNS has never heard of.
+func newUnresolvedHostPushError(host string) error {
+	dnsErr := &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+	return fmt.Errorf("could not push changes to remote repository: %w",
+		&net.OpError{Op: "dial", Net: "tcp", Err: dnsErr})
 }
 
 func TestDescribeUnresolvedSSHHost(t *testing.T) {
@@ -412,12 +637,57 @@ func TestDescribeUnresolvedSSHHost(t *testing.T) {
 		searched := "~/.ssh/config, /etc/ssh/ssh_config and the Windows profile's .ssh/config"
 
 		// when
-		message := commands.DescribeUnresolvedSSHHost("github.com-mine", searched)
+		message := commands.DescribeUnresolvedSSHHost("github.com-mine", "github.com-mine", searched)
 
 		// then
 		assert.Contains(t, message, `"github.com-mine"`)
 		assert.Contains(t, message, searched)
-		assert.Contains(t, message, "HostName")
+		assert.Contains(t, message, "Define the alias there with at least a HostName")
+	})
+
+	t.Run("should name the alias and its HostName when the HostName is what does not resolve", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the push dialed the alias's HostName in place of the alias
+		searched := "~/.ssh/config and /etc/ssh/ssh_config"
+
+		// when
+		message := commands.DescribeUnresolvedSSHHost("github.com-mine", "github.example.invalid", searched)
+
+		// then
+		assert.Contains(t, message, `the SSH host "github.example.invalid"`)
+		assert.Contains(t, message, `the HostName of "github.com-mine"`)
+		assert.Contains(t, message, "the alias is defined")
+		assert.Contains(t, message, searched)
+		assert.NotContains(t, message, "Define the alias")
+	})
+
+	t.Run("should name the HostName when only the case of the dialed name differs", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the transport dials the URL's host verbatim when no HostName applies, so a
+		// name differing in case can only come from a HostName, which is then what failed
+		searched := "~/.ssh/config and /etc/ssh/ssh_config"
+
+		// when
+		message := commands.DescribeUnresolvedSSHHost("GitHub.com-Mine", "github.com-mine", searched)
+
+		// then
+		assert.Contains(t, message, `the HostName of "GitHub.com-Mine"`)
+	})
+
+	t.Run("should ask for the alias when the push URL's host is unknown", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- without the URL's host there is nothing to tell a HostName apart from an alias
+		searched := "~/.ssh/config and /etc/ssh/ssh_config"
+
+		// when
+		message := commands.DescribeUnresolvedSSHHost("", "github.com-mine", searched)
+
+		// then
+		assert.Contains(t, message, `the SSH host "github.com-mine"`)
+		assert.Contains(t, message, "Define the alias there with at least a HostName")
 	})
 }
 

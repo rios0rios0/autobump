@@ -134,12 +134,21 @@ func askCredentialFallback(ctx *RepoContext, request credentialEntities.Credenti
 // signed-in account's default subscription can be another one, whose token the organization
 // refuses. It returns "", which keeps the CLI's default tenant, for every other forge and for
 // an origin gitforge cannot parse.
+//
+// The organization is read from origin's first URL (GetRemoteRepoURL), as openPullRequest,
+// checkPullRequestExists and resolveCleanupProvider read the repository their API call
+// addresses, and not from the push URL a pushurl sets: the token is for that API call.
 func azureDevOpsOrganization(repo *git.Repository, serviceType entities.ServiceType) string {
-	if serviceType != entities.AZUREDEVOPS {
+	if serviceType != entities.AZUREDEVOPS || repo == nil {
 		return ""
 	}
 
-	parsed, err := gitInfra.ParseRemoteURL(originRemoteURL(repo))
+	remoteURL, err := gitInfra.GetRemoteRepoURL(repo)
+	if err != nil {
+		return ""
+	}
+
+	parsed, err := gitInfra.ParseRemoteURL(remoteURL)
 	if err != nil || parsed.ServiceType != entities.AZUREDEVOPS {
 		return ""
 	}
