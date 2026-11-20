@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the Go modules `github.com/rios0rios0/gitforge/v4` from `v4.7.0` to `v4.7.1` and `gitlab.com/gitlab-org/api/client-go/v3` from `v3.53.0` to `v3.54.1`'
+time: '2026-11-20T09:06:55.995898529Z'
