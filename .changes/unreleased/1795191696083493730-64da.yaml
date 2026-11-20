@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'stopped sending a GitLab CI job''s `CI_JOB_TOKEN` to a GitLab server other than the one the job runs on: AutoBump fell back to it for the GitLab API, which is gitlab.com''s, and offered it to git for any URL gitforge recognises as GitLab, which `gitlab.company.com` is too, so a self-managed runner''s job token reached gitlab.com. The job token now goes only to the server the job''s own `CI_SERVER_*` variables name (gitforge''s `GitLabCIServerHost`): the API only when that is gitlab.com, git only for a remote there, and nowhere when no server can be read'
+time: '2026-11-20T16:21:36.083417465Z'

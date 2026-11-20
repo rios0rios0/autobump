@@ -685,8 +685,52 @@ func FinalizeGlobalConfig(config *GlobalConfig) {
 	}
 
 	config.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
+	config.GitLabCIServerHost = ""
+	if config.GitLabCIJobToken != "" {
+		config.GitLabCIServerHost = gitLabCIServerHostForJobToken()
+	}
 
 	if config.GpgKeyPassphrase == "" {
 		config.GpgKeyPassphrase = os.Getenv("GPG_PASSPHRASE")
 	}
 }
+
+// errNoGitLabCIServerHostReader is why CI_JOB_TOKEN is withheld when no reader of
+// the job's server was installed (SetGitLabCIServerHostReader).
+var errNoGitLabCIServerHostReader = errors.New("no reader of the GitLab server a CI job runs on is installed")
+
+// gitLabCIServerHostReader returns the host of the GitLab server a GitLab CI job
+// runs on; set once at startup by SetGitLabCIServerHostReader.
+var gitLabCIServerHostReader func() (string, error) //nolint:gochecknoglobals // set once at startup
+
+// SetGitLabCIServerHostReader sets what FinalizeGlobalConfig asks for the GitLab
+// server a CI job runs on, the one that issued CI_JOB_TOKEN: the application
+// installs gitforge's GitLabCIServerHost, which reads only the job's own
+// CI_SERVER_* variables and fails when they are missing, unreadable or disagree.
+// Left unset, no server is known and the job token is withheld everywhere, so a
+// missing installation fails closed.
+func SetGitLabCIServerHostReader(read func() (string, error)) {
+	gitLabCIServerHostReader = read
+}
+
+// gitLabCIServerHostForJobToken reads the GitLab server the CI job runs on, or ""
+// when it cannot be known, and says what that means for CI_JOB_TOKEN.
+func gitLabCIServerHostForJobToken() string {
+	read := gitLabCIServerHostReader
+	if read == nil {
+		read = func() (string, error) { return "", errNoGitLabCIServerHostReader }
+	}
+	host, err := read()
+	if err != nil {
+		logger.Infof("not using CI_JOB_TOKEN: %v", err)
+		return ""
+	}
+	if !strings.EqualFold(host, gitlabAPIHost) {
+		logger.Infof("CI_JOB_TOKEN belongs to the GitLab server %s: git operations there use it, "+
+			"the GitLab API at %s does not", host, gitlabAPIHost)
+	}
+	return host
+}
+
+// gitlabAPIHost is the host of the only GitLab API AutoBump calls.
+const gitlabAPIHost = "gitlab.com"

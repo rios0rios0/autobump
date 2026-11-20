@@ -10,6 +10,7 @@ import (
 
 	"github.com/rios0rios0/autobump/internal"
 	"github.com/rios0rios0/autobump/internal/domain/commands"
+	"github.com/rios0rios0/autobump/internal/domain/entities"
 	"github.com/rios0rios0/autobump/internal/infrastructure/controllers"
 	credentialsInfra "github.com/rios0rios0/gitforge/v4/pkg/credentials/infrastructure"
 	gitInfra "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure"
@@ -194,6 +195,7 @@ func main() {
 	// to its CLI: `gh auth token` or `az account get-access-token`. Pushes never do; see
 	// resolveAPIToken and collectTokens.
 	commands.SetCredentialFallback(credentialsInfra.NewDefaultCredentialResolver())
+	installGitLabCIServerHostReader()
 
 	// Every SSH connection go-git opens -- AutoBump's push, clone and remote listing, and
 	// gitforge's default SSH agent fallback -- goes through gitforge's SSH transport, which
@@ -216,4 +218,13 @@ func main() {
 		logger.Errorf("Uncaught error: %v", err)
 		os.Exit(1)
 	}
+}
+
+// installGitLabCIServerHostReader tells the configuration how to learn the GitLab
+// server a CI job runs on, which decides where CI_JOB_TOKEN may go: gitforge's
+// GitLabCIServerHost, which reads only the job's own CI_SERVER_* variables.
+func installGitLabCIServerHostReader() {
+	entities.SetGitLabCIServerHostReader(func() (string, error) {
+		return credentialsInfra.GitLabCIServerHost(nil)
+	})
 }

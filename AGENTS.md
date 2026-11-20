@@ -158,7 +158,7 @@ it, and no log line there may carry a value it did not read as a path, since tha
 be the passphrase: a Stat failure other than not-exist is warned about by the setting and
 the `*fs.PathError`'s cause alone (`pathErrorCause`). SSH push auth uses `ssh_key_path`,
 `ssh_key_passphrase` and `ssh_auth_sock`; common agent sockets are auto-detected when not
-set.
+set. `FinalizeGlobalConfig` also reads `CI_JOB_TOKEN`, and records in `GlobalConfig.GitLabCIServerHost` the GitLab server the job runs on, from the reader `main.go` installs with `entities.SetGitLabCIServerHostReader` (gitforge's `GitLabCIServerHost`, which reads only the job's `CI_SERVER_*` variables; `TestInstallGitLabCIServerHostReader` pins the wiring). `gitLabCIJobTokenFor` then gives the job token only to destinations on that server: the GitLab API (`resolveToken`, always gitlab.com) and git (`collectTokens`: the clone URL, or every origin URL for push and cleanup). gitforge recognises GitLab by a substring of the URL, so without that rule a self-managed runner's token reached gitlab.com. An unknown server, including no reader installed, withholds it everywhere.
 
 The forge API calls (`openPullRequest`, `checkPullRequestExists`, `resolveCleanupProvider`)
 take their token from `resolveAPIToken` (`api_token.go`): the configured token first

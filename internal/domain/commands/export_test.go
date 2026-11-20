@@ -294,3 +294,6 @@ var PrepareGoModulePathChange = prepareGoModulePathChange //nolint:gochecknoglob
 func ApplyGoModulePathChange(change *GoModulePathChange) ([]string, error) {
 	return change.apply()
 }
+
+// OriginURLs exports originURLs for testing.
+var OriginURLs = originURLs //nolint:gochecknoglobals // test export

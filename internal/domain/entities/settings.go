@@ -71,6 +71,13 @@ type GlobalConfig struct {
 	AzureDevOpsAccessToken string `yaml:"azure_devops_access_token"`
 	GitHubAccessToken      string `yaml:"github_access_token"`
 	GitLabCIJobToken       string `yaml:"gitlab_ci_job_token"`
+
+	// GitLabCIServerHost is the host of the GitLab server a GitLab CI job runs on,
+	// the one that issued GitLabCIJobToken and the only one that accepts it, as
+	// FinalizeGlobalConfig read it (gitforge's GitLabCIServerHost, through
+	// SetGitLabCIServerHostReader); "" when there is no job token or no server could
+	// be read, which withholds the token everywhere. Never decoded from YAML.
+	GitLabCIServerHost string `yaml:"-"`
 }
 
 // ProviderConfig is re-exported from gitforge for backward compatibility.

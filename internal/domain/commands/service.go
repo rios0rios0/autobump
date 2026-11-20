@@ -274,6 +274,7 @@ func cloneRepo(ctx *RepoContext) (string, error) {
 		ctx.GlobalGitConfig.Raw.Section("user").Option("name"),
 		ctx.GlobalConfig,
 		ctx.ProjectConfig,
+		ctx.ProjectConfig.Path,
 	)
 
 	repoDir := workspaceRepoPath(root)
@@ -962,7 +963,9 @@ func pushChanges(ctx *RepoContext, branchName string) error {
 	}
 
 	username := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
-	authMethods := collectAuthMethods(serviceType, username, ctx.GlobalConfig, ctx.ProjectConfig)
+	authMethods := collectAuthMethods(
+		serviceType, username, ctx.GlobalConfig, ctx.ProjectConfig, originURLs(ctx.Repo)...,
+	)
 
 	err = gitInfra.PushWithTransportDetection(ctx.Repo, refSpec, authMethods)
 	if err != nil {
@@ -1427,7 +1430,8 @@ func resolveToken(
 		if globalConfig.GitLabAccessToken != "" {
 			return globalConfig.GitLabAccessToken
 		}
-		return globalConfig.GitLabCIJobToken
+		// Only a job token gitlab.com issued: the GitLab API AutoBump calls is gitlab.com's.
+		return gitLabCIJobTokenFor(globalConfig, gitlabAPIURL)
 	case entities.AZUREDEVOPS:
 		return globalConfig.AzureDevOpsAccessToken
 	case entities.UNKNOWN, entities.BITBUCKET, entities.CODECOMMIT, entities.CODEBERG:
@@ -1446,10 +1450,15 @@ func resolveToken(
 // so a lookalike host such as github.com.example.net would receive the operator's gh token. A
 // configured token is one the operator chose to hand over; the fallback's token only ever
 // goes to the forge's fixed API host.
+//
+// destinations are the URLs git will send the tokens to; the GitLab CI job token
+// is added only when every one of them is on the server that issued it
+// (gitLabCIJobTokenFor).
 func collectTokens(
 	serviceType entities.ServiceType,
 	globalConfig *entities.GlobalConfig,
 	projectConfig *entities.ProjectConfig,
+	destinations []string,
 ) []string {
 	var tokens []string
 
@@ -1466,8 +1475,8 @@ func collectTokens(
 		if globalConfig.GitLabAccessToken != "" {
 			tokens = append(tokens, globalConfig.GitLabAccessToken)
 		}
-		if globalConfig.GitLabCIJobToken != "" {
-			tokens = append(tokens, globalConfig.GitLabCIJobToken)
+		if jobToken := gitLabCIJobTokenFor(globalConfig, destinations...); jobToken != "" {
+			tokens = append(tokens, jobToken)
 		}
 	case entities.AZUREDEVOPS:
 		if globalConfig.AzureDevOpsAccessToken != "" {
@@ -1487,8 +1496,9 @@ func collectAuthMethods(
 	username string,
 	globalConfig *entities.GlobalConfig,
 	projectConfig *entities.ProjectConfig,
+	destinations ...string,
 ) []transport.AuthMethod {
-	tokens := collectTokens(serviceType, globalConfig, projectConfig)
+	tokens := collectTokens(serviceType, globalConfig, projectConfig, destinations)
 	name := registryInfra.ServiceTypeToProviderName(serviceType)
 	if name == "" || providerRegistry == nil {
 		return nil
@@ -2063,4 +2073,40 @@ func getLanguageInterface(projectConfig entities.ProjectConfig, languageInterfac
 	if projectConfig.Language == "python" {
 		*languageInterface = &python.Python{ProjectConfig: projectConfig}
 	}
+}
+
+// gitlabAPIURL is where the only GitLab API AutoBump calls lives.
+const gitlabAPIURL = "https://gitlab.com"
+
+// gitLabCIJobTokenFor returns the GitLab CI job token for requests to every one
+// of destinations, or "". A job token is accepted only by the GitLab server that
+// issued it, the one the job runs on (GlobalConfig.GitLabCIServerHost), and
+// gitforge recognises GitLab by a substring of the URL, so a self-managed runner's
+// token would otherwise reach gitlab.com, or a gitlab.com job's token another
+// server. No destination, or no known server, withholds it.
+func gitLabCIJobTokenFor(globalConfig *entities.GlobalConfig, destinations ...string) string {
+	token, server := globalConfig.GitLabCIJobToken, globalConfig.GitLabCIServerHost
+	if token == "" || server == "" || len(destinations) == 0 {
+		return ""
+	}
+	for _, destination := range destinations {
+		endpoint, err := transport.NewEndpoint(destination)
+		if err != nil || !strings.EqualFold(endpoint.Host, server) {
+			return ""
+		}
+	}
+	return token
+}
+
+// originURLs returns every URL of the repository's origin remote: git fetches
+// from the first and pushes to the last, so a token is offered to each.
+func originURLs(repo *git.Repository) []string {
+	if repo == nil {
+		return nil
+	}
+	remote, err := repo.Remote("origin")
+	if err != nil {
+		return nil
+	}
+	return remote.Config().URLs
 }

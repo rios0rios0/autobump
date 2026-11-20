@@ -148,15 +148,20 @@ found, in this order:
 
 1. the project's `project_access_token` (a [`projects`](#static-project-list) entry; every repository
    [discovered](#provider-discovery) through `providers` carries its provider's `token` here)
-2. the platform's key: `github_access_token`, `gitlab_access_token` (then `CI_JOB_TOKEN`), or
-   `azure_devops_access_token`
+2. the platform's key: `github_access_token`, `gitlab_access_token` (then `CI_JOB_TOKEN`, only when the
+   GitLab CI job runs on gitlab.com, as the job's own `CI_SERVER_*` variables say), or
+   `azure_devops_access_token`. Cloning, pushing and cleaning up offer `CI_JOB_TOKEN` to git only for a
+   remote on the server the job runs on: only that server accepts it
 3. the platform's token environment variables: `GITHUB_TOKEN`, then `GH_TOKEN`; `GITLAB_TOKEN`, then
-   `GL_TOKEN`, unless `GITLAB_HOST` or `GL_HOST` names a server other than gitlab.com (that token
-   belongs to the other server); `AZURE_DEVOPS_EXT_PAT`, then `SYSTEM_ACCESSTOKEN`
+   `GL_TOKEN`, unless a variable names a GitLab server other than gitlab.com (that token belongs to
+   the other server): glab's `GITLAB_HOST`, `GITLAB_URI`, `GL_HOST`, `GITLAB_API_HOST` and
+   `GITLAB_REPO`, semantic-release's `GL_URL` and `GITLAB_URL`, Lerna's `GL_API_URL`, Terraform's
+   `GITLAB_BASE_URL`, or a GitLab CI job's `CI_SERVER_URL`, `CI_SERVER_HOST`, `CI_SERVER_FQDN` and
+   `CI_API_V4_URL`; `AZURE_DEVOPS_EXT_PAT`, then `SYSTEM_ACCESSTOKEN`
 4. the platform's CLI, when you are signed in to it: `gh auth token --hostname github.com` for GitHub,
    and `az account get-access-token` for Azure DevOps, issued in the Microsoft Entra tenant of the
-   organization the repository belongs to. GitLab has no step 4: `glab` has no command that prints a
-   token.
+   organization the repository belongs to. GitLab has no step 4: `glab` has no `auth token`
+   command.
 
 So someone signed in to `gh` or `az` whose remote is SSH can run `autobump .` without a configuration
 file and still get the pull request. Steps 3 and 4 are tried only when no token is configured for the
