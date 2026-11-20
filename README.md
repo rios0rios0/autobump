@@ -148,9 +148,10 @@ found, in this order:
 
 1. the project's `project_access_token` (a [`projects`](#static-project-list) entry; every repository
    [discovered](#provider-discovery) through `providers` carries its provider's `token` here)
-2. the platform's key: `github_access_token`, `gitlab_access_token` (then `CI_JOB_TOKEN`, unless the
-   GitLab CI job runs on a server other than gitlab.com, whose job token gitlab.com's API must not
-   receive), or `azure_devops_access_token`
+2. the platform's key: `github_access_token`, `gitlab_access_token` (then `CI_JOB_TOKEN`, only when the
+   GitLab CI job runs on gitlab.com, as the job's own `CI_SERVER_*` variables say), or
+   `azure_devops_access_token`. Cloning, pushing and cleaning up offer `CI_JOB_TOKEN` to git only for a
+   remote on the server the job runs on: only that server accepts it
 3. the platform's token environment variables: `GITHUB_TOKEN`, then `GH_TOKEN`; `GITLAB_TOKEN`, then
    `GL_TOKEN`, unless a variable names a GitLab server other than gitlab.com (that token belongs to
    the other server): glab's `GITLAB_HOST`, `GITLAB_URI`, `GL_HOST`, `GITLAB_API_HOST` and

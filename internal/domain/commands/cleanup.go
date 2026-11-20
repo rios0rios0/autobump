@@ -72,7 +72,9 @@ func cleanupStaleBumpBranches(ctx *RepoContext) {
 	}
 
 	username := ctx.GlobalGitConfig.Raw.Section("user").Option("name")
-	authMethods := collectAuthMethods(serviceType, username, ctx.GlobalConfig, ctx.ProjectConfig)
+	authMethods := collectAuthMethods(
+		serviceType, username, ctx.GlobalConfig, ctx.ProjectConfig, originURLs(ctx.Repo)...,
+	)
 
 	branches, err := gitInfra.ListRemoteBranches(ctx.Repo, authMethods)
 	if err != nil {

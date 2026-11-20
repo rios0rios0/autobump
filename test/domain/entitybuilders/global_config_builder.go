@@ -31,6 +31,7 @@ type GlobalConfigBuilder struct {
 	azureDevOpsAccessToken string
 	gitHubAccessToken      string
 	gitLabCIJobToken       string
+	gitLabCIServerHost     string
 }
 
 // NewGlobalConfigBuilder creates a new GlobalConfig builder with sensible defaults.
@@ -165,6 +166,12 @@ func (b *GlobalConfigBuilder) WithGitHubAccessToken(token string) *GlobalConfigB
 	return b
 }
 
+// WithGitLabCIServerHost sets the GitLab server the CI job token belongs to.
+func (b *GlobalConfigBuilder) WithGitLabCIServerHost(host string) *GlobalConfigBuilder {
+	b.gitLabCIServerHost = host
+	return b
+}
+
 // WithGitLabCIJobToken sets the GitLab CI job token.
 func (b *GlobalConfigBuilder) WithGitLabCIJobToken(token string) *GlobalConfigBuilder {
 	b.gitLabCIJobToken = token
@@ -199,6 +206,7 @@ func (b *GlobalConfigBuilder) BuildGlobalConfig() *entities.GlobalConfig {
 		AzureDevOpsAccessToken: b.azureDevOpsAccessToken,
 		GitHubAccessToken:      b.gitHubAccessToken,
 		GitLabCIJobToken:       b.gitLabCIJobToken,
+		GitLabCIServerHost:     b.gitLabCIServerHost,
 	}
 }
 

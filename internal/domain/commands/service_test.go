@@ -419,6 +419,7 @@ func TestResolveToken(t *testing.T) {
 		// given
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithGitLabCIJobToken("ci-job-token").
+			WithGitLabCIServerHost("gitlab.com").
 			BuildGlobalConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
@@ -459,7 +460,7 @@ func TestCollectTokens(t *testing.T) {
 			BuildProjectConfig()
 
 		// when
-		tokens := commands.CollectTokens(gitforgeEntities.GITHUB, globalConfig, projectConfig)
+		tokens := commands.CollectTokens(gitforgeEntities.GITHUB, globalConfig, projectConfig, nil)
 
 		// then
 		require.Len(t, tokens, 2)
@@ -474,11 +475,13 @@ func TestCollectTokens(t *testing.T) {
 		globalConfig := entitybuilders.NewGlobalConfigBuilder().
 			WithGitLabAccessToken("gitlab-pat").
 			WithGitLabCIJobToken("ci-job-token").
+			WithGitLabCIServerHost("gitlab.com").
 			BuildGlobalConfig()
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		tokens := commands.CollectTokens(gitforgeEntities.GITLAB, globalConfig, projectConfig)
+		tokens := commands.CollectTokens(gitforgeEntities.GITLAB, globalConfig, projectConfig,
+			[]string{"https://gitlab.com/group/project.git"})
 
 		// then
 		require.Len(t, tokens, 2)
@@ -496,7 +499,7 @@ func TestCollectTokens(t *testing.T) {
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		tokens := commands.CollectTokens(gitforgeEntities.AZUREDEVOPS, globalConfig, projectConfig)
+		tokens := commands.CollectTokens(gitforgeEntities.AZUREDEVOPS, globalConfig, projectConfig, nil)
 
 		// then
 		require.Len(t, tokens, 1)
@@ -511,7 +514,7 @@ func TestCollectTokens(t *testing.T) {
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		tokens := commands.CollectTokens(gitforgeEntities.GITHUB, globalConfig, projectConfig)
+		tokens := commands.CollectTokens(gitforgeEntities.GITHUB, globalConfig, projectConfig, nil)
 
 		// then
 		assert.Empty(t, tokens)
@@ -527,7 +530,7 @@ func TestCollectTokens(t *testing.T) {
 		projectConfig := entitybuilders.NewProjectConfigBuilder().BuildProjectConfig()
 
 		// when
-		tokens := commands.CollectTokens(gitforgeEntities.UNKNOWN, globalConfig, projectConfig)
+		tokens := commands.CollectTokens(gitforgeEntities.UNKNOWN, globalConfig, projectConfig, nil)
 
 		// then
 		assert.Empty(t, tokens)
