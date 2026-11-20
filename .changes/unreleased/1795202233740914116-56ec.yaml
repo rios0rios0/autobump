@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'read `GH_TOKEN` before `GITHUB_TOKEN`, gh''s own order, so when both hold different tokens `GH_TOKEN` now wins (gitforge v4.9.0)'
+time: '2026-11-20T19:17:13.740871211Z'

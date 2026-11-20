@@ -163,20 +163,21 @@ func isSSHRemote(remoteURL string) bool {
 	return strings.HasPrefix(remoteURL, "git@") || strings.HasPrefix(remoteURL, "ssh://")
 }
 
-// originPushURL returns the URL a push to origin dials: the last of origin's URLs, which is
-// its pushurl when one is set. go-git appends every pushurl to the URLs it read from url, and
-// gitforge's push pins the last of them (originPushTarget, in pkg/git/infrastructure, which
-// PushWithTransportDetection classifies the transport by); gitforge does not export that rule,
-// so it is mirrored here. It returns an empty string when the remote is missing or carries no
-// URL. An empty string is not an SSH remote, which leaves the original push error untouched —
-// the diagnosis never displaces a more specific failure.
+// originPushURL returns the URL a push to origin dials, as gitforge's push picks it
+// (gitInfra.OriginPushURL): the last of origin's URLs, which is its pushurl when one is
+// set. It returns an empty string when the remote is missing or carries no URL. An empty
+// string is not an SSH remote, which leaves the original push error untouched — the
+// diagnosis never displaces a more specific failure.
 func originPushURL(repo *git.Repository) string {
-	urls := originURLs(repo)
-	if len(urls) == 0 {
+	if repo == nil {
+		return ""
+	}
+	pushURL, err := gitInfra.OriginPushURL(repo)
+	if err != nil {
 		return ""
 	}
 
-	return urls[len(urls)-1]
+	return pushURL
 }
 
 // gitSSHCommand returns git's core.sshCommand. AutoBump never runs it; it is read so the
