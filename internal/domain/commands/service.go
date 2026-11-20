@@ -1427,7 +1427,8 @@ func resolveToken(
 		if globalConfig.GitLabAccessToken != "" {
 			return globalConfig.GitLabAccessToken
 		}
-		return globalConfig.GitLabCIJobToken
+		// Never a self-managed runner's job token: the GitLab API is gitlab.com's.
+		return globalConfig.GitLabAPIJobToken()
 	case entities.AZUREDEVOPS:
 		return globalConfig.AzureDevOpsAccessToken
 	case entities.UNKNOWN, entities.BITBUCKET, entities.CODECOMMIT, entities.CODEBERG:

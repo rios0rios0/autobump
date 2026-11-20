@@ -685,8 +685,41 @@ func FinalizeGlobalConfig(config *GlobalConfig) {
 	}
 
 	config.GitLabCIJobToken = os.Getenv("CI_JOB_TOKEN")
+	config.gitLabCIJobTokenRefused = false
+	if config.GitLabCIJobToken != "" {
+		if refusal := checkGitLabCIJobToken(); refusal != nil {
+			config.gitLabCIJobTokenRefused = true
+			logger.Warnf("not calling the GitLab API with CI_JOB_TOKEN: %v", refusal)
+		}
+	}
 
 	if config.GpgKeyPassphrase == "" {
 		config.GpgKeyPassphrase = os.Getenv("GPG_PASSPHRASE")
 	}
+}
+
+// errNoGitLabCIJobTokenCheck is why CI_JOB_TOKEN is withheld from the GitLab API
+// when no check was installed (SetGitLabCIJobTokenCheck).
+var errNoGitLabCIJobTokenCheck = errors.New("no check of the GitLab server CI_JOB_TOKEN belongs to is installed")
+
+// gitLabCIJobTokenCheck decides whether a GitLab CI job's CI_JOB_TOKEN may be
+// sent to gitlab.com's API; set once at startup by SetGitLabCIJobTokenCheck.
+var gitLabCIJobTokenCheck func() error //nolint:gochecknoglobals // set once at startup
+
+// SetGitLabCIJobTokenCheck sets what decides, in FinalizeGlobalConfig, whether a
+// GitLab CI job's CI_JOB_TOKEN may be sent to the GitLab API, which gitforge
+// only calls at gitlab.com: the application installs gitforge's
+// CheckGitLabCIJobTokenServer, which allows it only when the job's own CI_SERVER_*
+// variables name gitlab.com. Left unset, every job token is withheld from the
+// API, so a missing installation fails closed.
+func SetGitLabCIJobTokenCheck(check func() error) {
+	gitLabCIJobTokenCheck = check
+}
+
+// checkGitLabCIJobToken runs the installed check, refusing when there is none.
+func checkGitLabCIJobToken() error {
+	if gitLabCIJobTokenCheck == nil {
+		return errNoGitLabCIJobTokenCheck
+	}
+	return gitLabCIJobTokenCheck()
 }

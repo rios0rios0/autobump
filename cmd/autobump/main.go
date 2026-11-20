@@ -10,6 +10,7 @@ import (
 
 	"github.com/rios0rios0/autobump/internal"
 	"github.com/rios0rios0/autobump/internal/domain/commands"
+	"github.com/rios0rios0/autobump/internal/domain/entities"
 	"github.com/rios0rios0/autobump/internal/infrastructure/controllers"
 	credentialsInfra "github.com/rios0rios0/gitforge/v4/pkg/credentials/infrastructure"
 	gitInfra "github.com/rios0rios0/gitforge/v4/pkg/git/infrastructure"
@@ -194,6 +195,7 @@ func main() {
 	// to its CLI: `gh auth token` or `az account get-access-token`. Pushes never do; see
 	// resolveAPIToken and collectTokens.
 	commands.SetCredentialFallback(credentialsInfra.NewDefaultCredentialResolver())
+	entities.SetGitLabCIJobTokenCheck(func() error { return credentialsInfra.CheckGitLabCIJobTokenServer(nil) })
 
 	// Every SSH connection go-git opens -- AutoBump's push, clone and remote listing, and
 	// gitforge's default SSH agent fallback -- goes through gitforge's SSH transport, which

@@ -71,6 +71,24 @@ type GlobalConfig struct {
 	AzureDevOpsAccessToken string `yaml:"azure_devops_access_token"`
 	GitHubAccessToken      string `yaml:"github_access_token"`
 	GitLabCIJobToken       string `yaml:"gitlab_ci_job_token"`
+
+	// gitLabCIJobTokenRefused is set by FinalizeGlobalConfig when the
+	// environment names a GitLab server other than gitlab.com (gitforge's
+	// CheckGitLabTokenServer): the job then runs on that server, its
+	// CI_JOB_TOKEN is that server's, and the GitLab API, which gitforge only
+	// calls at gitlab.com, must not receive it. git operations still use the
+	// token (collectTokens), because they send it to the remote's own host.
+	gitLabCIJobTokenRefused bool
+}
+
+// GitLabAPIJobToken returns the GitLab CI job token the GitLab API may be called
+// with: GitLabCIJobToken, or "" when FinalizeGlobalConfig found that the job runs
+// on another GitLab server than gitlab.com.
+func (c *GlobalConfig) GitLabAPIJobToken() string {
+	if c.gitLabCIJobTokenRefused {
+		return ""
+	}
+	return c.GitLabCIJobToken
 }
 
 // ProviderConfig is re-exported from gitforge for backward compatibility.
