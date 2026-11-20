@@ -429,6 +429,30 @@ func TestExplainSSHPushFailure(t *testing.T) {
 		assert.Contains(t, result.Error(), "HostName")
 	})
 
+	t.Run("should name the unresolved HostName when the push URL's alias is defined", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the push dialed another name than the alias the URL holds, which only a
+		// HostName that an ssh_config file gives the alias makes gitforge's transport do
+		repo := newRepoWithOriginPushURL(t, "git@github.com-mine:rios0rios0/autobump.git", "")
+		ctx := &commands.RepoContext{
+			Repo:         repo,
+			GlobalConfig: entitybuilders.NewGlobalConfigBuilder().BuildGlobalConfig(),
+		}
+		pushErr := newUnresolvedHostPushError("github.example.invalid")
+
+		// when
+		result := commands.ExplainSSHPushFailure(ctx, pushErr)
+
+		// then
+		require.ErrorIs(t, result, commands.ErrSSHHostUnresolved)
+		require.ErrorIs(t, result, pushErr, "the original failure stays in the chain")
+		assert.Contains(t, result.Error(), `the SSH host "github.example.invalid"`)
+		assert.Contains(t, result.Error(), `the HostName of "github.com-mine"`)
+		assert.Contains(t, result.Error(), "the alias is defined")
+		assert.NotContains(t, result.Error(), "Define the alias")
+	})
+
 	t.Run("should explain an unresolved SSH push URL when origin fetches over HTTPS", func(t *testing.T) {
 		t.Parallel()
 
@@ -613,12 +637,57 @@ func TestDescribeUnresolvedSSHHost(t *testing.T) {
 		searched := "~/.ssh/config, /etc/ssh/ssh_config and the Windows profile's .ssh/config"
 
 		// when
-		message := commands.DescribeUnresolvedSSHHost("github.com-mine", searched)
+		message := commands.DescribeUnresolvedSSHHost("github.com-mine", "github.com-mine", searched)
 
 		// then
 		assert.Contains(t, message, `"github.com-mine"`)
 		assert.Contains(t, message, searched)
-		assert.Contains(t, message, "HostName")
+		assert.Contains(t, message, "Define the alias there with at least a HostName")
+	})
+
+	t.Run("should name the alias and its HostName when the HostName is what does not resolve", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the push dialed the alias's HostName in place of the alias
+		searched := "~/.ssh/config and /etc/ssh/ssh_config"
+
+		// when
+		message := commands.DescribeUnresolvedSSHHost("github.com-mine", "github.example.invalid", searched)
+
+		// then
+		assert.Contains(t, message, `the SSH host "github.example.invalid"`)
+		assert.Contains(t, message, `the HostName of "github.com-mine"`)
+		assert.Contains(t, message, "the alias is defined")
+		assert.Contains(t, message, searched)
+		assert.NotContains(t, message, "Define the alias")
+	})
+
+	t.Run("should name the HostName when only the case of the dialed name differs", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- the transport dials the URL's host verbatim when no HostName applies, so a
+		// name differing in case can only come from a HostName, which is then what failed
+		searched := "~/.ssh/config and /etc/ssh/ssh_config"
+
+		// when
+		message := commands.DescribeUnresolvedSSHHost("GitHub.com-Mine", "github.com-mine", searched)
+
+		// then
+		assert.Contains(t, message, `the HostName of "GitHub.com-Mine"`)
+	})
+
+	t.Run("should ask for the alias when the push URL's host is unknown", func(t *testing.T) {
+		t.Parallel()
+
+		// given -- without the URL's host there is nothing to tell a HostName apart from an alias
+		searched := "~/.ssh/config and /etc/ssh/ssh_config"
+
+		// when
+		message := commands.DescribeUnresolvedSSHHost("", "github.com-mine", searched)
+
+		// then
+		assert.Contains(t, message, `the SSH host "github.com-mine"`)
+		assert.Contains(t, message, "Define the alias there with at least a HostName")
 	})
 }
 

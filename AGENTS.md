@@ -183,7 +183,10 @@ or a Unix socket it can dial, and `core.sshCommand` or an `ssh` wrapper on `PATH
 failure (`explainSSHPushFailure` → `ErrNoSSHCredential`, naming the push URL's host) only
 when origin's push URL is SSH and no method was collected, and an unresolvable host
 (`ErrSSHHostUnresolved`, from a `*net.DNSError`, naming the files from gitforge's
-`SSHConfigSearchDescription`) before that. The push URL is the last of origin's URLs, its
+`SSHConfigSearchDescription`) before that. gitforge's transport dials the push URL's host
+verbatim unless an alias's `HostName` replaces it, so a DNS name that differs from that host
+(compared exactly) is a defined alias's `HostName`, and `describeUnresolvedSSHHost` says so
+instead of asking for the alias to be defined. The push URL is the last of origin's URLs, its
 `pushurl` when one is set: `originPushURL` mirrors gitforge's unexported `originPushTarget`,
 the URL `PushWithTransportDetection` classifies and dials. Origin's first URL is the fetch
 URL and the forge API's: `azureDevOpsOrganization` reads it through `GetRemoteRepoURL`, like

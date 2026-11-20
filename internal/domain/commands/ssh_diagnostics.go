@@ -64,7 +64,7 @@ func explainSSHPushFailure(ctx *RepoContext, pushErr error) error {
 		return fmt.Errorf(
 			"%w: %w\n\n%s",
 			ErrSSHHostUnresolved, pushErr,
-			describeUnresolvedSSHHost(host, gitInfra.SSHConfigSearchDescription()),
+			describeUnresolvedSSHHost(remoteHost(pushURL), host, gitInfra.SSHConfigSearchDescription()),
 		)
 	}
 
@@ -119,18 +119,41 @@ func unresolvedSSHHost(pushErr error) (string, bool) {
 }
 
 // describeUnresolvedSSHHost renders the operator-facing explanation for an SSH host that has
-// no address; searched names the ssh_config files read on this host, as gitforge's
-// SSHConfigSearchDescription gives them. gitforge's SSH transport resolves host aliases
-// itself, from those files, so a host that still reaches DNS unresolved is an alias defined
-// somewhere else, or a name that does not exist at all. Without this, an alias that works for
-// every git command reads as a network failure.
-func describeUnresolvedSSHHost(host, searched string) string {
+// no address: pushHost is the host origin's push URL names, dialedHost the name DNS found no
+// address for, and searched names the ssh_config files read on this host, as gitforge's
+// SSHConfigSearchDescription gives them.
+//
+// gitforge's SSH transport resolves host aliases itself, from those files, and dials the host
+// as the URL writes it unless the alias has a HostName, which replaces it; Go reports the name
+// exactly as it was dialed. So a dialedHost that is the URL's own host is an alias defined
+// somewhere else, or a name that does not exist at all, and without saying so an alias that
+// works for every git command reads as a network failure. Any other dialedHost is the HostName
+// of an alias those files do define (describeUnresolvedSSHHostName).
+func describeUnresolvedSSHHost(pushHost, dialedHost, searched string) string {
+	if pushHost != "" && dialedHost != pushHost {
+		return describeUnresolvedSSHHostName(pushHost, dialedHost, searched)
+	}
+
 	return fmt.Sprintf(
 		"AutoBump could not resolve the SSH host %q. AutoBump never executes the \"ssh\" binary, so a "+
 			"host alias applies to the push only when it is defined in an ssh_config file AutoBump reads: "+
 			"%s. Define the alias there with at least a HostName; AutoBump applies its HostName, Port, "+
 			"IdentityFile and IdentitiesOnly.\n",
-		host, searched,
+		dialedHost, searched,
+	)
+}
+
+// describeUnresolvedSSHHostName renders the explanation for a host alias whose HostName has no
+// address: alias is the host origin's push URL names, and hostName the HostName an ssh_config
+// file gives it, the name the push dialed in its place. The alias is defined and was applied, so
+// asking the operator to define it would send them to a line that is already right.
+func describeUnresolvedSSHHostName(alias, hostName, searched string) string {
+	return fmt.Sprintf(
+		"AutoBump could not resolve the SSH host %q. It is the HostName of %q, the host alias origin's "+
+			"push URL names: the alias is defined in an ssh_config file AutoBump reads (%s), and AutoBump "+
+			"applied it, but its HostName does not resolve. Correct that HostName, or make sure the name "+
+			"resolves from this machine.\n",
+		hostName, alias, searched,
 	)
 }
 
