@@ -22,6 +22,24 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.5.1] - 2026-11-25
+
+### Changed
+
+- changed the Go module `github.com/rios0rios0/gitforge/v4` from `v4.8.0` to `v4.9.0`
+- changed the Go modules `github.com/rios0rios0/gitforge/v4` from `v4.7.0` to `v4.7.1` and `gitlab.com/gitlab-org/api/client-go/v3` from `v3.53.0` to `v3.56.1`
+- read `GH_TOKEN` before `GITHUB_TOKEN`, gh's own order, so when both hold different tokens `GH_TOKEN` now wins (gitforge v4.9.0)
+
+### Fixed
+
+- fixed the SSH push diagnosis reading origin's first URL, the one fetches use, instead of the URL the push dialed: with a `pushurl` beside it, an SSH push beside an HTTPS fetch URL went unexplained, and an HTTPS push beside an SSH fetch URL was explained as a missing SSH credential or an unresolvable SSH host. The diagnosis now reads the last of origin's URLs, as gitforge's push does, and names that URL's host when it finds no SSH credential
+- fixed the unresolvable SSH host diagnosis asking to define a host alias that was already defined: when the alias origin's push URL names has a `HostName` that does not resolve, the push fails on that `HostName`, and the diagnosis now says the alias is defined and names its `HostName` as the name that does not resolve
+
+### Security
+
+- stopped sending a GitHub token from the environment to github.com when `GITHUB_SERVER_URL`, `GITHUB_API_URL` or a `*.ghe.com` `GH_HOST` names another GitHub server, ran `gh` without the token variables so it reports only its own login, and recognised an HTTPS remote's forge only by its exact host, so a lookalike such as `github.com.evil.example` or `github.company.com` no longer passes as github.com (gitforge v4.9.0)
+- stopped sending a GitLab CI job's `CI_JOB_TOKEN` to a GitLab server other than the one the job runs on: AutoBump fell back to it for the GitLab API, which is gitlab.com's, and offered it to git for any URL gitforge recognises as GitLab, which `gitlab.company.com` is too, so a self-managed runner's job token reached gitlab.com. The job token now goes only to the server the job's own `CI_SERVER_*` variables name (gitforge's `GitLabCIServerHost`): the API only when that is gitlab.com, git only for a remote there, and nowhere when no server can be read
+
 ## [3.5.0] - 2026-11-19
 
 ### Added

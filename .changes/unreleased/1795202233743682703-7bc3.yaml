@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'stopped sending a GitHub token from the environment to github.com when `GITHUB_SERVER_URL`, `GITHUB_API_URL` or a `*.ghe.com` `GH_HOST` names another GitHub server, ran `gh` without the token variables so it reports only its own login, and recognised an HTTPS remote''s forge only by its exact host, so a lookalike such as `github.com.evil.example` or `github.company.com` no longer passes as github.com (gitforge v4.9.0)'
-time: '2026-11-20T19:17:13.743637856Z'
