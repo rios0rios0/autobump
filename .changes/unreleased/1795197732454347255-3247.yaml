@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the unresolvable SSH host diagnosis asking to define a host alias that was already defined: when the alias origin''s push URL names has a `HostName` that does not resolve, the push fails on that `HostName`, and the diagnosis now says the alias is defined and names its `HostName` as the name that does not resolve'
-time: '2026-11-20T18:02:12.454287109Z'
