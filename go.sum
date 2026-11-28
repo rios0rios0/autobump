@@ -77,8 +77,8 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/rios0rios0/cliforge v0.5.4 h1:xeNasbY6pjPJMEtmeDfG3BIn4eHMgYUKungEsfxofiU=
 github.com/rios0rios0/cliforge v0.5.4/go.mod h1:LYn/zfcU6T3BhNyltv+S9vZbJ896eT91VOc3lfedXX8=
-github.com/rios0rios0/gitforge/v4 v4.9.0 h1:dEUR9GPLMb7jNMNDYMGxZM7vtyPpYZb7IiDZi22BDUo=
-github.com/rios0rios0/gitforge/v4 v4.9.0/go.mod h1:nWfdpvwACtNntHvNavcq43BeKza05W8No3+oBYJOSdM=
+github.com/rios0rios0/gitforge/v4 v4.9.1 h1:rZfwE/Nrv80oimhkZLIwq65IczlzqELrxdddqUqoZVg=
+github.com/rios0rios0/gitforge/v4 v4.9.1/go.mod h1:UM5t4HC1Y7sbUMHIsX9zRmbl4qMXUXx65vbQffJk1jI=
 github.com/rios0rios0/langforge v1.1.13 h1:krwNUGC+0o3bqy4Pd8SpZw2pvm7knon3lDgk5CGClpo=
 github.com/rios0rios0/langforge v1.1.13/go.mod h1:sjXUFv2pgkx2v+Izn+g7FcxiWd6NG2+s6CWlhA7S1NA=
 github.com/rios0rios0/testkit v0.3.9 h1:4p+35IiFw6BwJ+owQH/TRFoRaBlo0w+4Ke1oVFe0qfc=
@@ -105,8 +105,8 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/xanzy/ssh-agent v0.3.3 h1:+/15pJfg/RsTxqYcX6fHqOXZwwMP+2VyYWJeWM2qQFM=
 github.com/xanzy/ssh-agent v0.3.3/go.mod h1:6dzNDKs0J9rVPHPhaGCukekBHKqfl+L3KghI1Bc68Uw=
-gitlab.com/gitlab-org/api/client-go/v3 v3.56.1 h1:mHkhLjJW1+toSIu3BknDqk1+TO3l5aLbUJoAhbQDtUM=
-gitlab.com/gitlab-org/api/client-go/v3 v3.56.1/go.mod h1:8cuzgeUJzkVvaRvw57iZ8foGmL5q8GZXi4lHTiF5edY=
+gitlab.com/gitlab-org/api/client-go/v3 v3.57.0 h1:qyG+9mTmsujA8vLjp8fVWCMGXDgITaYim9zJ5isknPA=
+gitlab.com/gitlab-org/api/client-go/v3 v3.57.0/go.mod h1:8cuzgeUJzkVvaRvw57iZ8foGmL5q8GZXi4lHTiF5edY=
 go.uber.org/dig v1.19.0 h1:BACLhebsYdpQ7IROQ1AGPjrXcP5dF80U3gKoFzbaq/4=
 go.uber.org/dig v1.19.0/go.mod h1:Us0rSJiThwCv2GteUN0Q7OKvU7n5J4dxZ9JKUXozFdE=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
